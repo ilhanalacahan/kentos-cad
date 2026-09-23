@@ -14,7 +14,7 @@ const ORANGE = rgb(255, 115, 0);
 /** Speckled 3 mm discs on a 9 mm grid, staggered: the rows half a column pitch apart as drawn. */
 const discs = () => pattern(speckle(3), 9, 4.5, { stagger: true });
 const discNote =
-  '0,2 mm, 3 mm çapında serbest noktalama 9 mm karolaj merkezlerinde, şaşırtmalı sıra. Benekli daire 19 noktadan kuruldu (motorda daireye kırpılmış serbest noktalama yok); şaşırtmalı sıralar EK-1c çizimindeki gibi sütun aralığının yarısı (4,5 mm) arayla.';
+  '0,2 mm, 3 mm çapında serbest noktalama 9 mm karolaj merkezlerinde, şaşırtmalı sıra. Her benekli daire, daire içinde rastgele noktalardan oluşan tek bir çizim (benekli-daire); şaşırtmalı sıralar EK-1c çizimindeki gibi sütun aralığının yarısı (4,5 mm) arayla.';
 
 /** A code in a 5 mm circle (T, GTB …); `fill` paints the circle (the turizm sub-types). */
 const ring = (code: string, o: { fill?: string; weight?: 400 | 700; textSize?: number; strokeWidth?: number } = {}) =>
@@ -51,7 +51,7 @@ calisma.area(
   [solid(rgb(232, 190, 255)), pairs(45, 3), pairs(135, 3), edge(BLACK, 0.3, { dash: [7, 15] }), along(gear(5), 22, { offsetAlong: 14.5, group: { count: 2, spacing: 6 } }), box('EGB')],
   {
     ref: 'EK-1c s.2; EK-1e s.66',
-    note: 'Tarama: 0,2 mm, 1 mm tarama çiftleri ile 45 derece çapraz tarama, çiftler arası 3 mm. Sınır: 0,3 mm; 5 mm dış çaplı içi dolu 1 mm aralıklı 2 dişli, 2 mm boşluk, 7 mm çizgi. Dişli, 12 yuvarlak dişli dolu daire olarak çizildi (motorda dişli şekli yok). EK-1c taraması UİP aralığıyla (5 mm) basılmış; ölçü EK-1e ÇDP satırından.',
+    note: 'Tarama: 0,2 mm, 1 mm tarama çiftleri ile 45 derece çapraz tarama, çiftler arası 3 mm. Sınır: 0,3 mm; 5 mm dış çaplı içi dolu 1 mm aralıklı 2 dişli, 2 mm boşluk, 7 mm çizgi. Dişli 12 kare dişli, diş derinliği yarıçapın 0,22 katı (EK-1ç çiziminden ölçüldü; çizimde dişler raster yüzünden yuvarlak görünüyor). EK-1c taraması UİP aralığıyla (5 mm) basılmış; ölçü EK-1e ÇDP satırından.',
   },
 );
 calisma.area('turizm-bolgesi', 'Turizm bölgesi', [solid(ORANGE), discs(), ring('T')], { ref: 'EK-1c s.2 (AÇIKLAMA 9); EK-1e s.57', note: discNote });

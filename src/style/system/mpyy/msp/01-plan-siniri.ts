@@ -8,7 +8,7 @@ import { BLACK, rgb, sheet, stroke } from '../dsl';
 
 export const sinirlar = sheet('msp', ['Sınırlar'], 'sinirlar', 10);
 
-sinirlar.line('plan-siniri', 'Plan sınırı', [stroke(rgb(178, 178, 178), 1, { offset: 0.6 }), stroke(BLACK, 1)], {
+sinirlar.line('plan-siniri', 'Plan sınırı', [{ ...stroke(rgb(178, 178, 178), 1, { cap: 'butt' }), blur: 1.2, shift: [0, -0.6] }, stroke(BLACK, 1)], {
   ref: 'EK-1e s.1',
-  note: '1 mm siyah çizgi, 178/178/178 gölgeli. Gölge çizimde çizginin altında yumuşak bir bant; motorda bulanıklık ve sayfaya sabit gölge yönü yok: gölge 1 mm gri çizgi olarak 0,6 mm içe (çizim yönünün soluna, alanın içine) kaydırıldı. Kayma ölçüsü çizimden kestirildi.',
+  note: '1 mm siyah çizgi, 178/178/178 gölgeli. Gölge sayfada hep aşağıya düşer (çizginin yönünden bağımsız): 1 mm gri çizgi 0,6 mm aşağı kaydırılmış, kenarları 1,2 mm boyunca yumuşar; siyah çizginin alt kenarından 178/178/178 ile başlayıp 1,2 mm aşağıda kaybolur. Kayma ve yumuşama ölçüsü yazılı değil, EK-1e çiziminden (orada gölge çizilen çizgi kalınlığının yaklaşık 1,5 katı aşağıda kaybolur; yana kayma yok).',
 });

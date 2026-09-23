@@ -15,7 +15,7 @@ import { S, box, speckle, stack } from './common';
 const discs = () => pattern(speckle(4), 12, 6, { stagger: true });
 
 const discNote =
-  '4 mm çapında serbest noktalama 12 mm karolaj merkezlerinde, şaşırtmalı sıra. Benekli daire 19 noktadan kuruldu (motorda daireye kırpılmış serbest noktalama yok). Sıralar arası 6 mm: EK-1ç örneğinde şaşırtmalı sıralar sütun aralığının yarısı kadar aralıklı.';
+  '4 mm çapında serbest noktalama 12 mm karolaj merkezlerinde, şaşırtmalı sıra. Her benekli daire, daire içinde rastgele noktalardan oluşan tek bir çizim (benekli-daire). Sıralar arası 6 mm: EK-1ç örneğinde şaşırtmalı sıralar sütun aralığının yarısı kadar aralıklı.';
 
 export const turizm = sheet('nip', ['Turizm alanları'], 'turizm', 40);
 

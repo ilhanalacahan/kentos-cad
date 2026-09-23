@@ -65,7 +65,7 @@ calisma.area(
   ],
   {
     ref: 'EK-1ç s.4; EK-1e s.66',
-    note: 'Tarama: 0,2 mm, 1 mm tarama çiftleri ile 45 derece çapraz tarama, çiftler arası 3 mm. Sınır: 0,3 mm; 6 mm dış çaplı içi dolu 1 mm aralıklı 2 dişli, 2 mm boşluk, 7 mm çizgi. Dişli, 12 yuvarlak dişli dolu daire olarak çizildi (motorda dişli şekli yok).',
+    note: 'Tarama: 0,2 mm, 1 mm tarama çiftleri ile 45 derece çapraz tarama, çiftler arası 3 mm. Sınır: 0,3 mm; 6 mm dış çaplı içi dolu 1 mm aralıklı 2 dişli, 2 mm boşluk, 7 mm çizgi. Dişli 12 kare dişli, diş derinliği yarıçapın 0,22 katı (EK-1ç çiziminden ölçüldü; çizimde dişler raster yüzünden yuvarlak görünüyor).',
   },
 );
 calisma.area('kucuk-sanayi-alani', 'Küçük sanayi alanı', [solid(rgb(170, 102, 205)), pairs(45, 4), hatch(135, 4, 0.2), box('KSA', { weight: 900, heavy: true })], {

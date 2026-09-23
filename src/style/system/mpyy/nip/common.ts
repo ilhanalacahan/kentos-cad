@@ -106,17 +106,11 @@ export function crossBoxMarks(caption: string, size = S): Markers {
 }
 
 /**
- * A filled toothed disc ("içi dolu dişli"), `d` outside: a disc of 0.8 d
- * with twelve round teeth on its rim, as the legend's scalloped wheel (the
- * engine has no gear shape).
+ * A filled toothed disc ("içi dolu dişli"), `d` outside: twelve teeth about
+ * a fifth of the radius deep, as the legend's wheel (EK-1ç s.4 measures
+ * 12 teeth, 0.22 of the radius deep; its teeth are rounded by the raster).
  */
-export function gear(d: number): Markers {
-  const teeth = Array.from({ length: 12 }, (_, i) => {
-    const a = (i * Math.PI) / 6;
-    return circle(0.2 * d, { fill: BLACK, offset: [0.4 * d * Math.cos(a), 0.4 * d * Math.sin(a)] });
-  });
-  return [circle(0.8 * d, { fill: BLACK }), ...teeth];
-}
+export const gear = (d: number): MarkerDraft => ({ ...shape('gear', d, { fill: BLACK }), teeth: 12, teethDepth: 0.22 });
 
 /** Hatch lines in pairs 1 mm apart, the pairs `period` apart ("1 mm tarama çiftleri … çiftler arası mesafe"). */
 export const pairs = (angle: number, period: number, width = 0.2) => groupedHatch(angle, period, 2, 1, width);
@@ -133,25 +127,10 @@ export const freeDots = (dot: number, seed = 1) => stipple(2, dot, BLACK, 0.8, s
 
 /**
  * A speckled disc of diameter `d` ("… mm çapında serbest noktalama"): the
- * legend's round blobs of random specks, drawn as 19 dots on two rings
- * around a centre dot, slightly out of line so they read as free dotting.
+ * legend's round blob of random specks, one SVG mark (42 dots inside a
+ * circle filling 96 % of the drawing's box).
  */
-export function speckle(d: number): Markers {
-  const k = d / 4;
-  const out: Markers = [circle(0.75 * k, { fill: BLACK, offset: [0.1 * k, -0.08 * k] })];
-  const jitter = [0.12, -0.1, 0.05, -0.14, 0.09, -0.04, 0.13, -0.11, 0.02, 0.1, -0.07, 0.06];
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI) / 3 + 0.3;
-    const r = 0.9 + jitter[i] * 0.8;
-    out.push(circle(0.75 * k, { fill: BLACK, offset: [r * k * Math.cos(a), r * k * Math.sin(a)] }));
-  }
-  for (let i = 0; i < 12; i++) {
-    const a = (i * Math.PI) / 6 + 0.12 + jitter[(i + 5) % 12] * 0.6;
-    const r = 1.65 + jitter[i] * 0.5;
-    out.push(circle(0.7 * k, { fill: BLACK, offset: [r * k * Math.cos(a), r * k * Math.sin(a)] }));
-  }
-  return out;
-}
+export const speckle = (d: number): MarkerDraft => svg(pic('benekli-daire'), d / 0.96, { fill: BLACK });
 
 /**
  * "Dik tarama çiftleri" (limanlar, iskele, istasyonlar): vertical strips
