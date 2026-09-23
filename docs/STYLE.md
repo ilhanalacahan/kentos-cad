@@ -228,5 +228,29 @@ Pencereler ilk açılışta yüklenir (`ui/style/`); komutlar Araçlar menüsün
 2. **GPU (yapıldı):** kalın ve kesikli çizgiler, taramalar, işaret örnekleri (SDF), doku atlası (SVG, yazı, raster, desen); katmanlara ve nesnelere bağlama; ölçek aralıkları; iki arka uçta eşit çizim.
 3. **Stil yöneticisi ve sembol tasarımcısı**, katman stili penceresi, nesneye sembol verme (yapıldı).
 4. **SVG editörü** ve raster desenler (yapıldı).
-5. **MPYY sistem kitaplığı:** EK-1a, 1c, 1ç, 1d'nin bütün gösterimleri; değişken metinli sembollerin öznitelik şablonları; lejant üretimi (lejant penceresi yapıldı; gösterimler sürüyor).
+5. **MPYY sistem kitaplığı (yapıldı):** yönetmelik eklerinin bütün gösterimleri, 770 sembol:
+
+   | Bölüm | Kaynak | Öğe |
+   |---|---|---|
+   | Uygulama imar planı | EK-1d | 204 |
+   | Nazım imar planı | EK-1ç | 118 |
+   | Çevre düzeni planı | EK-1c | 46 |
+   | Mekânsal strateji planı | EK-1e I | 39 |
+   | Ortak gösterimler | EK-1a | UİP 89, NİP 89, ÇDP 88 |
+   | Piktogramlar | Çizimlerden elle çizilmiş SVG | 79 |
+
+   - Kaynaklar `style/system/mpyy/` altında, plan kademesine göre klasörlenir (`uip/`, `nip/`, `cdp/`, `msp/`, `ortak/`). Yardımcılar `dsl.ts`'te, piktogramlar `pictograms.ts` ve `pictogramDrawings.ts`'tedir.
+   - Rakamlar EK-1e metninden alınır. Metnin vermediği ölçüler çizimlerden ölçülür. Metin ile çizim çeliştiğinde metin uygulanır. Her tahmin ve çelişki öğenin açıklamasında (`note`) yazar.
+   - Değişken metinli semboller öznitelikten okur (`[Kat]`, `[TAKS]`, `[Genişlik]` …).
+   - Yollar alanlardaki genişlikten gerçek boyunda çizilir (`$ölçek`).
+   - Her sembol demo projenin gösterim kataloğunda örnek geometri üzerinde durur.
+   - **Yaklaşık kalanlar**, motorda karşılığı olmadığı için:
+     - Dişli şekli yok; dişliler şekil katmanlarından kurulur.
+     - Desen daireye kırpılamaz; benekli daireler sabit nokta öbekleridir.
+     - Şerit içi tarama (dik tarama çiftleri) işaret deseniyle çizilir.
+     - Dalga evresi yol başına bağlanamaz; sulak alan dalgası işaretle yerleşir.
+     - Sayfaya sabit gölge yok; MSP plan sınırının gölgesi kaydırılmış gri çizgidir.
+     - Yay şekli yok; seyir terası kirişlerle çizilir.
+     - Desendeki işaret kaydırması desenle dönmez, çizgi boyuncaki işaretinki döner.
+   - Lejant penceresi kullanılan sembollerden lejant üretir.
 6. **Paylaşma:** sunucu ile kitaplık paylaşımı ve kurum kitaplıkları.
