@@ -159,6 +159,8 @@ içinde kurulur.
 | `ui/`         | Bileşenler, paneller, pencereler, widget'lar                                                                                                                                                                               | hepsi (servisler `AppContext` üzerinden)    | model'i doğrudan değiştirmek (bkz. §8) |
 | `app/`        | Kompozisyon kökü, komutlar, menüler, kısayollar, durum depoları, biçimlendirici                                                                                                                                            | hepsi                                       | —                                      |
 
+**`contracts/`** zincirin dışındadır: Rust'tan (`crates/contracts`, ts-rs) üretilen sürümlü sözleşme tipleri (`generated/`, elle düzenlenmez) ve sözleşme sürümü (`version.ts`). Hiçbir şey içe aktarmaz; her katman buradan tip alabilir. Uygulamanın kendi tipleri sözleşmeye `contracts.test.ts`'te derleme anında denetlenir (ADR 0002).
+
 Bağımlılık yönünü bozan bir içe aktarma gerekiyorsa tasarım yanlıştır. Bu
 durumda bir arayüz ya da olay ekleyin, döngüsel bağımlılık kurmayın.
 
@@ -627,10 +629,19 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `app/server.test.ts` | Sağlık yanıtının güvenilmeyen veri olarak okunması; yalnız aynı sözleşme sürümünde “bağlı”; 503, 404, HTML dizin sayfası, sözleşmeye uymayan gövde ve ağ hatasında “yok” ve nedeni; eşzamanlı denetimin paylaşılması |
 | `contracts/contracts.test.ts` | Uygulama tiplerinin (`Entity`, `LayerNode`, `ProjectSettings`, `StyleFile`, `RunJob` …) Rust'tan üretilen sözleşmelere derleme anında uyması (`tsc` denetler) |
 | `geo/crs.test.ts` | CRS kaydı: Rust ile paylaşılan dosyayla birebir aynılık (kayıt değişince yeniden kaydedilir; Rust tarafı EPSG değerlerine göre denetler), tekil SRID, varsayılan, dilim önerisi (sınırda batı dilimi), SRID/ad/bölge araması |
+| `wasm/golden.wasm.test.ts` | Rust çekirdeğinin WASM derlemesinde aynı golden durumlar ve bağımsız referanslar; paketin çalışma alanı sürümüyle derlendiği (eski paket kırılır). Paket yoksa atlanır; `pnpm test:rust` derleyip çalıştırır |
 | `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
 | `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
 | `style/svg/arrange.test.ts` | Birimler (grup tek birim, seçim sırası), seçime/ilk/son/en büyük/tuvale hizalama, blok olarak hizalama, eşit aralık ve eşit boşluk; taşı (göreli, mutlak, ayrı ayrı adımla), ölçek, döndürme yönü ve merkezi, eğme, kutuya göre matris; satır-sütun, dairesel (tam tur ve yay, dönmeden) ve aynalı dizi, kopyaların grupları; sıra (öne, arkaya, en öne, en arkaya) |
 | `style/svg/snapping.test.ts` | SVG düzenleyicisinin kenetlemesi: köşe/yumuşak düğüm, parça ortası, ağırlık merkezi, kutu noktaları, tuval köşesi ve kenarı, kesişim (eğriyle dahil), dik ayak ve teğet noktası (başlangıç noktasından), kılavuz, kılavuz kesişimi ve kılavuzla kesişim, noktaların çizgilerden önce gelmesi, taşınan şekil ve düğümlerin dışarıda kalması |
+
+**Rust testleri** (`pnpm rust:test`: `cargo test` + clippy `-D warnings`):
+- `crates/geometry-core/tests/golden.rs`: TS ile aynı golden dosya ve bağımsız referanslar;
+- `tests/numeric.rs`: §23 yuvarlama, hisse ve dağıtım, Python'la üretilmiş dosyalara karşı;
+- `crates/contracts/tests/document.rs`: .kcad örneğinin gidiş-dönüşü ve reddi;
+- `tests/crs.rs`: CRS kaydının EPSG değerleri;
+- `apps/api`: sağlık isteği, gerçek HTTP ile;
+- `crates/wasm`: halka bölücü.
 
 Kurallar:
 
@@ -727,7 +738,11 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Tarama deseni her katman yeniden kurulumunda CPU'da üretiliyor; çok sayıda sık taramada GPU tarafına (desen gölgelendiricisi) taşınmalı.
 - Pencere seçiminde çokgenlerin sınır kutusu kullanılıyor (tam geometri testi değil).
 - Ayar pencereleri her değişiklikte bölümü yeniden çiziyor (odak korunuyor); kısa formlar için yeterli.
-- Arayüz için otomatik test yok; yalnızca saf katmanların birim testleri var.
+- Arayüz bileşenlerinin birim testi yok; arayüz yalnızca duman testiyle (`pnpm e2e`) sınanıyor.
+- Rust çekirdeği (`crates/geometry-core`) TypeScript geometrisinin yalnızca bir alt kümesini karşılıyor: bulge yayı, yol uzunluğu, halka ve delikli alan, çevre, nokta-çokgen, sınır kutusu. Uygulama WASM paketini henüz yüklemiyor; çalışan geometri TypeScript'tir. Yaylı nesnelerin sınır kutusu TS'de 72 parçalı ana hatla yaklaşık bulunuyor ve golden setinde yok (ADR 0002).
+- §23 sayısal politika (yuvarlama, hisse, artık dağıtımı) yalnızca Rust'ta var. Onaylı resmî politika olmadığı için durumu `draft`; kesin kadastral işlemler kapalı. `ctx.format` yalnızca gösterimdir.
+- API yalnızca `/v1/health` veriyor: kimlik, tenant, veritabanı yok. Durum çubuğundaki sunucu göstergesi §21'deki bağlantı durum makinesi değildir.
+- ADR 0005 hedefleri taslak; ağır modül açılışı ve §6.1 etkileşim bütçeleri henüz ölçülmüyor (`docs/perf/README.md`).
 
 ---
 
@@ -749,6 +764,7 @@ src/
     format.ts                Formatter: sayıdan metne tek geçit
     processing.ts            ProcessingService: işlem kaydı, çalıştırıcı, son değerler; işlem komutları
     styles.ts                StyleService: stil kitaplığı (sistem + kullanıcı localStorage + proje); stil komutları, nesneye sembol verme
+  contracts/                 Sürümlü sözleşmeler: generated/ (ts-rs çıktısı, elle düzenlenmez), version.ts, contracts.test.ts (derleme anında uyum)
   core/                      Bağımsız temel yapılar (signal, emitter, disposable, commands, keymap)
   geo/crs.ts                 EPSG kaydı (TUREF/ED50 TM, UTM, WGS84), arama, dilim önerisi
   geo/crsFixture.ts          Kaydın Rust ile paylaşılan sürümlü dosyası (fixtures/crs/v1/registry.json) ve dilim önerisi örnekleri
@@ -820,7 +836,20 @@ src/
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
   styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları)
+  wasm/                      Rust çekirdeğinin WASM golden testi; pkg/ `pnpm rust:wasm` ile üretilir, depoya girmez
+crates/
+  contracts/                 Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları)
+  geometry-core/             Saf analitik geometri (f64) ve §23 sayısal politika (rust_decimal); tests/ (golden, bağımsız referans, sayısal)
+  wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen, düz Float64Array)
+apps/api/                    Axum API: GET /v1/health (127.0.0.1:8787)
+fixtures/                    İki dilin paylaştığı sürümlü dosyalar: geometry/v1 (golden, bağımsız referans), numeric/v1, document/v1 (.kcad örneği), crs/v1 (CRS kaydı)
+Cargo.toml, rust-toolchain.toml, .cargo/config.toml   Rust çalışma alanı, sabit araç zinciri, 4 işlik derleme sınırı
+vite.config.mjs              /v1 isteklerini yerel API'ye ileten eklenti (dev ve preview)
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo)
+scripts/fixtures/            Fixture kaydedicileri (GOLDEN_WRITE=1) ve bağımsız referans üreticileri (Python decimal/fractions)
+scripts/perf/                Build envanteri (bundle.mjs) ve başlangıç ölçümü (startup.mjs) → docs/perf/
+docs/adr/                    Mimari kararlar (0001 çalışma alanı, 0002 sözleşme ve fixture, 0003 işlem anlamı, 0004 sayısal politika, 0005 performans hedefleri, taslak)
+docs/perf/                   Ölçüm raporları ve özet (README.md)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanları, birimler, işleyiciler, kitaplık, çizim hattı, aşamalar
 ```
@@ -835,6 +864,15 @@ tarayıcı uygulamasıdır; Rust crate'i, Cargo workspace, HTTP sunucusu,
 kalıcı proje kaydı ve çoklu tenant henüz yoktur. `src/processing/worker/`
 bir tarayıcı Web Worker'ıdır; sunucu job worker'ı değildir. WebGL2/WebGPU
 arka uçları, stil motoru ve `SceneLayer` sözleşmesi mevcuttur.
+
+> **Doğrulanmış durum (2026-09-23, `e916874` sonrası):** Faz A dilimleri depodadır:
+> - Cargo çalışma alanı: `crates/contracts`, `crates/geometry-core`, `crates/wasm`, `apps/api`.
+> - Yalnızca `GET /v1/health` veren API.
+> - Native ve WASM'da aynı golden ve bağımsız referans dosyalarıyla sınanan geometri alt kümesi.
+> - §23 sayısal politika çekirdeği, sürümlü sözleşmeler.
+> - Yerel `.kcad` kaydet/aç.
+>
+> PostgreSQL/PostGIS, kimlik, tenant, sunucu worker'ı, MVT/Martin ve bulut kaydı yoktur. Ayrıntı: §11–12, `docs/adr/`, `docs/perf/`.
 
 **Kesin karar:** Ana kalıcı veri deposu PostgreSQL + PostGIS. Bu proje için
 ayrı bir disk motoru, WAL, MVCC, uzamsal indeks veya dağıtık veritabanı
