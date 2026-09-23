@@ -1,9 +1,10 @@
 import { Signal } from '../core/signal';
 import { DOCUMENT_EXTENSION, readSnapshot, toSnapshot } from '../model/snapshot';
-import { parseStyleFile, STYLE_FORMAT, STYLE_VERSION } from '../style/file';
 import { h } from '../ui/dom';
 import { Dialog } from '../ui/widgets/Dialog';
+import { projectStylesProblem } from './cloud/incoming';
 import type { AppContext } from './context';
+import type { DocumentContent } from '../model/document';
 
 /**
  * Local drawing files (`.kcad`, the versioned `DocumentSnapshotV1`): Save,
@@ -59,6 +60,16 @@ export const browserPicker: DrawingFilePicker = {
     }
   },
 };
+
+/** Puts a whole drawing on screen: select tool, no selection, the new content, its start view. */
+export function replaceDrawing(ctx: AppContext, content: DocumentContent): void {
+  ctx.tools.activate('select');
+  ctx.selection.clear();
+  ctx.doc.replaceWith(content);
+  const home = ctx.doc.homeView;
+  if (home) ctx.view.camera.fit(home);
+  else ctx.view.zoomExtents();
+}
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const withoutExtension = (name: string) => (name.toLowerCase().endsWith(DOCUMENT_EXTENSION) ? name.slice(0, -DOCUMENT_EXTENSION.length) : name);
@@ -121,19 +132,15 @@ export class DocumentFiles {
       return false;
     }
     // The project's own symbols are checked like any shared style file (untrusted data).
-    const styles = read.content.styles;
-    const check = parseStyleFile(JSON.stringify({ format: STYLE_FORMAT, version: STYLE_VERSION, exported: '', items: styles.items, categories: styles.categories }));
-    if (check.issues.length) {
-      ctx.log.error(`${handle ? `“${handle.name}”` : 'Dosya'} açılamadı: proje stillerinde sorun var (${check.issues[0]}).`);
+    const styles = projectStylesProblem(read.content.styles);
+    if (styles) {
+      ctx.log.error(`${handle ? `“${handle.name}”` : 'Dosya'} açılamadı: ${styles}.`);
       return false;
     }
-    ctx.tools.activate('select');
-    ctx.selection.clear();
-    ctx.doc.replaceWith(read.content);
+    // A local file replaces an open cloud project (its unsent changes stay in the device draft).
+    ctx.cloud.detach();
+    replaceDrawing(ctx, read.content);
     this.handle = readOnly ? null : handle;
-    const home = ctx.doc.homeView;
-    if (home) ctx.view.camera.fit(home);
-    else ctx.view.zoomExtents();
     ctx.log.success(`“${handle?.name ?? ctx.doc.name.value}” açıldı: ${ctx.doc.size} nesne, ${ctx.doc.layers.leaves().length} katman.`);
     return true;
   }

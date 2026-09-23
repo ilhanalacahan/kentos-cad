@@ -25,6 +25,22 @@ interface DocumentEvents {
   changed: { layerIds: Set<string> };
   /** Only attributes changed (no geometry rebuild needed). */
   attrs: { ids: number[] };
+  /**
+   * Which objects an applied change touched (edit, undo, redo, rollback or an
+   * external change) and whether a layer's style changed. Cloud sync
+   * (app/cloud/sync.ts) diffs exactly these; `external` marks changes that
+   * came from the server and must not be sent back.
+   */
+  touched: { ids: number[]; layerStyles: boolean; external: boolean };
+}
+
+/** The project's metadata another editor may have changed (applied by `applyExternal`). */
+export interface ExternalMeta {
+  name?: string;
+  settings?: ProjectSettingsData;
+  layers?: readonly LayerInit[];
+  activeLayer?: string;
+  styles?: ProjectStyles;
 }
 
 /** Everything a drawing file holds (see model/snapshot.ts for its versioned form). */
@@ -66,6 +82,9 @@ export class CadDocument {
    * (an edit made during a slow save stays unsaved; CLAUDE.md §21.3).
    */
   private edits = 0;
+  /** While positive, changes are not edits (another editor's changes arriving: `applyExternal`). */
+  private quiet = 0;
+  private external = false;
   private nextId = 1;
   private undoStack: Transaction[] = [];
   private redoStack: Transaction[] = [];
@@ -98,8 +117,14 @@ export class CadDocument {
   }
 
   private markEdited(): void {
+    if (this.quiet) return;
     this.edits++;
     this.dirty.set(true);
+  }
+
+  /** The drawing has changes a save has not written (cloud sync restoring a device draft). */
+  markUnsaved(): void {
+    this.markEdited();
   }
 
   /** A save of `revision` succeeded: the drawing is clean unless it changed since. */
@@ -285,6 +310,61 @@ export class CadDocument {
     this.dirty.set(false);
   }
 
+  /** A fresh object id (for objects that arrive from elsewhere, see `applyExternal`). */
+  allocateId(): number {
+    return this.nextId++;
+  }
+
+  /** Whether an edit or a group is open (external changes wait until it closes). */
+  get busy(): boolean {
+    return !!(this.pending || this.group);
+  }
+
+  /**
+   * Applies changes that another editor already saved: no undo step, not an
+   * unsaved edit. Undo steps touching these objects are dropped, so undo can
+   * never silently revert someone else's change (CLAUDE.md §15). Objects are
+   * put with their id (`allocateId` for new ones). Refused while an edit is open.
+   */
+  applyExternal(changes: { put?: readonly Entity[]; remove?: readonly number[]; meta?: ExternalMeta }): void {
+    if (this.busy) throw new Error('Açık bir düzenleme varken dışarıdan gelen değişiklik uygulanamaz.');
+    const ops: Op[] = [];
+    for (const e of changes.put ?? []) {
+      const before = this.entities.get(e.id);
+      ops.push(before ? { type: 'update', before, after: e } : { type: 'add', entity: e });
+      if (e.id >= this.nextId) this.nextId = e.id + 1;
+    }
+    for (const id of changes.remove ?? []) {
+      const entity = this.entities.get(id);
+      if (entity) ops.push({ type: 'remove', entity });
+    }
+    this.quiet++;
+    this.external = true;
+    try {
+      if (ops.length) this.applyAll(ops);
+      const m = changes.meta;
+      if (m?.layers) this.layers.reset(m.layers, m.activeLayer ?? this.layers.active.value);
+      else if (m?.activeLayer) this.layers.reset(this.layers.tree, m.activeLayer);
+      if (m?.settings) this.settings.assign(m.settings);
+      if (m?.name !== undefined) this.name.set(m.name);
+      if (m?.styles) this.styles.set(m.styles);
+    } finally {
+      this.external = false;
+      this.quiet--;
+    }
+    this.forgetHistoryOf(new Set(ops.map((o) => (o.type === 'update' ? o.after.id : o.type === 'layerStyle' ? -1 : o.entity.id))));
+  }
+
+  /** Drops the undo and redo steps that touch any of these objects. */
+  forgetHistoryOf(ids: ReadonlySet<number>): void {
+    if (!ids.size) return;
+    const touches = (tx: Transaction) =>
+      tx.ops.some((o) => (o.type === 'update' ? ids.has(o.before.id) : o.type === 'layerStyle' ? false : ids.has(o.entity.id)));
+    this.undoStack = this.undoStack.filter((tx) => !touches(tx));
+    this.redoStack = this.redoStack.filter((tx) => !touches(tx));
+    this.syncHistory();
+  }
+
   undo(): string | null {
     const tx = this.undoStack.pop();
     if (!tx) return null;
@@ -330,11 +410,15 @@ export class CadDocument {
   private applyAll(ops: Op[]): void {
     const layerIds = new Set<string>();
     const attrIds: number[] = [];
+    const touched: number[] = [];
+    let layerStyles = false;
     for (const op of ops) {
       if (op.type === 'layerStyle') {
         this.layers.replaceStyle(op.layerId, op.after);
+        layerStyles = true;
         continue;
       }
+      touched.push(op.type === 'update' ? op.after.id : op.entity.id);
       if (op.type === 'add') {
         this.entities.set(op.entity.id, op.entity);
         layerIds.add(op.entity.layerId);
@@ -351,6 +435,7 @@ export class CadDocument {
     }
     if (layerIds.size) this.events.emit('changed', { layerIds });
     if (attrIds.length) this.events.emit('attrs', { ids: attrIds });
+    if (touched.length || layerStyles) this.events.emit('touched', { ids: touched, layerStyles, external: this.external });
   }
 
   private syncHistory(): void {

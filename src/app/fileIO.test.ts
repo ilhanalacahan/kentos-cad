@@ -38,6 +38,7 @@ function setup(doc = new CadDocument({ name: 'Proje', layers: new LayerStore([{ 
     tools: { activate: () => {} },
     selection: { clear: () => {} },
     view: { camera: { fit: () => {} }, zoomExtents: () => {} },
+    cloud: { detach: () => {} },
   } as unknown as AppContext;
   const files = new DocumentFiles(ctx);
   return { doc, files, messages };

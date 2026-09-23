@@ -94,9 +94,15 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       title: 'Kaydet',
       category: F,
       icon: 'save',
-      description: 'Çizimi .kcad dosyasına yazar; dosya yazılamazsa değişiklikler kaydedilmemiş sayılır. Bulut kaydı sunucuyla gelecek.',
+      description:
+        'Bulut projesinde bekleyen değişiklikleri hemen gönderir (zaten kendiliğinden kaydedilir). Yerel çizimi .kcad dosyasına yazar; dosya yazılamazsa değişiklikler kaydedilmemiş sayılır.',
       aliases: ['KAYDET', 'SAVE'],
-      run: () => void ctx.files.save(),
+      run: () => {
+        if (!ctx.cloud.project.value) return void ctx.files.save();
+        void ctx.cloud.flush().then((ok) =>
+          ok ? ctx.log.success('Buluta kaydedildi.') : ctx.log.warn('Bulut kaydı tamamlanamadı; durum çubuğundaki kayıt durumuna bakın.'),
+        );
+      },
       isEnabled: () => !ctx.files.busy.value,
       watch: [ctx.files.busy],
     },

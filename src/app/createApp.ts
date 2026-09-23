@@ -15,6 +15,11 @@ import { ViewportController } from '../viewport/ViewportController';
 import { Clipboard } from './clipboard';
 import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
+import { registerCloudCommands } from './cloud/commands';
+import { openConflictDialog } from '../ui/cloud/ConflictDialog';
+import { openLoginDialog } from '../ui/cloud/LoginDialog';
+import { openProjectsDialog } from '../ui/cloud/ProjectsDialog';
+import { CloudSession } from './cloud/session';
 import { DocumentFiles } from './fileIO';
 import { ServerStatus } from './server';
 import { registerDefaultKeybindings } from './keybindings';
@@ -23,6 +28,25 @@ import { createStyles, registerStyleCommands } from './styles';
 import { Formatter } from './format';
 import { applyUiScale } from './commands';
 import { createPreferences, createUiState, DraftingSettings, MessageLog } from './state';
+
+/** An OpenID sign-in that failed comes back as `?oidc=error&reason=…`: say why, then clean the address. */
+function reportSignInError(ctx: AppContext): void {
+  const q = new URLSearchParams(location.search);
+  if (q.get('oidc') !== 'error') return;
+  const why: Record<string, string> = {
+    unauthenticated: 'kimlik doğrulanamadı',
+    forbidden: 'hesabınız devre dışı',
+    invalid: 'giriş isteğinin süresi doldu',
+    unavailable: 'sunucuya ya da kimlik sağlayıcısına ulaşılamadı',
+    not_configured: 'bu sunucuda OpenID girişi yok',
+    access_denied: 'giriş reddedildi',
+  };
+  const reason = q.get('reason') ?? '';
+  ctx.log.error(`Kurum hesabıyla giriş yapılamadı: ${why[reason] ?? reason}. Yeniden deneyin ya da yerel hesabınızla girin.`);
+  q.delete('oidc');
+  q.delete('reason');
+  history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+}
 
 /**
  * Composition root: builds services, wires them into one AppContext and
@@ -60,10 +84,11 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     processing: createProcessing(doc, selection, () => ctx.view.camera.visibleBounds()),
     styles: createStyles(doc),
     server: new ServerStatus(),
-  } as AppContext & { tools: ToolManager; view: ViewportController; files: DocumentFiles };
+  } as AppContext & { tools: ToolManager; view: ViewportController; files: DocumentFiles; cloud: CloudSession };
   ctx.tools = new ToolManager(ctx);
   ctx.view = new ViewportController(ctx);
   ctx.files = new DocumentFiles(ctx);
+  ctx.cloud = new CloudSession(ctx);
   // Closing the tab with unsaved changes asks first. Not in development, where Vite reloads the page on every edit.
   if (import.meta.env.PROD) window.addEventListener('beforeunload', (e) => doc.dirty.value && e.preventDefault());
   TOOL_CATALOG.forEach((d) => ctx.tools.register(d));
@@ -84,6 +109,11 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     show: (tab) => shell?.showProcessing(tab),
   });
   registerStyleCommands(ctx);
+  registerCloudCommands(ctx, {
+    signIn: (then) => openLoginDialog(ctx, then),
+    projects: (mode) => openProjectsDialog(ctx, mode),
+    conflicts: () => openConflictDialog(ctx),
+  });
   registerDefaultKeybindings(ctx);
   commands.events.on('missing', ({ id }) => ctx.log.error(`Komut bulunamadı: ${id}`));
 
@@ -98,6 +128,9 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   ctx.server.watch(window);
   const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 300));
   idle(() => void ctx.server.check());
+  // Who is signed in, once the server answers (and again whenever it comes back).
+  ctx.server.state.subscribe((s) => s === 'online' && ctx.cloud.auth.value !== 'signedIn' && void ctx.cloud.refresh());
+  reportSignInError(ctx);
 
   // Drop selection entries whose entities disappeared (undo, erase).
   doc.events.on('changed', () => ctx.selection.retain((id) => !!doc.get(id)));

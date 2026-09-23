@@ -1,0 +1,163 @@
+/* Cloud: sign-in, cloud projects, save conflicts, and the save cell of the status bar. */
+
+.dialog--cloud .dialog__body > p {
+  margin: 0 0 12px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--c-text);
+}
+.cloud-form {
+  display: grid;
+  gap: 12px;
+}
+.cloud-field {
+  display: grid;
+  gap: 4px;
+}
+.dialog--cloud .cloud-field + .cloud-field,
+.dialog--cloud .cloud-field + .cloud-list {
+  margin-top: 12px;
+}
+.cloud-field > span {
+  font-size: var(--fs-xs);
+  color: var(--c-text-2);
+}
+.cloud-error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-danger);
+}
+.cloud-or {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.cloud-or > span {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--c-text-3);
+}
+.cloud-oidc {
+  width: 100%;
+}
+
+.cloud-list {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(320px * var(--ui-scale));
+  overflow: auto;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+}
+.cloud-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--c-line-soft);
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.cloud-row:last-child {
+  border-bottom: 0;
+}
+.cloud-row:hover {
+  background: var(--c-hover);
+}
+.cloud-row[aria-selected='true'] {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.cloud-row__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cloud-row__meta {
+  font-size: var(--fs-xs);
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+.cloud-empty {
+  margin: 0;
+  padding: 16px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+.cloud-hint {
+  font-size: var(--fs-xs);
+  color: var(--c-text-2);
+  line-height: 1.5;
+}
+.cloud-progress {
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background: var(--c-line);
+  overflow: hidden;
+}
+.cloud-progress > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--c-accent);
+  transition: width var(--dur);
+}
+.cloud-status {
+  min-height: 1.4em;
+  margin: 8px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-2);
+}
+.cloud-status[data-kind='error'] {
+  color: var(--c-danger);
+}
+.cloud-conflicts {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  max-height: calc(240px * var(--ui-scale));
+  overflow: auto;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+}
+.cloud-conflicts > li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--c-line-soft);
+  font-size: var(--fs-sm);
+}
+.cloud-conflicts > li:last-child {
+  border-bottom: 0;
+}
+
+/* Save cell: filled green only when the server has everything; amber while offline; red for a conflict or an error. */
+.status__save {
+  color: var(--c-text-2);
+}
+.status__save[data-state='saved'] .status__lamp {
+  border-color: var(--c-ok);
+  background: var(--c-ok);
+}
+.status__save[data-state='offline_pending'] {
+  color: var(--c-warn);
+}
+.status__save[data-state='conflict'],
+.status__save[data-state='error'] {
+  color: var(--c-danger);
+}
+.status__save[data-state='conflict'] .status__lamp,
+.status__save[data-state='error'] .status__lamp {
+  background: currentColor;
+}
+.status__save[data-state='readonly'] {
+  color: var(--c-text-3);
+}

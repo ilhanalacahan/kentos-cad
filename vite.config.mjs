@@ -1,9 +1,11 @@
 // Vite configuration. The only addition to the defaults: requests under /v1/
 // go to the local KentOS API (apps/api, `pnpm api`), in both `vite` and
-// `vite preview`. When the API is not running the answer is a quiet 503, so
-// the app shows "Sunucu: yok" without filling the terminal with proxy errors
-// (Vite's own proxy logs every refused connection).
+// `vite preview`, and so does the project WebSocket (/v1/ws). When the API is
+// not running the answer is a quiet 503, so the app shows "Sunucu: yok"
+// without filling the terminal with proxy errors (Vite's own proxy logs every
+// refused connection).
 import http from 'node:http';
+import net from 'node:net';
 import { defineConfig } from 'vite';
 
 const API_PORT = Number(process.env.KENTOS_API_PORT ?? 8787);
@@ -23,10 +25,34 @@ function kentosApi() {
     });
     req.pipe(upstream);
   };
+  // WebSocket upgrades never reach the middleware: /v1/ws is passed through as raw TCP. Vite's own HMR socket is left alone.
+  const upgrade = (httpServer) =>
+    httpServer?.on('upgrade', (req, socket, head) => {
+      if (!req.url?.startsWith('/v1/ws')) return;
+      const upstream = net.connect(API_PORT, '127.0.0.1', () => {
+        const lines = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
+        for (let i = 0; i < req.rawHeaders.length; i += 2) {
+          const name = req.rawHeaders[i];
+          lines.push(`${name}: ${name.toLowerCase() === 'host' ? `127.0.0.1:${API_PORT}` : req.rawHeaders[i + 1]}`);
+        }
+        upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
+        if (head?.length) upstream.write(head);
+        upstream.pipe(socket);
+        socket.pipe(upstream);
+      });
+      upstream.on('error', () => socket.destroy());
+      socket.on('error', () => upstream.destroy());
+    });
   return {
     name: 'kentos-api',
-    configureServer: (server) => void server.middlewares.use(forward),
-    configurePreviewServer: (server) => void server.middlewares.use(forward),
+    configureServer: (server) => {
+      server.middlewares.use(forward);
+      upgrade(server.httpServer);
+    },
+    configurePreviewServer: (server) => {
+      server.middlewares.use(forward);
+      upgrade(server.httpServer);
+    },
   };
 }
 
