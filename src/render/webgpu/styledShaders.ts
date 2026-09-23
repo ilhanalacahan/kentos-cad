@@ -3,8 +3,8 @@
  * strokes, solid/hatch/tile fills and markers, with the same distance
  * fields, dash test and unit handling. Group 0 is the frame (shared with
  * the plain pipelines), group 1 the batch style, group 2 the atlas.
- * Derivatives are taken before any branch (WGSL uniformity rules) and
- * textures are sampled with explicit gradients.
+ * The atlas has one level (images are drawn at their shown size), so it
+ * is sampled with textureSampleLevel, which needs no uniform control flow.
  */
 export const STYLED_WGSL = /* wgsl */ `
 struct Frame {
@@ -130,7 +130,7 @@ struct AreaOut {
 @fragment fn solidFs(i: AreaOut) -> @location(0) vec4f {
   return st.color;
 }
-// Hatch: a = (dir.x, dir.y, spacing, width), b = (offset, dashTotal, dashOn, 0), flags.x = unit.
+// Hatch: a = (dir.x, dir.y, spacing, width), b = (offset, dashTotal, dashOn, dashOffset), flags.x = unit.
 @fragment fn hatchFs(i: AreaOut) -> @location(0) vec4f {
   let screen = st.flags.x == 1u;
   var p = i.world;
@@ -147,7 +147,7 @@ struct AreaOut {
     let u = dot(p, n) - st.b.x;
     let d = abs(fract(u / st.a.z + 0.5) - 0.5) * gap;
     a = clamp(halfW + 0.5 - d, 0.0, 1.0);
-    a *= dashCover(dot(p, dir) * k, k, st.b.y, st.b.z, 0.0);
+    a *= dashCover(dot(p, dir) * k, k, st.b.y, st.b.z, st.b.w);
   }
   if (a < 0.004) { discard; }
   return vec4f(st.color.rgb, st.color.a * a);
@@ -158,13 +158,10 @@ struct AreaOut {
   if (st.flags.x == 1u) { p = i.pos.xy * vec2f(1.0, -1.0) / frame.dpr; }
   let r = st.a.zw;
   p = vec2f(r.x * p.x + r.y * p.y, -r.y * p.x + r.x * p.y) - st.b.xy;
-  let q = p / st.a.xy;
-  let gx = dpdx(q) * st.rect.zw;
-  let gy = dpdy(q) * st.rect.zw;
-  let f = fract(q);
+  let f = fract(p / st.a.xy);
   let inset = vec2f(0.5 / 2048.0);
   let uv = st.rect.xy + inset + vec2f(f.x, 1.0 - f.y) * (st.rect.zw - 2.0 * inset);
-  let c = textureSampleGrad(atlasTex, atlasSmp, uv, gx, gy) * st.b.z;
+  let c = textureSampleLevel(atlasTex, atlasSmp, uv, 0.0) * st.b.z;
   if (c.a < 0.004) { discard; }
   return c;
 }
@@ -275,42 +272,98 @@ fn shapeDist(s: u32, p: vec2f, hs: vec2f) -> f32 {
       if (inside) { return -d; }
       return d;
     }
-    case 15u: { return max(length(p) - r, -p.y); }
+    case 15u: { return min(sdSeg(p, vec2f(-hs.x, hs.y), vec2f(hs.x, 0.0)), sdSeg(p, vec2f(hs.x, 0.0), vec2f(-hs.x, -hs.y))); }
+    case 16u: { return max(length(p) - r, -p.y); }
     default: { return max(length(p) - r, max(-p.x, -p.y)); }
   }
 }
-fn isOpen(s: u32) -> bool { return s == 10u || s == 11u || s == 12u || s == 13u; }
+fn isOpen(s: u32) -> bool { return s == 10u || s == 11u || s == 12u || s == 13u || s == 15u; }
+// A shape's colour (premultiplied) from its distance d in device px; q is the point in px (ring dot).
+fn shapeColor(shape: u32, d: f32, q: vec2f, hs: vec2f, fill: vec4f, strokeIn: vec4f, swIn: f32) -> vec4f {
+  let open = isOpen(shape);
+  var stroke = strokeIn;
+  if (stroke.a <= 0.0) { if (open) { stroke = fill; } else { stroke = vec4f(0.0); } }
+  var sw = swIn;
+  if (sw <= 0.0 && open) { sw = max(frame.dpr, 1.0); }
+  var col = vec4f(0.0);
+  if (!open && fill.a > 0.0) { col = vec4f(fill.rgb * fill.a, fill.a) * clamp(0.5 - d, 0.0, 1.0); }
+  if (stroke.a > 0.0 && sw > 0.0) {
+    let sa = clamp(sw * 0.5 + 0.5 - abs(d), 0.0, 1.0);
+    let sc = vec4f(stroke.rgb * stroke.a, stroke.a) * sa;
+    col = sc + col * (1.0 - sc.a);
+  }
+  if (shape == 1u && stroke.a > 0.0) {
+    let dt = clamp(max(1.2 * frame.dpr, hs.x * 0.16) + 0.5 - length(q), 0.0, 1.0);
+    let dc = vec4f(stroke.rgb * stroke.a, stroke.a) * dt;
+    col = dc + col * (1.0 - dc.a);
+  }
+  return col;
+}
+fn hash3(p: vec2f) -> vec3f {
+  var q = fract(vec3f(p.xyx) * vec3f(0.1031, 0.1030, 0.0973));
+  q += dot(q, q.yxz + 33.33);
+  return fract((q.xxy + q.yzz) * q.zyx);
+}
+
+// Pattern: color = fill, stroke, dash0 = (size, cos, sin), dash1 = (shift, jitter), rect = (half, markOffset),
+// a = (markRot cos, sin, coverage, seed), b = (strokeW, tint, opacity, 0), flags = (unit, stagger, shape, reach). Premultiplied out.
+@fragment fn patternFs(i: AreaOut) -> @location(0) vec4f {
+  var p = i.world;
+  var k = frame.pxPerM;
+  if (st.flags.x == 1u) { p = i.pos.xy * vec2f(1.0, -1.0) / frame.dpr; k = frame.dpr; }
+  let rot = st.dash0.zw;
+  p = vec2f(rot.x * p.x + rot.y * p.y, -rot.y * p.x + rot.x * p.y) - st.dash1.xy;
+  let size = st.dash0.xy;
+  let shape = st.flags.z;
+  var col = vec4f(0.0);
+  if (min(size.x, size.y) * k < 4.0) {
+    var ink = st.color;
+    if (!(st.color.a > 0.0 && !isOpen(shape)) && st.stroke.a > 0.0) { ink = st.stroke; }
+    let a = ink.a * st.b.y;
+    col = vec4f(ink.rgb * a, a);
+  } else {
+    var best = 1e9;
+    var bestQ = vec2f(0.0);
+    let reach = i32(st.flags.w);
+    let row0 = floor(p.y / size.y);
+    for (var dy = -1; dy <= 1; dy++) {
+      if (abs(dy) > reach) { continue; }
+      let row = row0 + f32(dy);
+      var sx = 0.0;
+      if (st.flags.y == 1u && fmod(row, 2.0) > 0.5) { sx = 0.5 * size.x; }
+      let col0 = floor((p.x - sx) / size.x);
+      for (var dx = -1; dx <= 1; dx++) {
+        if (abs(dx) > reach) { continue; }
+        let cell = vec2f(col0 + f32(dx), row);
+        let h = hash3(cell + vec2f(st.a.w * 17.31, st.a.w * 7.73));
+        if (h.z > st.a.z) { continue; }
+        let c = vec2f((cell.x + 0.5) * size.x + sx, (row + 0.5) * size.y) + (h.xy - 0.5) * st.dash1.zw;
+        var q = p - c - st.rect.zw;
+        let mr = st.a.xy;
+        q = vec2f(mr.x * q.x + mr.y * q.y, -mr.y * q.x + mr.x * q.y) * k;
+        let d = shapeDist(shape, q, st.rect.xy * k);
+        if (d < best) { best = d; bestQ = q; }
+      }
+    }
+    if (best > 1e8) { discard; }
+    var sw = 0.0;
+    if (st.b.x > 0.0) { sw = max(st.b.x * k, 1.0); }
+    col = shapeColor(shape, best, bestQ, st.rect.xy * k, st.color, st.stroke, sw);
+  }
+  col *= st.b.z;
+  if (col.a < 0.004) { discard; }
+  return col;
+}
 
 @fragment fn markerFs(i: MarkerOut) -> @location(0) vec4f {
-  // Texture coordinates and their gradients first, in uniform control flow.
-  let t = i.local / (2.0 * i.hs) + 0.5;
-  let uv = st.rect.xy + vec2f(t.x, 1.0 - t.y) * st.rect.zw;
-  let gx = dpdx(uv);
-  let gy = dpdy(uv);
-  let img = textureSampleGrad(atlasTex, atlasSmp, uv, gx, gy);
   var col = vec4f(0.0);
   if (st.flags.y == 1u) {
+    let t = i.local / (2.0 * i.hs) + 0.5;
     if (any(t < vec2f(0.0)) || any(t > vec2f(1.0))) { discard; }
-    col = img;
+    col = textureSampleLevel(atlasTex, atlasSmp, st.rect.xy + vec2f(t.x, 1.0 - t.y) * st.rect.zw, 0.0);
   } else {
     let shape = st.flags.z;
-    let d = shapeDist(shape, i.local, i.hs);
-    let open = isOpen(shape);
-    var stroke = st.stroke;
-    if (stroke.a <= 0.0) { if (open) { stroke = st.color; } else { stroke = vec4f(0.0); } }
-    var sw = i.sw;
-    if (sw <= 0.0 && open) { sw = max(frame.dpr, 1.0); }
-    if (!open && st.color.a > 0.0) { col = vec4f(st.color.rgb * st.color.a, st.color.a) * clamp(0.5 - d, 0.0, 1.0); }
-    if (stroke.a > 0.0 && sw > 0.0) {
-      let sa = clamp(sw * 0.5 + 0.5 - abs(d), 0.0, 1.0);
-      let sc = vec4f(stroke.rgb * stroke.a, stroke.a) * sa;
-      col = sc + col * (1.0 - sc.a);
-    }
-    if (shape == 1u && stroke.a > 0.0) {
-      let dt = clamp(max(1.2 * frame.dpr, i.hs.x * 0.16) + 0.5 - length(i.local), 0.0, 1.0);
-      let dc = vec4f(stroke.rgb * stroke.a, stroke.a) * dt;
-      col = dc + col * (1.0 - dc.a);
-    }
+    col = shapeColor(shape, shapeDist(shape, i.local, i.hs), i.local, i.hs, st.color, st.stroke, i.sw);
   }
   col *= st.b.z;
   if (col.a < 0.004) { discard; }

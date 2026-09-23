@@ -20,6 +20,8 @@ export interface CanvasPalette {
   fgDim: string;
   /** CAD colour 7 ("siyah"): black on light backgrounds, white on dark. */
   ink: string;
+  /** The sheet itself: white on paper and the light theme, the canvas colour on dark (knockouts, "white" insides). */
+  paper: string;
   gridMinor: RGBA;
   gridMajor: RGBA;
   accent: string;
@@ -38,6 +40,7 @@ export function readCanvasPalette(el: Element = document.documentElement): Canva
     fg: v('--canvas-fg', '#E4EAF0'),
     fgDim: v('--canvas-fg-dim', '#A9B4C0'),
     ink: v('--canvas-ink', '#FFFFFF'),
+    paper: v('--canvas-bg', '#151B22'),
     gridMinor: parseHex(v('--canvas-grid-minor', '#FFFFFF0D')),
     gridMajor: parseHex(v('--canvas-grid-major', '#FFFFFF1C')),
     accent: v('--canvas-accent', '#F2B632'),
@@ -55,5 +58,6 @@ export function resolveColor(color: string, palette: CanvasPalette): string {
   if (color === 'fg') return palette.fg;
   if (color === 'fg-dim') return palette.fgDim;
   if (color === 'ink') return palette.ink;
+  if (color === 'paper') return palette.paper;
   return color;
 }

@@ -1,6 +1,8 @@
 import { CommandRegistry } from '../core/commands';
 import { Keymap } from '../core/keymap';
 import { createSampleProject } from '../model/sampleProject';
+import { buildShowcase } from '../style/showcase';
+import { SYSTEM_LIBRARY } from '../style/system';
 import { Selection } from '../model/selection';
 import { TOOL_CATALOG } from '../tools/catalog';
 import { ToolManager } from '../tools/ToolManager';
@@ -30,6 +32,11 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   const ui = createUiState();
   const prefs = createPreferences();
   const doc = createSampleProject(prefs.defaultSrid.value);
+  // The demo carries the whole system symbol library as a catalogue below the sheet.
+  if (doc.homeView) {
+    buildShowcase(doc, SYSTEM_LIBRARY.items, SYSTEM_LIBRARY.categories, { x: doc.homeView.minX, y: doc.homeView.minY - 80 });
+    doc.dirty.set(false);
+  }
   // Theme and type scale before any service reads CSS tokens (canvas palette).
   document.documentElement.dataset.theme = ui.theme.value;
   applyUiScale(prefs.uiScale.value);

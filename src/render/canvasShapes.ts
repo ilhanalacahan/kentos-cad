@@ -7,7 +7,7 @@ import type { MarkerLook, RGBA, ShapeId } from './types';
  */
 
 /** Shapes drawn as lines only (their "fill" colour, if any, strokes them). */
-export const OPEN_SHAPES: ReadonlySet<ShapeId> = new Set(['cross', 'x', 'line', 'arrow']);
+export const OPEN_SHAPES: ReadonlySet<ShapeId> = new Set(['cross', 'x', 'line', 'arrow', 'chevron']);
 
 function polygon(n: number, r: number, rot = Math.PI / 2): [number, number][] {
   return Array.from({ length: n }, (_, i) => [Math.cos(rot + (i * 2 * Math.PI) / n) * r, Math.sin(rot + (i * 2 * Math.PI) / n) * r]);
@@ -85,6 +85,12 @@ export function shapePath(shape: ShapeId, hw: number, hh: number): Path2D {
         [-hw, hh * 0.8],
         [-hw, -hh * 0.8],
       ]);
+      break;
+    case 'chevron':
+      // Open V pointing along +x (the two sides of an arrowhead without its base).
+      p.moveTo(-hw, hh);
+      p.lineTo(hw, 0);
+      p.lineTo(-hw, -hh);
       break;
     case 'cross':
       p.moveTo(-r, 0);

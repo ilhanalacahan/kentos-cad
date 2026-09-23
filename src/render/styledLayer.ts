@@ -39,6 +39,8 @@ export interface StyledBuildOptions {
 
 /** Symbol levels across classes: every fill before any line, every line before any marker. */
 const LEVEL_BASE: Record<GeometryClass, number> = { fill: 0, line: 1000, marker: 2000 };
+/** An object's symbol may be of another class than its geometry (compileSymbol adapts it). */
+const SYMBOL_CLASS = { fill: 'fill', line: 'line', marker: 'marker' } as const;
 
 export function buildStyledLayer(id: string, entities: readonly Entity[], style: LayerStyle, opts: StyledBuildOptions): SceneLayer {
   const sink = new StyledSink({ origin: opts.origin, palette: opts.palette, plotScale: opts.plotScale, asset: (a) => opts.library.asset(a) });
@@ -84,13 +86,13 @@ export function buildStyledLayer(id: string, entities: readonly Entity[], style:
       sink.setScale(r);
       const own = symbolOf(r.symbols[geom.cls], lookup);
       if (own) {
-        compileSymbol(own, geom, target, env, sink, LEVEL_BASE[geom.cls]);
+        compileSymbol(own, geom, target, env, sink, LEVEL_BASE[SYMBOL_CLASS[own.type]]);
         drew = true;
       } else if (geom.cls === 'fill') {
         // An area without a fill symbol takes the line symbol on its edges.
         const edge = symbolOf(r.symbols.line, lookup);
         if (!edge) continue;
-        compileSymbol(edge, { cls: 'line', paths: geom.rings.map((pts) => ({ pts, closed: true })) }, target, env, sink, LEVEL_BASE.line);
+        compileSymbol(edge, geom, target, env, sink, LEVEL_BASE.line);
         drew = true;
       }
     }

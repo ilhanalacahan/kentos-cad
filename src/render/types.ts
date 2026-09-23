@@ -40,11 +40,20 @@ export interface ScaleRange {
   maxScale?: number;
 }
 
+/** Where a batch draws, so a frame can skip it when it is out of view. */
+export interface BatchExtent extends ScaleRange {
+  /** Origin-relative box of the batch's geometry: minX, minY, maxX, maxY. */
+  bounds: readonly [number, number, number, number];
+  /** How far drawing reaches past the geometry (half a stroke, a marker's size), in `reachUnit`. */
+  reach: number;
+  reachUnit: StyleUnit;
+}
+
 /** Sizes in metres ("world", from paper mm at the plot scale) or screen pixels. */
 export type StyleUnit = 'world' | 'px';
 
 /** Thick, capped, dashed lines as instanced segments. */
-export interface StrokeBatch extends ScaleRange {
+export interface StrokeBatch extends BatchExtent {
   kind: 'stroke';
   /**
    * STROKE_STRIDE floats per segment: ax, ay, bx, by (origin-relative),
@@ -65,19 +74,45 @@ export const STROKE_STRIDE = 6;
 
 export type FillPaintBatch =
   | { kind: 'solid'; color: RGBA }
-  | { kind: 'hatch'; color: RGBA; angle: number; spacing: number; width: number; offset: number; dash: readonly number[] | null; unit: StyleUnit }
+  | { kind: 'hatch'; color: RGBA; angle: number; spacing: number; width: number; offset: number; dash: readonly number[] | null; dashOffset: number; unit: StyleUnit }
+  /**
+   * One shape on a grid computed per pixel (sizes in `unit`): `size` is the
+   * cell, `mark` the shape in it; `jitter` and `coverage` scatter it at
+   * random per cell; `tint` is the share of a cell the shape inks, used
+   * when cells are too small to draw.
+   */
+  | {
+      kind: 'pattern';
+      shape: ShapeId;
+      fill: RGBA | null;
+      stroke: RGBA | null;
+      strokeWidth: number;
+      half: readonly [number, number];
+      markOffset: readonly [number, number];
+      markRotation: number;
+      size: readonly [number, number];
+      stagger: boolean;
+      angle: number;
+      offset: readonly [number, number];
+      jitter: number;
+      coverage: number;
+      seed: number;
+      tint: number;
+      opacity: number;
+      unit: StyleUnit;
+    }
   /** A tile from the atlas repeated over the area; `size` in `unit`. */
   | { kind: 'tile'; image: AtlasImage; size: readonly [number, number]; angle: number; offset: readonly [number, number]; opacity: number; unit: StyleUnit };
 
 /** Triangulated areas with a paint computed per pixel (hatch lines and tiles cost no geometry). */
-export interface PaintFillBatch extends ScaleRange {
+export interface PaintFillBatch extends BatchExtent {
   kind: 'fill';
   positions: Float32Array;
   paint: FillPaintBatch;
 }
 
 /** Shapes drawn from distance fields in the shader. */
-export type ShapeId = 'circle' | 'ring' | 'square' | 'rectangle' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'cross' | 'x' | 'line' | 'arrow' | 'arrowhead' | 'semicircle' | 'quartercircle';
+export type ShapeId = 'circle' | 'ring' | 'square' | 'rectangle' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'cross' | 'x' | 'line' | 'arrow' | 'arrowhead' | 'chevron' | 'semicircle' | 'quartercircle';
 
 export type MarkerLook =
   | { kind: 'shape'; shape: ShapeId; fill: RGBA | null; stroke: RGBA | null; strokeWidth: number }
@@ -85,7 +120,7 @@ export type MarkerLook =
   | { kind: 'image'; image: AtlasImage; fit: 'width' | 'height' };
 
 /** Instanced markers sharing one look. */
-export interface MarkerBatch extends ScaleRange {
+export interface MarkerBatch extends BatchExtent {
   kind: 'marker';
   /** MARKER_STRIDE floats per marker: x, y (origin-relative), angle (radians), width, height (in `unit`). */
   instances: Float32Array;
@@ -96,6 +131,8 @@ export interface MarkerBatch extends ScaleRange {
   /** Where the point sits in the box: (0,0) centre, (0,0.5) top edge, (-0.5,0) left edge … */
   anchor: readonly [number, number];
   opacity: number;
+  /** Largest width and height among the instances (in `unit`): the atlas draws images for this size. */
+  extent: readonly [number, number];
 }
 
 export const MARKER_STRIDE = 5;
@@ -162,23 +199,61 @@ export interface FrameState {
 
 export type BackendKind = 'webgl2' | 'webgpu';
 
-/** The atlas as a backend sees it: a canvas to upload when `version` changes, and where each image sits. */
-export interface AtlasSource {
-  readonly version: number;
-  readonly canvas: HTMLCanvasElement | OffscreenCanvas;
-  /** Canvases for mip levels 1…n (WebGPU has no generated mipmaps). */
-  mipLevels(): readonly (HTMLCanvasElement | OffscreenCanvas)[];
-  /** UV rect (x, y, w, h in 0..1) and height/width of an image, or null while it is still loading. */
-  lookup(image: AtlasImage): { uv: readonly [number, number, number, number]; aspect: number } | null;
-  /** Places the images a draw will need before the texture is uploaded for it. */
-  prefetch(images: Iterable<AtlasImage>): void;
+/** Where an image sits in the atlas texture. */
+export interface AtlasHit {
+  /** UV rect (x, y, w, h in 0..1, y down). */
+  readonly uv: readonly [number, number, number, number];
+  /** Height / width of the image. */
+  readonly aspect: number;
 }
 
-/** The atlas images a styled batch draws with. */
+/** Copies a freshly drawn image into the backend's atlas texture at (x, y) px. */
+export type AtlasUpload = (source: HTMLCanvasElement, x: number, y: number) => void;
+
+/**
+ * The atlas as a backend sees it. Images are drawn at the size they are
+ * shown (in power-of-two steps), so they stay sharp at every zoom without
+ * mipmaps; each new image is handed to the backend's `upload` as it is
+ * drawn. A frame first looks up everything it will draw, then draws.
+ */
+export interface AtlasSource {
+  /** Page size in px (the texture is size × size, RGBA, premultiplied on upload). */
+  readonly size: number;
+  /** Bumped when the page starts over: rectangles looked up before are void. */
+  readonly generation: number;
+  /** The backend that receives drawn images; the page starts over for a new one. */
+  attach(upload: AtlasUpload | null): void;
+  beginFrame(): void;
+  /**
+   * Where an image drawn about `px` device pixels along its fitted side
+   * (height for text, width otherwise) is; a nearby size while that one is
+   * being made, or null while nothing is ready yet.
+   */
+  lookup(image: AtlasImage, px: number): AtlasHit | null;
+}
+
+/** The atlas image a styled batch draws with. */
 export function batchImage(b: StyledBatch): AtlasImage | null {
   if (b.kind === 'fill' && b.paint.kind === 'tile') return b.paint.image;
   if (b.kind === 'marker' && b.look.kind === 'image') return b.look.image;
   return null;
+}
+
+/**
+ * Size in device px an image batch wants from the atlas: a tile's width,
+ * a text marker's height, an SVG or raster marker's width.
+ */
+export function batchImagePx(b: StyledBatch, pxPerM: number, dpr: number): number {
+  if (b.kind === 'fill' && b.paint.kind === 'tile') return b.paint.size[0] * (b.paint.unit === 'world' ? pxPerM : dpr);
+  if (b.kind === 'marker' && b.look.kind === 'image') return (b.look.fit === 'height' ? b.extent[1] : b.extent[0]) * (b.unit === 'world' ? pxPerM : dpr);
+  return 0;
+}
+
+/** Whether a batch can show in a view (origin-relative box of the view in metres, device px per metre). */
+export function batchInView(b: BatchExtent, view: readonly [number, number, number, number], pxPerM: number, dpr: number): boolean {
+  const r = b.reachUnit === 'world' ? b.reach : (b.reach * dpr) / pxPerM;
+  const [x0, y0, x1, y1] = b.bounds;
+  return x1 + r >= view[0] && x0 - r <= view[2] && y1 + r >= view[1] && y0 - r <= view[3];
 }
 
 export interface RenderBackend {

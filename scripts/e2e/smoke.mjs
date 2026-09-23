@@ -594,7 +594,7 @@ try {
   await sleep(300);
   const styledInk = await inked();
   check('style: renderer and symbol add ink (hatches, arrows, text)', styledInk > 1.3 * plainInk, `${styledInk} / ${plainInk} px`);
-  check('style: text markers are drawn into the atlas', (await b.eval('window.kentos.view.atlas.version')) > 1);
+  check('style: text markers are drawn into the atlas', (await b.eval('window.kentos.view.atlas.entries.size')) > 0);
   await key('z', { ctrl: true });
   check('style: an object symbol is one undo step', (await b.eval(`window.kentos.doc.get(${axis}).symbol ?? null`)) === null);
   await b.eval(`window.kentos.doc.update(${axis}, { symbol: 'temel.cizgi.oklu' })`);

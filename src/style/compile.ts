@@ -3,8 +3,8 @@ import { compileExpression, type CompiledExpression } from '../model/expression/
 import { toNumber, toText, truthy, type ExprScope, type ExprValue } from '../model/expression/expressionLib';
 import { offsetPath } from '../model/geom/offset';
 import type { Vec2 } from '../model/geometry';
-import { interiorPoint, placeAlong, type StyledGeometry } from './geometry';
-import type { FillPaint, MarkerCommon, MarkerStyle, PrimitiveSink, PrimUnit, StrokeStyle } from './primitives';
+import { interiorPoint, placeAlong, wavePaths, type StyledGeometry } from './geometry';
+import type { FillPaint, MarkerCommon, MarkerStyle, PrimitiveSink, PrimUnit, ShapeMarkStyle, StrokeStyle } from './primitives';
 import type { DataDefined, FillLayer, LineLayer, MarkerLayer, MarkerSymbol, SizeUnit, Symbol } from '../model/style';
 
 /**
@@ -79,7 +79,7 @@ export function ddBool(v: DataDefined<boolean> | undefined, t: CompileTarget, en
   return r === null ? (v.fallback ?? true) : truthy(r);
 }
 
-const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|ink|fg|fg-dim)$/i;
+const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|ink|paper|fg|fg-dim)$/i;
 
 export function ddColor(v: DataDefined<string> | null | undefined, t: CompileTarget, env: CompileEnv): string | null {
   if (v === undefined || v === null) return null;
@@ -189,15 +189,22 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
   if (path.length < 2) return;
   if (layer.type === 'simpleLine') {
     const style = strokeStyle(layer, level, t, env);
-    if (style) sink.stroke(style, path, closed);
+    if (!style) return;
+    const w = layer.wave;
+    if (w && w.length > 0) {
+      const len = (v: number) => toWorld(v, layer.unit, env);
+      const spec = { shape: w.shape, length: len(w.length), amplitude: len(w.amplitude), spacing: len(w.spacing ?? w.length), connect: w.connect !== false };
+      for (const piece of wavePaths(path, closed, spec)) sink.stroke(style, piece, false);
+    } else sink.stroke(style, path, closed);
     return;
   }
   const interval = layer.interval !== undefined ? toWorld(layer.interval, layer.unit, env) : 0;
   const along = layer.offsetAlong !== undefined ? toWorld(layer.offsetAlong, layer.unit, env) : 0;
+  const group = layer.group && layer.group.count > 1 ? { count: layer.group.count, spacing: toWorld(layer.group.spacing, layer.unit, env) } : undefined;
   // One style object per marker layer for the whole path: the sink keys batches by identity.
   const styles = layer.marker.layers.flatMap((m) => markerStyle(m, level, t, env) ?? []);
   if (!styles.length) return;
-  for (const p of placeAlong(path, closed, layer.placement, interval, along)) for (const st of styles) sink.marker(st, p.at, layer.rotate === false ? 0 : p.angle);
+  for (const p of placeAlong(path, closed, layer.placement, interval, along, group)) for (const st of styles) sink.marker(st, p.at, layer.rotate === false ? 0 : p.angle);
 }
 
 // ── Fills ──────────────────────────────────────────────────────────────
@@ -233,6 +240,7 @@ function emitFillLayer(layer: FillLayer, rings: readonly (readonly Vec2[])[], le
         width: len(layer.width),
         offset: len(layer.offset ?? 0),
         dash: layer.dash?.length ? layer.dash.map(len) : null,
+        dashOffset: len(layer.dashOffset ?? 0),
         unit: px ? 'px' : 'world',
         level,
       };
@@ -241,16 +249,32 @@ function emitFillLayer(layer: FillLayer, rings: readonly (readonly Vec2[])[], le
     }
     case 'patternFill': {
       if (!(layer.spacingX > 0 && layer.spacingY > 0)) return;
-      // Pattern markers are drawn into a tile, so their sizes stay in the tile's unit.
       const markers = layer.marker.layers.flatMap((m) => markerStyle(m, level, t, env) ?? []);
       if (!markers.length) return;
       const px = layer.unit === 'px';
       const len = (v: number) => (px ? v : toWorld(v, layer.unit, env));
       const off = layer.offset ?? [0, 0];
-      sink.fill(
-        { kind: 'tile', tile: { kind: 'markers', markers, stagger: !!layer.stagger }, size: [len(layer.spacingX), len(layer.spacingY)], angle: (layer.angle ?? 0) * DEG, offset: [len(off[0]), len(off[1])], opacity, unit: px ? 'px' : 'world', level },
-        rings,
-      );
+      const unit: PrimUnit = px ? 'px' : 'world';
+      const size: [number, number] = [len(layer.spacingX), len(layer.spacingY)];
+      const angle = (layer.angle ?? 0) * DEG;
+      const offset: [number, number] = [len(off[0]), len(off[1])];
+      // Shapes are drawn by the shader, one paint per marker layer, in the pattern's unit;
+      // text and images go into one atlas tile after them.
+      const inUnit = (v: number, u: PrimUnit) => (u === unit ? v : u === 'px' ? v * ((MM_PER_PX * env.plotScale) / 1000) : v / ((MM_PER_PX * env.plotScale) / 1000));
+      for (const m of markers) {
+        if (m.kind !== 'shape') continue;
+        const u = m.common.unit;
+        const mark: ShapeMarkStyle = {
+          ...m,
+          size: inUnit(m.size, u),
+          height: inUnit(m.height, u),
+          strokeWidth: inUnit(m.strokeWidth, u),
+          common: { ...m.common, unit, offset: [inUnit(m.common.offset[0], u), inUnit(m.common.offset[1], u)] },
+        };
+        sink.fill({ kind: 'pattern', mark, size, stagger: !!layer.stagger, angle, offset, jitter: Math.min(1, Math.max(0, layer.jitter ?? 0)), coverage: Math.min(1, Math.max(0, layer.coverage ?? 1)), seed: layer.seed ?? 0, opacity, unit, level }, rings);
+      }
+      const others = markers.filter((m) => m.kind !== 'shape');
+      if (others.length) sink.fill({ kind: 'tile', tile: { kind: 'markers', markers: others, stagger: !!layer.stagger }, size, angle, offset, opacity, unit, level }, rings);
       return;
     }
     case 'imageFill': {
@@ -286,18 +310,38 @@ function centroidOf(ring: readonly Vec2[] | undefined): Vec2 | null {
 // ── Entry point ────────────────────────────────────────────────────────
 
 /**
- * Draws a symbol on a geometry of the matching class; a symbol of another
- * class draws nothing. `levelBase` orders symbol layers across a layer
+ * Draws a symbol on a geometry. A symbol of another class adapts, so any
+ * symbol can be given to any object: a line symbol on an area draws its
+ * edges (the area's rings as closed lines, left = inside), a marker symbol
+ * sits at an area's inside point or a line's middle, a fill symbol fills a
+ * closed line. A fill symbol on an open line or a point, and a line symbol
+ * on a point, draw nothing. `levelBase` orders symbol layers across a layer
  * (fills first, then lines, then markers: see the scene builder).
  */
 export function compileSymbol(symbol: Symbol, geom: StyledGeometry, t: CompileTarget, env: CompileEnv, sink: PrimitiveSink, levelBase = 0): void {
-  if (symbol.type === 'marker' && geom.cls === 'marker') {
-    symbol.layers.forEach((l, i) => emitMarker(l, geom.point, 0, levelBase + i, t, env, sink));
-  } else if (symbol.type === 'line' && geom.cls === 'line') {
+  if (symbol.type === 'marker') {
+    const at = geom.cls === 'marker' ? geom.point : geom.cls === 'fill' ? interiorPoint(geom.rings) : lineMiddle(geom.paths);
+    if (at) symbol.layers.forEach((l, i) => emitMarker(l, at, 0, levelBase + i, t, env, sink));
+  } else if (symbol.type === 'line') {
+    const paths = geom.cls === 'line' ? geom.paths : geom.cls === 'fill' ? geom.rings.map((pts) => ({ pts, closed: true })) : [];
     symbol.layers.forEach((l, i) => {
-      for (const p of geom.paths) emitLineLayer(l, p.pts, p.closed, levelBase + i, t, env, sink);
+      for (const p of paths) emitLineLayer(l, p.pts, p.closed, levelBase + i, t, env, sink);
     });
-  } else if (symbol.type === 'fill' && geom.cls === 'fill') {
-    symbol.layers.forEach((l, i) => emitFillLayer(l, geom.rings, levelBase + i, t, env, sink));
+  } else {
+    const rings = geom.cls === 'fill' ? geom.rings : geom.cls === 'line' ? geom.paths.filter((p) => p.closed && p.pts.length > 2).map((p) => p.pts) : [];
+    if (rings.length) symbol.layers.forEach((l, i) => emitFillLayer(l, rings, levelBase + i, t, env, sink));
   }
+}
+
+/** The point halfway along the longest path of a line geometry. */
+function lineMiddle(paths: readonly { readonly pts: readonly Vec2[]; readonly closed: boolean }[]): Vec2 | null {
+  let best: { pts: readonly Vec2[]; closed: boolean; len: number } | null = null;
+  for (const p of paths) {
+    let len = 0;
+    const n = p.pts.length;
+    for (let i = 0; i < (p.closed ? n : n - 1); i++) len += Math.hypot(p.pts[(i + 1) % n].x - p.pts[i].x, p.pts[(i + 1) % n].y - p.pts[i].y);
+    if (!best || len > best.len) best = { pts: p.pts, closed: p.closed, len };
+  }
+  if (!best) return null;
+  return placeAlong(best.pts, best.closed, 'center')[0]?.at ?? best.pts[0] ?? null;
 }

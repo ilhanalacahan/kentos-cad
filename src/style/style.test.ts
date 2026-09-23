@@ -4,7 +4,7 @@ import type { Vec2 } from '../model/geometry';
 import { compileSymbol, ExprCache, toDrawn, toWorld, type CompileEnv } from './compile';
 import { exportStyles, importStyles, parseStyleFile, sanitizeSvg, svgAsset, validateSymbol } from './file';
 import { hatchSymbolOf, symbolsOfLayerStyle } from './fromLayer';
-import { geometryClassOf, interiorPoint, MAX_MARKERS_PER_PATH, placeAlong, styledGeometry } from './geometry';
+import { geometryClassOf, interiorPoint, MAX_MARKERS_PER_PATH, placeAlong, styledGeometry, wavePaths } from './geometry';
 import { StyleLibrary } from './library';
 import { PrimitiveList } from './primitives';
 import { resolveRenderer } from './resolve';
@@ -153,20 +153,80 @@ describe('compiling symbols', () => {
       [2, null],
     ]);
   });
-  it('turns a marker pattern into a tile and an image fill keeps the asset proportions', () => {
+  it('draws pattern shapes in the shader, puts text in a tile, and an image fill keeps the asset proportions', () => {
     const sym: FillSymbol = {
       type: 'fill',
       layers: [
-        { id: 'p', type: 'patternFill', marker: { type: 'marker', layers: [{ id: 'd', type: 'shape', shape: 'cross', size: 1, stroke: '#2E7D32' }] }, spacingX: 4, spacingY: 3, stagger: true },
+        {
+          id: 'p',
+          type: 'patternFill',
+          marker: { type: 'marker', layers: [{ id: 'd', type: 'shape', shape: 'cross', size: 1, stroke: '#2E7D32', strokeWidth: 0.2 }, { id: 't', type: 'text', text: 'K', size: 2 }] },
+          spacingX: 4,
+          spacingY: 3,
+          stagger: true,
+          jitter: 2,
+          coverage: 0.4,
+        },
         { id: 'i', type: 'imageFill', asset: 'a1', tileSize: 5 },
       ],
     };
     const e = polygon(square(10));
     const out = new PrimitiveList();
     compileSymbol(sym, styledGeometry(e)!, { entity: e, index: 1 }, { ...env(500), assetAspect: () => 0.5 }, out);
-    const [p, i] = out.fills.map((f) => f.paint);
-    expect(p.kind === 'tile' && [p.size, p.tile.kind === 'markers' && p.tile.stagger]).toEqual([[2, 1.5], true]);
+    const [shape, text, i] = out.fills.map((f) => f.paint);
+    // Shape sizes stay in the pattern's unit (world metres at 1:500), jitter is clamped to 0–1.
+    expect(shape.kind === 'pattern' && [shape.size, shape.stagger, shape.mark.size, shape.mark.strokeWidth, shape.jitter, shape.coverage]).toEqual([[2, 1.5], true, 0.5, 0.1, 1, 0.4]);
+    expect(text.kind === 'tile' && text.tile.kind === 'markers' && [text.size, text.tile.markers.map((m) => m.kind)]).toEqual([[2, 1.5], ['text']]);
     expect(i.kind === 'tile' && i.size).toEqual([2.5, 1.25]);
+  });
+
+  it('hatch dash offsets and marker groups along a line', () => {
+    const hatch: FillSymbol = { type: 'fill', layers: [{ id: 'h', type: 'hatchFill', angle: 0, spacing: 2, width: 0.2, color: '#000000', dash: [2, 2], dashOffset: 2 }] };
+    const e = polygon(square(10));
+    const out = new PrimitiveList();
+    compileSymbol(hatch, styledGeometry(e)!, { entity: e, index: 1 }, env(1000), out);
+    const h = out.fills[0].paint;
+    expect(h.kind === 'hatch' && [h.dash, h.dashOffset]).toEqual([[2, 2], 2]);
+    // Three dots 1 mm apart in the middle of every 10 mm (köy sınırı): at 1:1000 that is metres.
+    const dots: LineSymbol = {
+      type: 'line',
+      layers: [{ id: 'g', type: 'markerLine', placement: 'interval', interval: 10, offsetAlong: 5, group: { count: 3, spacing: 1 }, marker: { type: 'marker', layers: [{ id: 'm', type: 'shape', shape: 'circle', size: 0.5, fill: '#000000' }] } }],
+    };
+    const l = line([v(0, 0), v(20, 0)]);
+    const out2 = new PrimitiveList();
+    compileSymbol(dots, styledGeometry(l)!, { entity: l, index: 1 }, env(1000), out2);
+    expect(out2.markers.map((m) => m.at.x)).toEqual([4, 5, 6, 14, 15, 16]);
+  });
+});
+
+describe('placement and waves', () => {
+  it('groups wrap on closed paths and are cut at open ends', () => {
+    const sq = [v(0, 0), v(10, 0), v(10, 10), v(0, 10)];
+    const closed = placeAlong(sq, true, 'first', 0, 0, { count: 3, spacing: 1 });
+    expect(closed.map((p) => [p.at.x, p.at.y])).toEqual([
+      [0, 1],
+      [0, 0],
+      [1, 0],
+    ]);
+    const open = placeAlong([v(0, 0), v(10, 0)], false, 'first', 0, 0, { count: 3, spacing: 1 });
+    expect(open.map((p) => p.at.x)).toEqual([0, 1]);
+  });
+
+  it('lays sine waves along a path, connected or as dashes', () => {
+    const path = [v(0, 0), v(20, 0)];
+    const joined = wavePaths(path, false, { shape: 'sine', length: 5, amplitude: 1, spacing: 5, connect: true });
+    expect(joined).toHaveLength(1);
+    const pts = joined[0];
+    expect(pts[0]).toEqual(v(0, 0));
+    expect(pts[pts.length - 1]).toEqual(v(20, 0));
+    // A quarter of the first wave is its crest, one amplitude to the left.
+    expect(Math.max(...pts.map((p) => p.y))).toBeCloseTo(1, 9);
+    expect(Math.min(...pts.map((p) => p.y))).toBeCloseTo(-1, 9);
+    const dashed = wavePaths(path, false, { shape: 'sine', length: 5, amplitude: 1, spacing: 7, connect: false });
+    // Two 7-unit repeats fit in 20; each wave is its own piece, centred on the path.
+    expect(dashed).toHaveLength(2);
+    expect(dashed[0][0].x).toBeCloseTo(4, 9);
+    expect(dashed[1][dashed[1].length - 1].x).toBeCloseTo(16, 9);
   });
 });
 
@@ -296,7 +356,7 @@ describe('style files', () => {
     const bad = { format: 'kentos-style', version: 1, exported: '', items: [{ kind: 'symbol', id: 's', name: 'S', path: [], symbol: { type: 'line', layers: [{ id: 'a', type: 'simpleFill', color: 'kırmızı' }] } }] };
     expect(parseStyleFile(JSON.stringify(bad)).issues[0]).toContain('“line” sembolünde “simpleFill” katmanı olamaz');
     expect(validateSymbol({ type: 'line', layers: [{ id: 'a', type: 'simpleLine', color: 'kırmızı', width: 1, dash: [0, 0] }] })).toEqual([
-      'sembol › katman 1: renk geçerli bir renk değil (#RRGGBB, #RRGGBBAA, ink, fg, fg-dim)',
+      'sembol › katman 1: renk geçerli bir renk değil (#RRGGBB, #RRGGBBAA, ink, paper, fg, fg-dim)',
       'sembol › katman 1: kesik deseninin toplamı sıfır olamaz',
     ]);
     const svg = sanitizeSvg('<?xml version="1.0"?><svg onload="alert(1)"><script>alert(2)</script><image href="http://x.test/a.png"/><rect fill="url(http://x.test/p)" onclick=\'x()\'/><use href="#k"/></svg>');

@@ -196,6 +196,11 @@ export class WebGPUBackend implements RenderBackend {
       colorAttachments: [{ view: this.msaa.createView(), resolveTarget: this.context.getCurrentTexture().createView(), clearValue: { r, g, b, a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
     });
     pass.setBindGroup(0, this.frameBind);
+    // Visibility and atlas images for the whole frame before anything is drawn.
+    this.styled.prepare(
+      [...frame.underlays, ...frame.order, ...frame.overlays].flatMap((id) => this.layers.get(id)?.styled ?? []),
+      { cam: [view.center.x, view.center.y], pxPerM: view.scale * this.dpr, dpr: this.dpr, viewPx: [w, h], scaleDenominator: frame.scaleDenominator },
+    );
     const drawPass = (ids: readonly string[]) => {
       const layers = ids.map((id) => this.layers.get(id)).filter((l): l is GpuLayer => !!l);
       // Same order as WebGL2: per layer its plain fills then its styled symbols; then plain lines and points.
@@ -208,7 +213,7 @@ export class WebGPUBackend implements RenderBackend {
             pass.draw(f.count);
           }
         }
-        this.styled.draw(pass, l.styled, frame.scaleDenominator);
+        this.styled.draw(pass, l.styled);
       }
       pass.setPipeline(this.linePipe);
       for (const l of layers)

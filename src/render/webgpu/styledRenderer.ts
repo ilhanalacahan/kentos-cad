@@ -1,13 +1,16 @@
-import { batchImage, MARKER_STRIDE, STROKE_STRIDE, type AtlasSource, type StyledBatch } from '../types';
+import { batchImage, batchImagePx, batchInView, MARKER_STRIDE, STROKE_STRIDE, type AtlasHit, type AtlasSource, type StyledBatch } from '../types';
+import { dashValues, inScale, patternReach, type StyledFrame } from '../webgl2/styledRenderer';
 import { SHAPE_IDS } from '../webgl2/styledShaders';
 import { STYLED_WGSL } from './styledShaders';
 
 /**
  * WebGPU side of the styled batches, twin of webgl2/styledRenderer.ts:
- * pipelines for strokes, solid/hatch/tile fills and markers; one style
- * uniform per batch written at upload (atlas rectangles refreshed when the
- * atlas changes); the atlas as a mipmapped texture (levels drawn by the
- * atlas itself, WebGPU has no generated mipmaps).
+ * pipelines for strokes, solid/hatch/pattern/tile fills and markers; one
+ * style uniform per batch written at upload (its atlas rectangle rewritten
+ * when the image moves); the atlas as a one-level texture fed image by
+ * image. A frame prepares (visibility, atlas lookups, rectangle writes)
+ * before the render pass is encoded, since the whole pass sees the texture
+ * as it is at submit.
  */
 
 const BUFFER = { VERTEX: 0x20, UNIFORM: 0x40, COPY_DST: 0x08 } as const;
@@ -15,8 +18,6 @@ const TEXTURE = { COPY_DST: 0x02, TEXTURE_BINDING: 0x04, RENDER_ATTACHMENT: 0x10
 const STAGE = { VERTEX: 0x1, FRAGMENT: 0x2 } as const;
 /** SStyle: 8 vec4f + 1 vec4u. */
 const STYLE_BYTES = 144;
-const ATLAS_SIZE = 2048;
-const ATLAS_MIPS = Math.log2(ATLAS_SIZE) + 1;
 const SHAPE_INDEX = new Map<string, number>(SHAPE_IDS.map((s, i) => [s, i]));
 
 interface GpuStyled {
@@ -26,22 +27,13 @@ interface GpuStyled {
   style: GPUBuffer;
   bind: GPUBindGroup;
   data: ArrayBuffer;
-  /** Atlas version the style's rectangle was written for (tiles and images). */
-  rectVersion: number;
+  /** Set by prepare: drawn this frame; the atlas rectangle last written into the style. */
+  visible: boolean;
+  hit: AtlasHit | null;
 }
 
 export interface GpuStyledLayer {
   list: GpuStyled[];
-}
-
-function dashValues(dash: readonly number[] | null): { d: number[]; total: number; on: number } {
-  if (!dash?.length) return { d: new Array(8).fill(0), total: 0, on: 1 };
-  const even = dash.length % 2 ? [...dash, ...dash] : [...dash];
-  const d = even.slice(0, 8);
-  while (d.length < 8) d.push(0);
-  const total = d.reduce((s, v) => s + v, 0);
-  const on = d.reduce((s, v, i) => (i % 2 ? s : s + v), 0);
-  return { d, total, on: total > 0 ? on / total : 1 };
 }
 
 export class WebGPUStyledRenderer {
@@ -49,9 +41,8 @@ export class WebGPUStyledRenderer {
   private readonly styleLayout: GPUBindGroupLayout;
   private readonly atlasBind: GPUBindGroup;
   private readonly texture: GPUTexture;
-  private readonly pipes: Record<'stroke' | 'solid' | 'hatch' | 'tile' | 'marker', GPURenderPipeline>;
+  private readonly pipes: Record<'stroke' | 'solid' | 'hatch' | 'pattern' | 'tile' | 'marker', GPURenderPipeline>;
   private atlas: AtlasSource | null = null;
-  private textureVersion = -1;
 
   constructor(device: GPUDevice, format: GPUTextureFormat, frameLayout: GPUBindGroupLayout, samples: number) {
     this.device = device;
@@ -63,8 +54,8 @@ export class WebGPUStyledRenderer {
         { binding: 1, visibility: STAGE.FRAGMENT, sampler: { type: 'filtering' } },
       ],
     });
-    this.texture = device.createTexture({ size: [ATLAS_SIZE, ATLAS_SIZE], format: 'rgba8unorm', mipLevelCount: ATLAS_MIPS, usage: TEXTURE.COPY_DST | TEXTURE.TEXTURE_BINDING | TEXTURE.RENDER_ATTACHMENT });
-    const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+    this.texture = device.createTexture({ size: [2048, 2048], format: 'rgba8unorm', usage: TEXTURE.COPY_DST | TEXTURE.TEXTURE_BINDING | TEXTURE.RENDER_ATTACHMENT });
+    const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
     this.atlasBind = device.createBindGroup({ layout: atlasLayout, entries: [{ binding: 0, resource: this.texture.createView() }, { binding: 1, resource: sampler }] });
     const layout = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.styleLayout, atlasLayout] });
     const straight: GPUBlendState = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' } };
@@ -96,6 +87,7 @@ export class WebGPUStyledRenderer {
       ),
       solid: pipe('areaVs', 'solidFs', [area], straight),
       hatch: pipe('areaVs', 'hatchFs', [area], straight),
+      pattern: pipe('areaVs', 'patternFs', [area], premul),
       tile: pipe('areaVs', 'tileFs', [area], premul),
       marker: pipe(
         'markerVs',
@@ -117,7 +109,9 @@ export class WebGPUStyledRenderer {
 
   useAtlas(atlas: AtlasSource): void {
     this.atlas = atlas;
-    this.textureVersion = -1;
+    atlas.attach((source, x, y) => {
+      this.device.queue.copyExternalImageToTexture({ source }, { texture: this.texture, origin: { x, y }, premultipliedAlpha: true }, [source.width, source.height]);
+    });
   }
 
   // ── Upload ───────────────────────────────────────────────────────────
@@ -133,7 +127,7 @@ export class WebGPUStyledRenderer {
       const style = this.device.createBuffer({ size: STYLE_BYTES, usage: BUFFER.UNIFORM | BUFFER.COPY_DST });
       this.device.queue.writeBuffer(style, 0, data);
       const bind = this.device.createBindGroup({ layout: this.styleLayout, entries: [{ binding: 0, resource: { buffer: style } }] });
-      list.push({ batch: b, vertex, count, style, bind, data, rectVersion: -1 });
+      list.push({ batch: b, vertex, count, style, bind, data, visible: false, hit: null });
     }
     return { list };
   }
@@ -167,8 +161,18 @@ export class WebGPUStyledRenderer {
         f.set(p.color, 0);
         const v = dash(p.dash);
         f.set([Math.cos(p.angle), Math.sin(p.angle), p.spacing, p.width], 20);
-        f.set([p.offset, v.total, v.on, 0], 24);
+        f.set([p.offset, v.total, v.on, p.dashOffset], 24);
         u[32] = p.unit === 'world' ? 0 : 1;
+      } else if (p.kind === 'pattern') {
+        const r = patternReach(p);
+        f.set(p.fill ?? [0, 0, 0, 0], 0);
+        f.set(p.stroke ?? [0, 0, 0, 0], 4);
+        f.set([p.size[0], p.size[1], Math.cos(p.angle), Math.sin(p.angle)], 8);
+        f.set([p.offset[0], p.offset[1], r.jitter[0], r.jitter[1]], 12);
+        f.set([p.half[0], p.half[1], p.markOffset[0], p.markOffset[1]], 16);
+        f.set([Math.cos(p.markRotation), Math.sin(p.markRotation), p.coverage, p.seed], 20);
+        f.set([p.strokeWidth, p.tint, p.opacity, 0], 24);
+        u.set([p.unit === 'world' ? 0 : 1, p.stagger ? 1 : 0, SHAPE_INDEX.get(p.shape) ?? 0, r.reach], 32);
       } else {
         f.set([p.size[0], p.size[1], Math.cos(p.angle), Math.sin(p.angle)], 20);
         f.set([p.offset[0], p.offset[1], p.opacity, 0], 24);
@@ -180,8 +184,7 @@ export class WebGPUStyledRenderer {
       if (look.kind === 'shape') {
         f.set(look.fill ?? [0, 0, 0, 0], 0);
         f.set(look.stroke ?? [0, 0, 0, 0], 4);
-        const open = look.shape === 'cross' || look.shape === 'x' || look.shape === 'line' || look.shape === 'arrow';
-        f.set([1, look.stroke || open ? look.strokeWidth : 0, b.opacity, 0], 24);
+        f.set([1, look.strokeWidth, b.opacity, 0], 24);
         u.set([b.unit === 'world' ? 0 : 1, 0, SHAPE_INDEX.get(look.shape) ?? 0, 0], 32);
       } else {
         f.set([1, 0, b.opacity, 0], 24);
@@ -193,48 +196,54 @@ export class WebGPUStyledRenderer {
 
   // ── Drawing ──────────────────────────────────────────────────────────
 
-  private syncAtlas(): void {
-    const a = this.atlas;
-    if (!a || a.version === this.textureVersion) return;
-    const q = this.device.queue;
-    q.copyExternalImageToTexture({ source: a.canvas }, { texture: this.texture, mipLevel: 0, premultipliedAlpha: true }, [ATLAS_SIZE, ATLAS_SIZE]);
-    a.mipLevels()
-      .slice(0, ATLAS_MIPS - 1)
-      .forEach((c, i) => {
-        const size = ATLAS_SIZE >> (i + 1);
-        q.copyExternalImageToTexture({ source: c }, { texture: this.texture, mipLevel: i + 1, premultipliedAlpha: true }, [size, size]);
-      });
-    this.textureVersion = a.version;
+  /**
+   * Decides what shows this frame and places its images in the atlas,
+   * writing moved rectangles into the batch styles. If the atlas starts
+   * over midway, everything is looked up once more.
+   */
+  prepare(layers: readonly GpuStyledLayer[], f: StyledFrame): void {
+    const hw = f.viewPx[0] / 2 / f.pxPerM;
+    const hh = f.viewPx[1] / 2 / f.pxPerM;
+    const view = [f.cam[0] - hw, f.cam[1] - hh, f.cam[0] + hw, f.cam[1] + hh] as const;
+    const atlas = this.atlas;
+    atlas?.beginFrame();
+    for (let pass = 0; pass < 2; pass++) {
+      const generation = atlas?.generation ?? 0;
+      for (const layer of layers)
+        for (const s of layer.list) {
+          const b = s.batch;
+          s.visible = inScale(b, f.scaleDenominator) && batchInView(b, view, f.pxPerM, f.dpr);
+          if (!s.visible) continue;
+          const image = batchImage(b);
+          if (!image) continue;
+          const hit = atlas?.lookup(image, batchImagePx(b, f.pxPerM, f.dpr)) ?? null;
+          if (!hit) {
+            s.visible = false;
+            continue;
+          }
+          if (hit === s.hit) continue;
+          s.hit = hit;
+          const data = new Float32Array(s.data);
+          data.set(hit.uv, 16);
+          if (b.kind === 'marker') data[24] = hit.aspect;
+          this.device.queue.writeBuffer(s.style, 0, s.data);
+        }
+      if ((atlas?.generation ?? 0) === generation) break;
+    }
   }
 
-  /** Writes the atlas rectangle (and image aspect) of a tile or image batch; false while its image is loading. */
-  private refreshRect(s: GpuStyled): boolean {
-    const b = s.batch;
-    const image = b.kind === 'fill' && b.paint.kind === 'tile' ? b.paint.image : b.kind === 'marker' && b.look.kind === 'image' ? b.look.image : null;
-    if (!image) return true;
-    if (!this.atlas) return false;
-    if (s.rectVersion === this.atlas.version) return true;
-    const hit = this.atlas.lookup(image);
-    if (!hit) return false;
-    const f = new Float32Array(s.data);
-    f.set(hit.uv, 16);
-    if (b.kind === 'marker') f[24] = hit.aspect;
-    this.device.queue.writeBuffer(s.style, 0, s.data);
-    s.rectVersion = this.atlas.version;
-    return true;
-  }
-
-  draw(pass: GPURenderPassEncoder, layer: GpuStyledLayer, scaleDenominator: number): void {
+  draw(pass: GPURenderPassEncoder, layer: GpuStyledLayer): void {
     if (!layer.list.length) return;
-    this.atlas?.prefetch(layer.list.flatMap((s) => batchImage(s.batch) ?? []));
-    this.syncAtlas();
     pass.setBindGroup(2, this.atlasBind);
+    let current: GPURenderPipeline | null = null;
     for (const s of layer.list) {
+      if (!s.visible) continue;
       const b = s.batch;
-      if ((b.minScale !== undefined && scaleDenominator < b.minScale) || (b.maxScale !== undefined && scaleDenominator > b.maxScale)) continue;
-      if (!this.refreshRect(s)) continue;
       const pipe = b.kind === 'stroke' ? this.pipes.stroke : b.kind === 'marker' ? this.pipes.marker : this.pipes[b.paint.kind];
-      pass.setPipeline(pipe);
+      if (pipe !== current) {
+        pass.setPipeline(pipe);
+        current = pipe;
+      }
       pass.setBindGroup(1, s.bind);
       pass.setVertexBuffer(0, s.vertex);
       if (b.kind === 'fill') pass.draw(s.count);

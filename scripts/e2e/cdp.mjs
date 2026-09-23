@@ -136,10 +136,10 @@ export async function launch(url, { width = 1600, height = 900, args = [] } = {}
       await send('Input.insertText', { text });
       await sleep(30);
     },
-    async shot(name, clip) {
+    async shot(name, clip, dir = OUT) {
       await sleep(120);
       const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
-      const file = join(OUT, `${name}.png`);
+      const file = join(dir, `${name}.png`);
       writeFileSync(file, Buffer.from(r.data, 'base64'));
       return file;
     },

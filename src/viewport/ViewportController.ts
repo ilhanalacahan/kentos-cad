@@ -88,6 +88,8 @@ export class ViewportController {
   private highlightDirty = true;
   private gridKey = '';
   private frameQueued = false;
+  /** CPU time of the last frame's steps in ms: rebuilding dirty layers, GPU submit, the 2D overlay. */
+  stats = { build: 0, render: 0, overlay: 0 };
   private glQueued = false;
 
   private screenCursor: Vec2 | null = null;
@@ -137,7 +139,9 @@ export class ViewportController {
     // The engine preference applies live (settings dialog, status bar, menu).
     this.d.add(this.ctx.prefs.rendererPreference.subscribe((k) => void this.switchBackend(k)));
     this.resize();
-    this.zoomExtents();
+    const home = this.ctx.doc.homeView;
+    if (home) this.camera.fit(home);
+    else this.zoomExtents();
     document.fonts?.ready.then(() => this.requestOverlay());
   }
 
@@ -671,13 +675,20 @@ export class ViewportController {
 
   private frame(): void {
     this.frameQueued = false;
+    const t0 = performance.now();
+    let t1 = t0;
+    let t2 = t0;
     if (this.backend && this.glQueued) {
       this.glQueued = false;
       this.refreshConstructionClip();
       this.syncLayers();
+      t1 = performance.now();
       this.renderGl();
+      t2 = performance.now();
     }
     this.drawOverlay();
+    const t3 = performance.now();
+    this.stats = { build: t1 - t0, render: t2 - t1, overlay: t3 - t2 };
   }
 
   private syncLayers(): void {

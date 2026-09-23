@@ -318,6 +318,8 @@ export function createSampleProject(srid = DEFAULT_SRID): CadDocument {
   }
 
   doc.load(out);
+  // The sheet is the demo; the symbol catalogue below it is reached by panning or "Tümünü göster".
+  doc.homeView = { minX: fx0, minY: fy0, maxX: fx1, maxY: fy1 };
   doc.dirty.set(false);
   return doc;
 }

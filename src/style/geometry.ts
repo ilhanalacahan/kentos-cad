@@ -110,12 +110,21 @@ function meanAngle(a: number, b: number): number {
   return Math.atan2(Math.sin(a) + Math.sin(b), Math.cos(a) + Math.cos(b));
 }
 
+/** Several markers per place, `spacing` apart along the path and centred on it. */
+export interface PlaceGroup {
+  readonly count: number;
+  readonly spacing: number;
+}
+
 /**
  * Marker positions along a path. `interval` places one every `interval`
  * from `offsetAlong` (a closed path does not repeat its start at the end);
- * vertices face the bisector of their corner.
+ * vertices face the bisector of their corner. A `group` puts `count`
+ * markers at each place instead of one, centred on it (dots in a dash
+ * gap); on a closed path they wrap around, on an open one those past an
+ * end are left out.
  */
-export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: MarkerPlacement, interval = 0, offsetAlong = 0): Placed[] {
+export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: MarkerPlacement, interval = 0, offsetAlong = 0, group?: PlaceGroup): Placed[] {
   const n = pts.length;
   if (n < 2) return n === 1 ? [{ at: pts[0], angle: 0 }] : [];
   const segCount = closed ? n : n - 1;
@@ -143,35 +152,170 @@ export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: Mar
     const t = Math.min(1, Math.max(0, (s - g.start) / g.len));
     return { at: { x: g.a.x + (g.b.x - g.a.x) * t, y: g.a.y + (g.b.y - g.a.y) * t }, angle: g.angle };
   };
+  // Where along the path each place is (vertices keep their bisector unless grouped).
+  const places: { s: number; placed?: Placed }[] = [];
   switch (placement) {
     case 'interval': {
       if (!(interval > 0)) return [];
-      const out: Placed[] = [];
       const first = ((offsetAlong % interval) + interval) % interval;
       const end = closed ? total - 1e-9 : total + 1e-9;
-      for (let s = closed ? first : offsetAlong; s <= end && out.length < MAX_MARKERS_PER_PATH; s += interval) if (s >= -1e-9) out.push(at(Math.max(0, s)));
-      return out;
+      for (let s = closed ? first : offsetAlong; s <= end && places.length < MAX_MARKERS_PER_PATH; s += interval) if (s >= -1e-9) places.push({ s: Math.max(0, s) });
+      break;
     }
     case 'center':
-      return [at(total / 2)];
+      places.push({ s: total / 2 });
+      break;
     case 'segmentCenter':
-      return segs.map((g) => ({ at: { x: (g.a.x + g.b.x) / 2, y: (g.a.y + g.b.y) / 2 }, angle: g.angle }));
+      for (const g of segs) places.push({ s: g.start + g.len / 2, placed: { at: { x: (g.a.x + g.b.x) / 2, y: (g.a.y + g.b.y) / 2 }, angle: g.angle } });
+      break;
     case 'first':
-      return [{ at: segs[0].a, angle: segs[0].angle }];
-    case 'last':
-      return [{ at: segs[segs.length - 1].b, angle: segs[segs.length - 1].angle }];
+      places.push({ s: 0, placed: { at: segs[0].a, angle: segs[0].angle } });
+      break;
+    case 'last': {
+      const g = segs[segs.length - 1];
+      places.push({ s: total, placed: { at: g.b, angle: g.angle } });
+      break;
+    }
     case 'vertex':
     case 'innerVertex': {
-      const out: Placed[] = [];
       for (let i = 0; i < segs.length; i++) {
         const prev = segs[i - 1] ?? (closed ? segs[segs.length - 1] : null);
         if (!prev && placement === 'innerVertex') continue;
-        out.push({ at: segs[i].a, angle: prev ? meanAngle(prev.angle, segs[i].angle) : segs[i].angle });
+        places.push({ s: segs[i].start, placed: { at: segs[i].a, angle: prev ? meanAngle(prev.angle, segs[i].angle) : segs[i].angle } });
       }
-      if (!closed && placement === 'vertex') out.push({ at: segs[segs.length - 1].b, angle: segs[segs.length - 1].angle });
-      return out;
+      if (!closed && placement === 'vertex') {
+        const g = segs[segs.length - 1];
+        places.push({ s: total, placed: { at: g.b, angle: g.angle } });
+      }
+      break;
     }
   }
+  const count = group ? Math.max(1, Math.floor(group.count)) : 1;
+  if (count === 1 || !(group!.spacing > 0)) return places.map((p) => p.placed ?? at(p.s));
+  const out: Placed[] = [];
+  const half = ((count - 1) * group!.spacing) / 2;
+  for (const p of places) {
+    for (let i = 0; i < count && out.length < MAX_MARKERS_PER_PATH; i++) {
+      let s = p.s - half + i * group!.spacing;
+      if (closed) s = ((s % total) + total) % total;
+      else if (s < -1e-9 || s > total + 1e-9) continue;
+      out.push(at(Math.min(total, Math.max(0, s))));
+    }
+  }
+  return out;
+}
+
+// ── Waves ──────────────────────────────────────────────────────────────
+
+/** Points per wave: enough for a smooth sine at any zoom a symbol is drawn at. */
+const WAVE_STEPS = 16;
+
+export interface WaveSpec {
+  readonly shape: 'sine' | 'zigzag' | 'square';
+  /** One wave's length along the path, its height to each side, and the repeat (world units). */
+  readonly length: number;
+  readonly amplitude: number;
+  readonly spacing: number;
+  /** Straight line between waves when the repeat is longer than a wave. */
+  readonly connect: boolean;
+}
+
+/** Height of a wave at t ∈ [0, 1] of its length, in amplitudes (starts and ends on the line). */
+function waveAt(shape: WaveSpec['shape'], t: number): number {
+  if (shape === 'sine') return Math.sin(t * 2 * Math.PI);
+  if (shape === 'zigzag') return t < 0.25 ? t * 4 : t < 0.75 ? 2 - t * 4 : t * 4 - 4;
+  return t <= 0 || t >= 1 ? 0 : t < 0.5 ? 1 : -1;
+}
+
+/**
+ * A path drawn as waves: each wave is laid along the path (following its
+ * bends) and pushed to the left by the wave height. Returns the pieces to
+ * stroke: one continuous path when the waves connect, one per wave when the
+ * line between them is left out. Waves that would pass an open path's end
+ * are cut short there.
+ */
+export function wavePaths(pts: readonly Vec2[], closed: boolean, w: WaveSpec): Vec2[][] {
+  if (!(w.length > 0) || pts.length < 2) return [pts.slice()];
+  const spacing = Math.max(w.length, w.spacing);
+  const along = walker(pts, closed);
+  if (!along) return [];
+  const total = along.total;
+  const count = Math.min(MAX_MARKERS_PER_PATH, Math.floor((total + 1e-9) / spacing));
+  if (count < 1) return [pts.slice()];
+  const out: Vec2[][] = [];
+  let current: Vec2[] = [];
+  const push = (s: number, h: number) => {
+    const p = along.at(s);
+    current.push({ x: p.at.x - Math.sin(p.angle) * h, y: p.at.y + Math.cos(p.angle) * h });
+  };
+  // Waves centred along the path, the rest shared at both ends.
+  const start = (total - count * spacing) / 2 + (spacing - w.length) / 2;
+  const steps = w.shape === 'square' ? 0 : WAVE_STEPS;
+  for (let k = 0; k < count; k++) {
+    const s0 = start + k * spacing;
+    if (w.connect) {
+      if (k === 0) push(0, 0);
+      // The corners of the path between waves stay corners.
+      along.cornersBetween(k === 0 ? 0 : s0 - (spacing - w.length), s0).forEach((c) => current.push(c));
+    } else if (current.length) {
+      out.push(current);
+      current = [];
+    }
+    if (w.shape === 'square') {
+      const a = w.amplitude;
+      push(s0, 0);
+      push(s0, a);
+      push(s0 + w.length / 2, a);
+      push(s0 + w.length / 2, -a);
+      push(s0 + w.length, -a);
+      push(s0 + w.length, 0);
+    } else for (let i = 0; i <= steps; i++) push(s0 + (w.length * i) / steps, waveAt(w.shape, i / steps) * w.amplitude);
+  }
+  if (w.connect) {
+    along.cornersBetween(start + (count - 1) * spacing + w.length, total).forEach((c) => current.push(c));
+    push(closed ? 0 : total, 0);
+  }
+  if (current.length > 1) out.push(current);
+  return out;
+}
+
+/** Arc-length access to a path: point and direction at a distance, and the corners inside a stretch. */
+function walker(pts: readonly Vec2[], closed: boolean) {
+  const segs: { a: Vec2; b: Vec2; len: number; start: number; angle: number }[] = [];
+  let total = 0;
+  const n = pts.length;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % n];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-12) continue;
+    segs.push({ a, b, len, start: total, angle: dirOf(a, b) });
+    total += len;
+  }
+  if (!segs.length) return null;
+  const find = (s: number) => {
+    let lo = 0;
+    let hi = segs.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (segs[mid].start <= s) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  return {
+    total,
+    at(s: number): Placed {
+      const g = segs[find(Math.min(total, Math.max(0, s)))];
+      const t = Math.min(1, Math.max(0, (s - g.start) / g.len));
+      return { at: { x: g.a.x + (g.b.x - g.a.x) * t, y: g.a.y + (g.b.y - g.a.y) * t }, angle: g.angle };
+    },
+    cornersBetween(s0: number, s1: number): Vec2[] {
+      const out: Vec2[] = [];
+      for (const g of segs) if (g.start > s0 + 1e-9 && g.start < s1 - 1e-9) out.push(g.a);
+      return out;
+    },
+  };
 }
 
 // ── Inside point ───────────────────────────────────────────────────────

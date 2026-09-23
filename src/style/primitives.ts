@@ -38,6 +38,27 @@ export type FillPaint =
       readonly width: number;
       readonly offset: number;
       readonly dash: readonly number[] | null;
+      readonly dashOffset: number;
+      readonly unit: PrimUnit;
+      readonly level: number;
+    }
+  | {
+      /**
+       * One shape on a grid, drawn by the shader (sharp at every zoom, no
+       * texture): pattern fills of shape markers, one paint per marker layer.
+       */
+      readonly kind: 'pattern';
+      /** The shape, its sizes in the paint's `unit`. */
+      readonly mark: ShapeMarkStyle;
+      /** Cell size in `unit` (width, height). */
+      readonly size: readonly [number, number];
+      readonly stagger: boolean;
+      readonly angle: number;
+      readonly offset: readonly [number, number];
+      readonly jitter: number;
+      readonly coverage: number;
+      readonly seed: number;
+      readonly opacity: number;
       readonly unit: PrimUnit;
       readonly level: number;
     }
@@ -78,13 +99,15 @@ export type MarkerStyle =
       readonly text: string;
       /** Letter height in `unit`. */
       readonly size: number;
-      readonly font: 'ui' | 'serif' | 'mono';
+      readonly font: 'ui' | 'sans' | 'narrow' | 'serif' | 'mono';
       readonly weight: number;
       readonly italic: boolean;
       readonly color: Color;
       readonly halo: { readonly color: Color; readonly width: number } | null;
       readonly common: MarkerCommon;
     };
+
+export type ShapeMarkStyle = Extract<MarkerStyle, { kind: 'shape' }>;
 
 export interface MarkerCommon {
   readonly unit: PrimUnit;

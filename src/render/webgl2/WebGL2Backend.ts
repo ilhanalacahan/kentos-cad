@@ -128,6 +128,9 @@ export class WebGL2Backend implements RenderBackend {
       viewPx: [this.canvas.width, this.canvas.height] as const,
       scaleDenominator: frame.scaleDenominator,
     };
+    // Visibility and atlas images for the whole frame first, then the draw calls.
+    const drawn = [...frame.underlays, ...frame.order, ...frame.overlays].flatMap((id) => this.layers.get(id)?.styled ?? []);
+    this.styled.prepare(drawn.length ? [drawn] : [], styledFrame);
     const pass = (ids: readonly string[]) => {
       const layers = ids.map((id) => this.layers.get(id)).filter((l): l is GpuLayer => !!l);
       // Each layer draws its styled symbols whole (symbol levels), under the plain lines and points.

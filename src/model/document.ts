@@ -41,6 +41,8 @@ export class CadDocument {
   readonly origin: Vec2;
   /** Symbols and assets that belong to this project (docs/STYLE.md §5), saved with the file. */
   readonly styles = new Signal<ProjectStyles>({ items: [], categories: [] });
+  /** Where the view opens (the project's start extent); all objects when unset. */
+  homeView: Bounds | null = null;
 
   private entities = new Map<number, Entity>();
   private nextId = 1;

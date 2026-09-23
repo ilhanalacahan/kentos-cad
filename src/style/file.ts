@@ -43,7 +43,7 @@ const LAYER_TYPES: Record<Symbol['type'], string[]> = {
   line: ['simpleLine', 'markerLine'],
   fill: ['simpleFill', 'hatchFill', 'patternFill', 'imageFill', 'centroidMarker', 'simpleLine', 'markerLine'],
 };
-const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|ink|fg|fg-dim)$/i;
+const COLOR = /^(#[0-9a-f]{6}([0-9a-f]{2})?|ink|paper|fg|fg-dim)$/i;
 
 type O = Record<string, unknown>;
 const isObj = (v: unknown): v is O => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -62,7 +62,7 @@ export function validateSymbol(sym: unknown, where = 'sembol'): string[] {
   const color = (w: string, v: unknown, name: string, nullable = false) => {
     if (v === undefined || (nullable && v === null)) return;
     if (isExpr(v)) return;
-    if (typeof v !== 'string' || !COLOR.test(v)) bad(w, `${name} geçerli bir renk değil (#RRGGBB, #RRGGBBAA, ink, fg, fg-dim)`);
+    if (typeof v !== 'string' || !COLOR.test(v)) bad(w, `${name} geçerli bir renk değil (#RRGGBB, #RRGGBBAA, ink, paper, fg, fg-dim)`);
   };
   const walk = (s: unknown, w: string) => {
     if (!isObj(s)) return bad(w, 'nesne değil');

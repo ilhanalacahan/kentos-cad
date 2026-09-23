@@ -17,7 +17,11 @@ export type SizeUnit = 'mm' | 'px' | 'm';
 /** A value that may come from an expression per object (docs/STYLE.md §3.5). */
 export type DataDefined<T> = T | { readonly expr: string; readonly fallback?: T };
 
-/** "#RRGGBB", "#RRGGBBAA" or a theme token ("ink", "fg", "fg-dim"). */
+/**
+ * "#RRGGBB", "#RRGGBBAA" or a theme token: "ink" (CAD colour 7: black on
+ * paper, white on a dark screen), "paper" (the sheet: white on paper, the
+ * canvas colour on a dark screen), "fg", "fg-dim".
+ */
 export type Color = string;
 
 // ── Symbol layers ──────────────────────────────────────────────────────
@@ -49,6 +53,7 @@ export type ShapeName =
   | 'line'
   | 'arrow'
   | 'arrowhead'
+  | 'chevron'
   | 'semicircle'
   | 'quartercircle';
 
@@ -87,8 +92,10 @@ export interface TextMarker extends MarkerBase {
   readonly type: 'text';
   /** Fixed text or an expression ("Parsel", "'E=' || Emsal"). */
   readonly text: DataDefined<string>;
-  readonly font?: 'ui' | 'serif' | 'mono';
-  readonly weight?: 400 | 500 | 600 | 700;
+  /** ui: the interface face; sans: Arial-like (the regulation's lettering); narrow: Arial Narrow-like; serif: Times-like; mono. */
+  readonly font?: 'ui' | 'sans' | 'narrow' | 'serif' | 'mono';
+  /** 900 with the sans face is Arial Black. */
+  readonly weight?: 400 | 500 | 600 | 700 | 800 | 900;
   readonly italic?: boolean;
   readonly color?: DataDefined<Color>;
   /** Outline around the letters for legibility over fills. */
@@ -118,6 +125,22 @@ export interface SimpleLine extends LayerBase {
   readonly offset?: number;
   /** Area edges only: which rings. */
   readonly rings?: 'all' | 'exterior' | 'interior';
+  /** Draw the line as waves (sulak alan, enerji nakil hattı …) instead of straight. */
+  readonly wave?: LineWave;
+}
+
+/**
+ * A wavy line, in the layer unit: one wave of `length` along the line and
+ * `amplitude` to each side, repeated every `spacing` (default: `length`,
+ * back to back). Between waves the line runs straight when `connect`,
+ * otherwise it is left out (a dashed wave).
+ */
+export interface LineWave {
+  readonly shape: 'sine' | 'zigzag' | 'square';
+  readonly length: number;
+  readonly amplitude: number;
+  readonly spacing?: number;
+  readonly connect?: boolean;
 }
 
 export type MarkerPlacement = 'interval' | 'vertex' | 'innerVertex' | 'first' | 'last' | 'center' | 'segmentCenter';
@@ -135,6 +158,8 @@ export interface MarkerLine extends LayerBase {
   /** Turn markers with the line's direction. */
   readonly rotate?: boolean;
   readonly rings?: 'all' | 'exterior' | 'interior';
+  /** Several markers at each place, `spacing` apart along the line (dots in a dash gap). */
+  readonly group?: { readonly count: number; readonly spacing: number };
 }
 
 export type LineLayer = SimpleLine | MarkerLine;
@@ -155,6 +180,7 @@ export interface HatchFill extends LayerBase {
   readonly offset?: number;
   /** Dashed hatch lines (on/off lengths). */
   readonly dash?: readonly number[] | null;
+  readonly dashOffset?: number;
 }
 
 export interface PatternFill extends LayerBase {
@@ -166,6 +192,15 @@ export interface PatternFill extends LayerBase {
   readonly stagger?: boolean;
   readonly angle?: number;
   readonly offset?: readonly [number, number];
+  /**
+   * Scatter (kumsal, serbest noktalama): 0–1, how far each shape may move
+   * at random inside its cell. Shape markers only.
+   */
+  readonly jitter?: number;
+  /** 0–1: share of the cells that get a shape, at random (default 1). Shape markers only. */
+  readonly coverage?: number;
+  /** Varies the random layout between symbols. */
+  readonly seed?: number;
 }
 
 export interface ImageFill extends LayerBase {

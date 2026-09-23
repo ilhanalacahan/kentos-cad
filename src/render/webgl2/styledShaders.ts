@@ -178,11 +178,11 @@ out vec4 outColor;
 void main() {
   vec2 p = u_unit == 1 ? gl_FragCoord.xy / u_dpr : v_world;
   p = vec2(u_rot.x * p.x + u_rot.y * p.y, -u_rot.y * p.x + u_rot.x * p.y) - u_shift;
-  vec2 q = p / u_tile;
-  vec2 f = fract(q);
+  vec2 f = fract(p / u_tile);
+  // The atlas draws the tile at its shown size (no mipmaps): one level, half a texel inside the rect.
   vec2 inset = vec2(0.5 / 2048.0);
   vec2 uv = u_rect.xy + inset + vec2(f.x, 1.0 - f.y) * (u_rect.zw - 2.0 * inset);
-  vec4 c = textureGrad(u_atlas, uv, dFdx(q) * u_rect.zw, dFdy(q) * u_rect.zw) * u_opacity;
+  vec4 c = textureLod(u_atlas, uv, 0.0) * u_opacity;
   if (c.a < 0.004) discard;
   outColor = c;
 }`;
@@ -277,7 +277,7 @@ float sdStar(vec2 p, float r, float rf) {
   return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 // Shape ids: 0 circle 1 ring 2 square 3 rectangle 4 diamond 5 triangle 6 pentagon 7 hexagon 8 octagon
-// 9 star 10 cross 11 x 12 line 13 arrow 14 arrowhead 15 semicircle 16 quartercircle
+// 9 star 10 cross 11 x 12 line 13 arrow 14 arrowhead 15 chevron 16 semicircle 17 quartercircle
 float shapeDist(int s, vec2 p, vec2 hs) {
   float r = min(hs.x, hs.y);
   if (s == 0 || s == 1) return length(p) - r;
@@ -299,10 +299,30 @@ float shapeDist(int s, vec2 p, vec2 hs) {
     bool inside = p.x >= -hs.x && abs(p.y) <= (hs.x - p.x) * 0.4 * hs.y / hs.x;
     return inside ? -d : d;
   }
-  if (s == 15) return max(length(p) - r, -p.y);
+  if (s == 15) return min(sdSeg(p, vec2(-hs.x, hs.y), vec2(hs.x, 0.0)), sdSeg(p, vec2(hs.x, 0.0), vec2(-hs.x, -hs.y)));
+  if (s == 16) return max(length(p) - r, -p.y);
   return max(length(p) - r, max(-p.x, -p.y));
 }
-bool isOpen(int s) { return s == 10 || s == 11 || s == 12 || s == 13; }
+bool isOpen(int s) { return s == 10 || s == 11 || s == 12 || s == 13 || s == 15; }
+/** A shape's colour (premultiplied) from its distance d in device px; q is the point in px (ring dot). */
+vec4 shapeColor(int shape, float d, vec2 q, vec2 halfPx, vec4 fill, vec4 strokeIn, float swIn, float dpr) {
+  bool open = isOpen(shape);
+  vec4 stroke = strokeIn.a > 0.0 ? strokeIn : (open ? fill : vec4(0.0));
+  float sw = swIn > 0.0 ? swIn : (open ? max(dpr, 1.0) : 0.0);
+  vec4 col = vec4(0.0);
+  if (!open && fill.a > 0.0) col = vec4(fill.rgb * fill.a, fill.a) * clamp(0.5 - d, 0.0, 1.0);
+  if (stroke.a > 0.0 && sw > 0.0) {
+    float sa = clamp(sw * 0.5 + 0.5 - abs(d), 0.0, 1.0);
+    vec4 sc = vec4(stroke.rgb * stroke.a, stroke.a) * sa;
+    col = sc + col * (1.0 - sc.a);
+  }
+  if (shape == 1 && stroke.a > 0.0) {
+    float dotA = clamp(max(1.2 * dpr, halfPx.x * 0.16) + 0.5 - length(q), 0.0, 1.0);
+    vec4 dc = vec4(stroke.rgb * stroke.a, stroke.a) * dotA;
+    col = dc + col * (1.0 - dc.a);
+  }
+  return col;
+}
 `;
 
 export const MARKER_FS = /* glsl */ `#version 300 es
@@ -326,23 +346,87 @@ void main() {
   if (u_kind == 1) {
     vec2 t = v_local / (2.0 * v_half) + 0.5;
     if (any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) discard;
-    col = texture(u_atlas, u_rect.xy + vec2(t.x, 1.0 - t.y) * u_rect.zw);
+    col = textureLod(u_atlas, u_rect.xy + vec2(t.x, 1.0 - t.y) * u_rect.zw, 0.0);
   } else {
-    float d = shapeDist(u_shape, v_local, v_half);
-    bool open = isOpen(u_shape);
-    vec4 stroke = u_stroke.a > 0.0 ? u_stroke : (open ? u_fill : vec4(0.0));
-    float sw = v_sw > 0.0 ? v_sw : (open ? max(u_dpr, 1.0) : 0.0);
-    if (!open && u_fill.a > 0.0) col = vec4(u_fill.rgb * u_fill.a, u_fill.a) * clamp(0.5 - d, 0.0, 1.0);
-    if (stroke.a > 0.0 && sw > 0.0) {
-      float sa = clamp(sw * 0.5 + 0.5 - abs(d), 0.0, 1.0);
-      vec4 sc = vec4(stroke.rgb * stroke.a, stroke.a) * sa;
-      col = sc + col * (1.0 - sc.a);
+    col = shapeColor(u_shape, shapeDist(u_shape, v_local, v_half), v_local, v_half, u_fill, u_stroke, v_sw, u_dpr);
+  }
+  col *= u_opacity;
+  if (col.a < 0.004) discard;
+  outColor = col;
+}`;
+
+/**
+ * A shape on a grid, per pixel (premultiplied output): the cell under the
+ * pixel (and its neighbours when the shape reaches past its cell) gives the
+ * nearest shape; a hash of the cell index scatters it (jitter) and leaves
+ * cells out (coverage), anchored to the world like hatches. Cells smaller
+ * than a few pixels become the pattern's average tint.
+ */
+export const PATTERN_FS = /* glsl */ `#version 300 es
+precision highp float;
+precision highp int;
+in vec2 v_world;
+uniform vec2 u_size;      // cell size in the unit
+uniform vec2 u_rot;       // cos, sin of the grid angle
+uniform vec2 u_shift;
+uniform int u_stagger;
+uniform vec2 u_jitter;    // random shift range per cell, in the unit
+uniform float u_coverage;
+uniform float u_seed;
+uniform int u_reach;      // 1: look at the neighbour cells too
+uniform int u_unit;
+uniform float u_pxPerM;
+uniform float u_dpr;
+uniform int u_shape;
+uniform vec2 u_half;
+uniform vec2 u_markOff;
+uniform vec2 u_markRot;
+uniform vec4 u_fill;
+uniform vec4 u_stroke;
+uniform float u_strokeW;
+uniform float u_tint;
+uniform float u_opacity;
+${SHAPES}
+vec3 hash3(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  q += dot(q, q.yxz + 33.33);
+  return fract((q.xxy + q.yzz) * q.zyx);
+}
+out vec4 outColor;
+void main() {
+  bool screen = u_unit == 1;
+  vec2 p = screen ? gl_FragCoord.xy / u_dpr : v_world;
+  float k = screen ? u_dpr : u_pxPerM;
+  p = vec2(u_rot.x * p.x + u_rot.y * p.y, -u_rot.y * p.x + u_rot.x * p.y) - u_shift;
+  vec4 col;
+  if (min(u_size.x, u_size.y) * k < 4.0) {
+    vec4 ink = u_fill.a > 0.0 && !isOpen(u_shape) ? u_fill : (u_stroke.a > 0.0 ? u_stroke : u_fill);
+    float a = ink.a * u_tint;
+    col = vec4(ink.rgb * a, a);
+  } else {
+    float best = 1e9;
+    vec2 bestQ = vec2(0.0);
+    float row0 = floor(p.y / u_size.y);
+    for (int dy = -1; dy <= 1; dy++) {
+      if (abs(dy) > u_reach) continue;
+      float row = row0 + float(dy);
+      float sx = (u_stagger == 1 && mod(row, 2.0) > 0.5) ? 0.5 * u_size.x : 0.0;
+      float col0 = floor((p.x - sx) / u_size.x);
+      for (int dx = -1; dx <= 1; dx++) {
+        if (abs(dx) > u_reach) continue;
+        vec2 cell = vec2(col0 + float(dx), row);
+        vec3 h = hash3(cell + vec2(u_seed * 17.31, u_seed * 7.73));
+        if (h.z > u_coverage) continue;
+        vec2 c = vec2((cell.x + 0.5) * u_size.x + sx, (row + 0.5) * u_size.y) + (h.xy - 0.5) * u_jitter;
+        vec2 q = p - c - u_markOff;
+        q = vec2(u_markRot.x * q.x + u_markRot.y * q.y, -u_markRot.y * q.x + u_markRot.x * q.y) * k;
+        float d = shapeDist(u_shape, q, u_half * k);
+        if (d < best) { best = d; bestQ = q; }
+      }
     }
-    if (u_shape == 1 && stroke.a > 0.0) {
-      float dot = clamp(max(1.2 * u_dpr, v_half.x * 0.16) + 0.5 - length(v_local), 0.0, 1.0);
-      vec4 dc = vec4(stroke.rgb * stroke.a, stroke.a) * dot;
-      col = dc + col * (1.0 - dc.a);
-    }
+    if (best > 1e8) discard;
+    float sw = u_strokeW > 0.0 ? max(u_strokeW * k, 1.0) : 0.0;
+    col = shapeColor(u_shape, best, bestQ, u_half * k, u_fill, u_stroke, sw, u_dpr);
   }
   col *= u_opacity;
   if (col.a < 0.004) discard;
@@ -350,4 +434,4 @@ void main() {
 }`;
 
 /** Shape ids in the order shapeDist knows them. */
-export const SHAPE_IDS = ['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'semicircle', 'quartercircle'] as const;
+export const SHAPE_IDS = ['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'chevron', 'semicircle', 'quartercircle'] as const;
