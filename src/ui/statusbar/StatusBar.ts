@@ -7,11 +7,12 @@ import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
 import { WebGPUBackend } from '../../render/webgpu/WebGPUBackend';
 import { PopupMenu } from '../widgets/PopupMenu';
-import { tooltip } from '../widgets/tooltip';
+import { hideTooltip, tooltip } from '../widgets/tooltip';
 
 /** Screen metres per CSS pixel → map-like scale at 96 dpi. */
 const screenScale = (pxPerMetre: number) => Math.round(1 / pxPerMetre / 0.00026458);
 const fmtScale = (n: number) => n.toLocaleString('tr-TR');
+const SERVER_TEXT = { checking: 'Sunucu…', online: 'Sunucu: bağlı', offline: 'Sunucu: yok', incompatible: 'Sunucu: uyumsuz' } as const;
 
 export class StatusBar extends Component {
   readonly el: HTMLElement;
@@ -63,7 +64,11 @@ export class StatusBar extends Component {
       ),
     );
 
-    this.el = h('footer', { class: 'status' }, coords, flash, selCount, toggles, zoom, crs, renderer);
+    const serverText = h('span');
+    const server = h('button', { class: 'status__cell status__btn status__server', type: 'button' }, h('span', { class: 'status__lamp', 'aria-hidden': 'true' }), serverText);
+    server.addEventListener('click', () => ctx.commands.execute('server.check'));
+
+    this.el = h('footer', { class: 'status' }, coords, flash, selCount, toggles, zoom, crs, server, renderer);
 
     this.d.add(
       ctx.view.cursorWorld.subscribe((p) => {
@@ -85,6 +90,24 @@ export class StatusBar extends Component {
     this.d.add(watchAll([ctx.view.backendKind, ctx.view.backendLabel], syncRenderer));
     this.d.add(
       tooltip(renderer, () => ({ title: 'Çizim motoru', description: `${ctx.view.backendLabel.value}. Değiştirmek için tıklayın; seçim hemen uygulanır ve hatırlanır.` }), 'top'),
+    );
+    this.d.add(
+      ctx.server.state.subscribe((s) => {
+        server.dataset.state = s;
+        serverText.textContent = SERVER_TEXT[s];
+        // An open tooltip was written for the previous answer.
+        hideTooltip(server);
+      }, true),
+    );
+    this.d.add(
+      tooltip(server, () => {
+        const s = ctx.server;
+        const hl = s.health.value;
+        const about = hl ? `${hl.service} ${hl.version}${hl.commit ? ` (${hl.commit.slice(0, 8)})` : ''}, sözleşme sürümü ${hl.contracts}.` : '';
+        const offline = `${s.detail.value} Çizim sunucusuz çalışır; kayıt yerel .kcad dosyasına yapılır.${import.meta.env.DEV ? ' Geliştirmede sunucuyu “pnpm api” ile başlatın.' : ''}`;
+        const text = s.state.value === 'online' ? about : s.state.value === 'incompatible' ? `${about} ${s.detail.value}` : s.state.value === 'checking' ? 'Sunucuya soruluyor…' : offline;
+        return { title: 'KentOS sunucusu', description: `${text} Yeniden denetlemek için tıklayın.` };
+      }, 'top'),
     );
     this.d.add(
       ctx.selection.ids.subscribe((ids) => {

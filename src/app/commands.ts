@@ -367,6 +367,22 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
     { id: 'help.shortcuts', title: 'Klavye kısayolları', category: 'Yardım', icon: 'keyboard', aliases: ['KISAYOL', 'KEYS'], run: hooks.openShortcuts },
     { id: 'help.about', title: 'KentOS CAD hakkında', category: 'Yardım', icon: 'info', run: hooks.openAbout },
     { id: 'tools.options', title: 'Uygulama ayarları…', category: 'Araçlar', icon: 'settings', aliases: ['AYARLAR', 'OPTIONS'], run: () => hooks.openAppSettings() },
+    {
+      id: 'server.check',
+      title: 'Sunucu bağlantısını denetle',
+      category: 'Araçlar',
+      description: 'KentOS sunucusuna şimdi sorar. Çizim sunucusuz da çalışır; kayıt yerel .kcad dosyasına yapılır.',
+      aliases: ['SUNUCU', 'SERVER'],
+      run: () =>
+        void ctx.server.check().then((s) => {
+          const why = ctx.server.detail.value;
+          if (s === 'online') ctx.log.success(`Sunucu bağlı: ${ctx.server.health.value?.service} ${ctx.server.health.value?.version}.`);
+          else if (s === 'incompatible') ctx.log.warn(`Sunucu uyumsuz. ${why}`);
+          else ctx.log.info(`Sunucu yok. ${why} Çizim sunucusuz çalışmaya devam ediyor.`);
+        }),
+      isEnabled: () => ctx.server.state.value !== 'checking',
+      watch: [ctx.server.state],
+    },
   ]);
 
   // Every tool becomes a command: menus, toolbox, keymap and command line share it.

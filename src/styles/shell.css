@@ -886,6 +886,29 @@
 .status__renderer[data-error] {
   color: var(--c-danger);
 }
+/* Server lamp: round, unlike the square drafting-aid lamps; hollow while there is no server. */
+.status__server {
+  color: var(--c-text-3);
+}
+.status__lamp {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.4px solid currentColor;
+}
+.status__server[data-state='online'] {
+  color: var(--c-text-2);
+}
+.status__server[data-state='online'] .status__lamp {
+  border-color: var(--c-ok);
+  background: var(--c-ok);
+}
+.status__server[data-state='incompatible'] {
+  color: var(--c-warn);
+}
+.status__server[data-state='incompatible'] .status__lamp {
+  background: currentColor;
+}
 
 .status__toggles {
   display: flex;

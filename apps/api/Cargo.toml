@@ -11,3 +11,6 @@ kentos-contracts = { path = "../../crates/contracts" }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util"] }

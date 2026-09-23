@@ -6,6 +6,7 @@ import type { ToolManager } from '../tools/ToolManager';
 import type { ViewportController } from '../viewport/ViewportController';
 import type { Clipboard } from './clipboard';
 import type { DocumentFiles } from './fileIO';
+import type { ServerStatus } from './server';
 import type { Formatter } from './format';
 import type { ProcessingService } from './processing';
 import type { DraftingSettings, MessageLog, Preferences, UiState } from './state';
@@ -37,4 +38,6 @@ export interface AppContext {
   readonly styles: StyleService;
   /** Local drawing files (.kcad): save, save as, open (app/fileIO.ts). */
   readonly files: DocumentFiles;
+  /** Whether the KentOS API answers (`/v1/health`); the drawing works without it (app/server.ts). */
+  readonly server: ServerStatus;
 }

@@ -95,7 +95,10 @@ npx tsc --noEmit -p .     # yalnızca tip denetimi
 pnpm rust:test            # Rust çalışma alanı: cargo test + clippy (-D warnings)
 pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → src/wasm/pkg (depoya girmez)
 pnpm test:rust            # rust:test + rust:wasm + WASM golden testleri
+pnpm api                  # Rust API (apps/api): 127.0.0.1:8787, yalnızca /v1/health
 ```
+
+- **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini `vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; çizim sunucuya hiç bağlı değildir.
 
 - **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. `pnpm test` Rust gerektirmez; WASM testleri paket yoksa atlanır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
 
@@ -194,6 +197,7 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 | `processing` | `ProcessingService`  | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`)                                               |
 | `styles`     | `StyleService`       | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
 | `files`      | `DocumentFiles`      | Yerel çizim dosyası (.kcad): kaydet, farklı kaydet, aç; kaydedilen dosyanın tutamacı (`app/fileIO.ts`)                                     |
+| `server`     | `ServerStatus`       | API'nin yanıt verip vermediği (`/v1/health`, üretilen `Health` sözleşmesiyle doğrulanır; sözleşme sürümü farklıysa “uyumsuz”) (`app/server.ts`) |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -620,6 +624,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/geom/reference.test.ts` | Bağımsız kesin referansa (Python kesirleri, 60 basamak π; `fixtures/geometry/v1/reference.json`) göre doğruluk: ondalık metinden TM parsel ve adalı alan, yaylı alanlar ve çevre; her durumun hata sınırı içinde (§23.4) |
 | `model/snapshot.test.ts` | .kcad dosyası: 13 nesne türünün TM koordinatında bit bit gidiş-dönüşü (bulge, delik, elips, ölçü, proje sembolü), kilitli örnek dosyaya (`fixtures/document/v1/sample.json`) eşitlik, bozuk dosyaların Türkçe “yer: sorun” iletisiyle reddi, `dirty` akışı (geri alma, katman durumu, yazım sürerken yapılan değişiklik) |
 | `app/fileIO.test.ts` | Kaydet/Aç (bellek içi dosyayla): işaret yalnızca yazımdan sonra temizlenir, yazım hatası ve vazgeçme kaydedilmemiş bırakır, yazım sürerken yapılan değişiklik kaydedilmemiş kalır, bozuk dosya açık çizime dokunmaz, yazılamayan dosya kayıt hedefi olmaz, aynı anda tek dosya komutu |
+| `app/server.test.ts` | Sağlık yanıtının güvenilmeyen veri olarak okunması; yalnız aynı sözleşme sürümünde “bağlı”; 503, 404, HTML dizin sayfası, sözleşmeye uymayan gövde ve ağ hatasında “yok” ve nedeni; eşzamanlı denetimin paylaşılması |
 | `contracts/contracts.test.ts` | Uygulama tiplerinin (`Entity`, `LayerNode`, `ProjectSettings`, `StyleFile`, `RunJob` …) Rust'tan üretilen sözleşmelere derleme anında uyması (`tsc` denetler) |
 | `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
 | `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
@@ -739,6 +744,7 @@ src/
     state.ts                 DraftingSettings, MessageLog, UiState, Preferences (localStorage)
     clipboard.ts             Clipboard: kopyalanan nesneler ve taban noktası (oturumluk)
     fileIO.ts                DocumentFiles: yerel .kcad kaydet/farklı kaydet/aç, dosya seçici (tarayıcı ya da test için bellek içi)
+    server.ts                ServerStatus: API sağlık denetimi (boşta, odakta, ağ dönünce, istekle), yanıtın sözleşmeye göre okunması
     format.ts                Formatter: sayıdan metne tek geçit
     processing.ts            ProcessingService: işlem kaydı, çalıştırıcı, son değerler; işlem komutları
     styles.ts                StyleService: stil kitaplığı (sistem + kullanıcı localStorage + proje); stil komutları, nesneye sembol verme

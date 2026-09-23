@@ -12,7 +12,8 @@
     "e2e": "node scripts/e2e/smoke.mjs",
     "rust:test": "cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings",
     "rust:wasm": "cargo build -p kentos-wasm --target wasm32-unknown-unknown --release && wasm-bindgen --target web --out-dir src/wasm/pkg target/wasm32-unknown-unknown/release/kentos_wasm.wasm",
-    "test:rust": "pnpm rust:test && pnpm rust:wasm && vitest run src/wasm"
+    "test:rust": "pnpm rust:test && pnpm rust:wasm && vitest run src/wasm",
+    "api": "cargo run -p kentos-api"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

@@ -154,7 +154,7 @@ Bütün boyutlar `--ui-scale` ile çarpılır. **Uygulama ayarları → Görün�
 │ └──┘                                                               0 ─── 50 m   │ Öznitelikler                       │
 ├ [alt panel: Komut geçmişi | Koordinat listesi | Uyarılar] (F2, isteğe bağlı)    │                                     │
 ├ Komut satırı (36) ─ İstem: [girdi……]                                          ⌃ │                                     │
-├ Durum çubuğu (28) ─ Y … X … │ mesaj │ n seçili │ ▪Kenet ▪Izgara ▫Orto ▫Kutupsal │ Ekran 1:2.470 │ TUREF / TM36 │ WebGL2  ┤
+├ Durum çubuğu (28) ─ Y … X … │ mesaj │ n seçili │ ▪Kenet ▪Izgara ▫Orto ▫Kutupsal │ Ekran 1:2.470 │ TUREF / TM36 │ ○ Sunucu: yok │ WebGL2  ┤
 ```
 
 - En küçük kabuk boyutu 1100×600 px. Daha küçük pencerede sayfa kayar, yerleşim bozulmaz.
@@ -281,8 +281,9 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 
 ### 7.7 Durum çubuğu
 
-- Hücreler: Y/X imleç koordinatı (tabular) │ son mesaj (5–9 sn görünür) │ seçim sayısı (amber) │ çizim yardımcıları │ ekran ölçeği │ koordinat sistemi │ çizim motoru (en sağda; çip simgesi ve "WebGL2" / "WebGPU"; WebGPU'da simge amber; tıklayınca motor seçme menüsü).
+- Hücreler: Y/X imleç koordinatı (tabular) │ son mesaj (5–9 sn görünür) │ seçim sayısı (amber) │ çizim yardımcıları │ ekran ölçeği │ koordinat sistemi │ sunucu │ çizim motoru (en sağda; çip simgesi ve "WebGL2" / "WebGPU"; WebGPU'da simge amber; tıklayınca motor seçme menüsü).
 - **Çizim yardımcısı düğmeleri** bir gösterge lambası taşır: kapalıyken boş kare, açıkken dolu amber kare. Metin kapalıyken üçüncül renktedir.
+- **Sunucu hücresi** yuvarlak bir lamba taşır (yardımcıların kare lambasından ayrılsın diye): bağlıyken dolu yeşil (`--c-ok`), sunucu yokken boş halka ve üçüncül metin (Faz A'da olağan durumdur, hata rengi kullanılmaz), sözleşme sürümü uyuşmazken dolu amber (`--c-warn`). Tıklamak yeniden denetler; ipucu sürümü ya da nedeni yazar.
 
 ### 7.8 İpucu
 

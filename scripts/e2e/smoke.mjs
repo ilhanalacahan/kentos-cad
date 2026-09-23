@@ -3,8 +3,18 @@
 // through the dev-only `window.kentos` handle.
 //
 //   pnpm e2e            (CHROME_BIN overrides the browser binary)
+import http from 'node:http';
 import { createServer } from 'vite';
 import { launch, sleep, WEBGPU_ARGS } from './cdp.mjs';
+
+// A stand-in for the KentOS API (apps/api) so the test needs no Rust build: the
+// dev server's /v1 forwarding (vite.config.mjs) reaches it through KENTOS_API_PORT.
+const api = http.createServer((req, res) => {
+  if (req.url !== '/v1/health') return res.writeHead(404).end();
+  res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ status: 'ok', service: 'kentos-api', version: '0.0.0-e2e', contracts: 1 }));
+});
+await new Promise((r) => api.listen(0, '127.0.0.1', r));
+process.env.KENTOS_API_PORT = String(api.address().port);
 
 // No file watching or hot reload: a file saved while the test runs must not reload the page under it.
 const server = await createServer({ server: { port: 0, strictPort: false, hmr: false, watch: null }, logLevel: 'error' });
@@ -23,6 +33,15 @@ try {
   await sleep(1200); // first-load dependency optimisation can reload once
   await b.waitFor(ready, 20000);
   check('app boots with a GPU backend', true, await b.eval('window.kentos.view.backendKind.value'));
+
+  // The status bar says whether the API answers; the drawing never waits for it.
+  await b.waitFor(`window.kentos.server.state.value !== 'checking'`, 8000).catch(() => {});
+  const serverText = () => b.eval(`document.querySelector('.status__server')?.textContent ?? ''`);
+  check('status bar shows the API as connected', (await b.eval('window.kentos.server.state.value')) === 'online' && (await serverText()) === 'Sunucu: bağlı', await serverText());
+  await new Promise((r) => (api.closeAllConnections(), api.close(r)));
+  await b.eval(`window.kentos.commands.execute('server.check')`);
+  await b.waitFor(`window.kentos.server.state.value === 'offline'`, 8000).catch(() => {});
+  check('without the API it shows “Sunucu: yok” and says why', (await serverText()) === 'Sunucu: yok' && (await b.eval('window.kentos.server.detail.value')) === 'API çalışmıyor.', await b.eval('window.kentos.server.detail.value'));
 
   const base = await b.eval('window.kentos.doc.size');
   const toScreen = (x, y) =>
@@ -947,6 +966,7 @@ try {
 } finally {
   b.close();
   await server.close();
+  api.close();
 }
 console.log(failures.length ? `\n${failures.length} kontrol başarısız.` : '\nTüm kontroller geçti.');
 process.exit(failures.length ? 1 : 0);

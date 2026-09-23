@@ -16,6 +16,7 @@ import { Clipboard } from './clipboard';
 import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
 import { DocumentFiles } from './fileIO';
+import { ServerStatus } from './server';
 import { registerDefaultKeybindings } from './keybindings';
 import { createProcessing, registerProcessingCommands } from './processing';
 import { createStyles, registerStyleCommands } from './styles';
@@ -58,6 +59,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     // The visible area is read lazily: the viewport exists only after the context.
     processing: createProcessing(doc, selection, () => ctx.view.camera.visibleBounds()),
     styles: createStyles(doc),
+    server: new ServerStatus(),
   } as AppContext & { tools: ToolManager; view: ViewportController; files: DocumentFiles };
   ctx.tools = new ToolManager(ctx);
   ctx.view = new ViewportController(ctx);
@@ -91,6 +93,11 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
 
   ctx.tools.activate('select');
   await ctx.view.mount(shell.viewportHost);
+
+  // The server is asked only once the app is idle, so the check never slows the start.
+  ctx.server.watch(window);
+  const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 300));
+  idle(() => void ctx.server.check());
 
   // Drop selection entries whose entities disappeared (undo, erase).
   doc.events.on('changed', () => ctx.selection.retain((id) => !!doc.get(id)));
