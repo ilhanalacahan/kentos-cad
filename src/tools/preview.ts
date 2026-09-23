@@ -1,0 +1,71 @@
+import { entityOutline, type EntityGeometry } from '../model/entities';
+import type { Vec2 } from '../model/geometry';
+import type { ViewTransform } from '../viewport/Camera';
+
+/** Shared drawing helpers for tool previews (numbers go through ctx.format). */
+
+export function strokePath(
+  g: CanvasRenderingContext2D,
+  view: ViewTransform,
+  pts: readonly Vec2[],
+  opts: { color: string; closed?: boolean; dash?: number[]; width?: number; fill?: string },
+): void {
+  if (pts.length < 2) return;
+  g.save();
+  g.beginPath();
+  pts.forEach((p, i) => {
+    const s = view.worldToScreen(p);
+    i ? g.lineTo(s.x, s.y) : g.moveTo(s.x, s.y);
+  });
+  if (opts.closed) g.closePath();
+  if (opts.fill) {
+    g.fillStyle = opts.fill;
+    g.fill();
+  }
+  g.setLineDash(opts.dash ?? []);
+  g.lineWidth = opts.width ?? 1;
+  g.strokeStyle = opts.color;
+  g.stroke();
+  g.restore();
+}
+
+/** Small tag next to the cursor: "23.412 m  ∠ 32.4°". */
+export function drawTag(g: CanvasRenderingContext2D, at: Vec2, lines: string[], color: string, bg: string): void {
+  if (!lines.length) return;
+  g.save();
+  g.font = '500 11px Barlow, system-ui, sans-serif';
+  const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 12;
+  const h = lines.length * 14 + 6;
+  const x = Math.round(at.x + 16);
+  const y = Math.round(at.y + 16);
+  g.fillStyle = bg;
+  g.globalAlpha = 0.92;
+  g.fillRect(x, y, w, h);
+  g.globalAlpha = 1;
+  g.strokeStyle = color;
+  g.lineWidth = 1;
+  g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  g.fillStyle = color;
+  g.textBaseline = 'top';
+  lines.forEach((l, i) => g.fillText(l, x + 6, y + 4 + i * 14));
+  g.restore();
+}
+
+/** Outline of any entity geometry (circles/arcs tessellated), e.g. modify-tool ghosts. */
+export function strokeGeometry(
+  g: CanvasRenderingContext2D,
+  view: ViewTransform,
+  geom: EntityGeometry,
+  opts: { color: string; dash?: number[]; width?: number },
+): void {
+  if (geom.kind === 'point' || geom.kind === 'text') {
+    const s = view.worldToScreen(geom.p);
+    g.save();
+    g.strokeStyle = opts.color;
+    g.setLineDash([]);
+    g.strokeRect(Math.round(s.x) - 3.5, Math.round(s.y) - 3.5, 7, 7);
+    g.restore();
+    return;
+  }
+  strokePath(g, view, entityOutline(geom, 64), { ...opts, closed: geom.kind === 'polygon' || geom.kind === 'circle' });
+}

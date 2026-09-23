@@ -1,0 +1,99 @@
+import type { Entity } from '../entities';
+import type { Vec2 } from '../geometry';
+import { arcEnd, arcMid, arcStart, arcThrough } from '../geom/arc';
+import { translation } from '../geom/affine';
+import { bulgeAt, bulgeThrough, isArcBulge, segmentMid } from '../geom/bulge';
+import { layoutDimension, signedOffset } from '../geom/dimension';
+import { transformEntity } from './transform';
+
+/**
+ * Grip points of an entity, in a stable order that `moveGrip` understands.
+ *   line: a, b · path: vertices, then one mid grip per segment
+ *   circle: centre, 4 quadrants · arc: start, mid, end, centre
+ *   point/text: insertion point · spline: fit points
+ *   dimension: a, b, dimension-line middle · hatch: ring
+ */
+export function entityGrips(e: Entity): Vec2[] {
+  switch (e.kind) {
+    case 'point':
+    case 'text':
+      return [e.p];
+    case 'line':
+      return [e.a, e.b];
+    case 'polyline':
+    case 'polygon': {
+      const n = e.pts.length;
+      const mids: Vec2[] = [];
+      for (let i = 0; i < (e.kind === 'polygon' ? n : n - 1); i++) mids.push(segmentMid(e.pts[i], e.pts[(i + 1) % n], bulgeAt(e.bulges, i)));
+      return [...e.pts, ...mids];
+    }
+    case 'circle':
+      return [e.c, { x: e.c.x + e.r, y: e.c.y }, { x: e.c.x, y: e.c.y + e.r }, { x: e.c.x - e.r, y: e.c.y }, { x: e.c.x, y: e.c.y - e.r }];
+    case 'arc':
+      return [arcStart(e), arcMid(e), arcEnd(e), e.c];
+    case 'spline':
+      return e.pts;
+    case 'hatch':
+      return e.ring;
+    case 'dimension': {
+      const l = layoutDimension(e);
+      return l ? [e.a, e.b, { x: (l.d1.x + l.d2.x) / 2, y: (l.d1.y + l.d2.y) / 2 }] : [e.a, e.b];
+    }
+  }
+}
+
+/** Entity with grip `index` moved to `p` (same id), or null if the result would be degenerate. */
+export function moveGrip<E extends Entity>(e: E, index: number, p: Vec2): E | null {
+  switch (e.kind) {
+    case 'point':
+    case 'text':
+      return { ...e, p };
+    case 'line':
+      return index === 0 ? { ...e, a: p } : { ...e, b: p };
+    case 'polyline':
+    case 'polygon': {
+      const seg = midGripSegment(e, index);
+      if (seg === null) return { ...e, pts: e.pts.map((q, i) => (i === index ? p : q)) };
+      const n = e.pts.length;
+      const a = e.pts[seg];
+      const b = e.pts[(seg + 1) % n];
+      // Arc segment: the arc now passes through p. Straight: p becomes a new vertex.
+      if (isArcBulge(bulgeAt(e.bulges, seg))) {
+        const bulge = bulgeThrough(a, p, b);
+        const bulges = e.pts.map((_, i) => (i === seg ? bulge : bulgeAt(e.bulges, i)));
+        return { ...e, bulges };
+      }
+      const pts = [...e.pts.slice(0, seg + 1), p, ...e.pts.slice(seg + 1)];
+      const bulges = e.bulges ? [...e.bulges.slice(0, seg + 1), 0, ...e.bulges.slice(seg + 1)] : undefined;
+      return bulges ? { ...e, pts, bulges } : { ...e, pts };
+    }
+    case 'circle': {
+      if (index === 0) return { ...e, c: p };
+      const r = Math.hypot(p.x - e.c.x, p.y - e.c.y);
+      return r > 1e-9 ? { ...e, r } : null;
+    }
+    case 'arc': {
+      if (index === 3) return transformEntity(e, translation(p.x - e.c.x, p.y - e.c.y));
+      // The arc keeps passing through its other two defining points.
+      const pts = [arcStart(e), arcMid(e), arcEnd(e)];
+      pts[index] = p;
+      const g = arcThrough(pts[0], pts[1], pts[2]);
+      return g ? { ...e, ...g } : null;
+    }
+    case 'spline':
+      return { ...e, pts: e.pts.map((q, i) => (i === index ? p : q)) };
+    case 'hatch':
+      return { ...e, ring: e.ring.map((q, i) => (i === index ? p : q)) };
+    case 'dimension': {
+      if (index === 0) return Math.hypot(e.b.x - p.x, e.b.y - p.y) > 1e-9 ? { ...e, a: p } : null;
+      if (index === 1) return Math.hypot(p.x - e.a.x, p.y - e.a.y) > 1e-9 ? { ...e, b: p } : null;
+      return { ...e, offset: signedOffset(e.a, e.b, p) };
+    }
+  }
+}
+
+/** Segment index of a path's mid grip (grip indices after the vertices), else null. */
+export function midGripSegment(e: Entity, index: number): number | null {
+  if (e.kind !== 'polyline' && e.kind !== 'polygon') return null;
+  return index >= e.pts.length ? index - e.pts.length : null;
+}

@@ -1,0 +1,128 @@
+// Minimal headless-Chrome driver over the DevTools protocol (no dependencies).
+// Chrome binary: $CHROME_BIN or `google-chrome`. Screenshots go to scripts/e2e/out/.
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+export const OUT = join(new URL('.', import.meta.url).pathname, 'out');
+const PORT = Number(process.env.CDP_PORT ?? 9333);
+
+export async function launch(url, { width = 1600, height = 900 } = {}) {
+  mkdirSync(OUT, { recursive: true });
+  const profile = mkdtempSync(join(tmpdir(), 'kentos-e2e-'));
+  const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', [
+    '--headless=new',
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${profile}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--enable-unsafe-swiftshader',
+    '--use-angle=swiftshader',
+    `--window-size=${width},${height}`,
+    'about:blank',
+  ], { stdio: 'ignore' });
+  let targets;
+  for (let i = 0; i < 50; i++) {
+    try {
+      targets = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+      if (targets.some((t) => t.type === 'page')) break;
+    } catch {}
+    await sleep(100);
+  }
+  const page = targets.find((t) => t.type === 'page');
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((r) => ws.addEventListener('open', r, { once: true }));
+  let id = 0;
+  const pending = new Map();
+  const consoleLog = [];
+  ws.addEventListener('message', (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result);
+    } else if (msg.method === 'Runtime.consoleAPICalled') {
+      consoleLog.push(`${msg.params.type}: ${msg.params.args.map((a) => a.value ?? a.description).join(' ')}`);
+    } else if (msg.method === 'Runtime.exceptionThrown') {
+      consoleLog.push(`EXCEPTION: ${msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text}`);
+    }
+  });
+  const send = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      const mid = ++id;
+      pending.set(mid, { resolve, reject });
+      ws.send(JSON.stringify({ id: mid, method, params }));
+    });
+  await send('Runtime.enable');
+  await send('Page.enable');
+  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+  await send('Page.navigate', { url });
+  const api = {
+    send,
+    consoleLog,
+    async eval(expr) {
+      const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
+      return r.result.value;
+    },
+    async waitFor(expr, ms = 10000) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        if (await api.eval(`!!(${expr})`).catch(() => false)) return;
+        await sleep(100);
+      }
+      throw new Error(`timeout waiting for ${expr}`);
+    },
+    async move(x, y) {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+    },
+    async click(x, y, { clickCount = 1, modifiers = 0 } = {}) {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', modifiers });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount, modifiers });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount, modifiers });
+      await sleep(40);
+    },
+    async drag(x1, y1, x2, y2) {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1, y: y1, button: 'none' });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x1, y: y1, button: 'left', clickCount: 1 });
+      for (let i = 1; i <= 8; i++) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1 + ((x2 - x1) * i) / 8, y: y1 + ((y2 - y1) * i) / 8, button: 'left', buttons: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x2, y: y2, button: 'left', clickCount: 1 });
+      await sleep(40);
+    },
+    async key(key, { shift = false, alt = false, ctrl = false } = {}) {
+      const named = { Enter: [13, 'Enter', '\r'], Escape: [27, 'Escape'], ' ': [32, 'Space', ' '], Delete: [46, 'Delete'], F10: [121, 'F10'], F3: [114, 'F3'], F8: [119, 'F8'] };
+      let vk, code, text;
+      if (named[key]) [vk, code, text] = named[key];
+      else {
+        vk = key.toUpperCase().charCodeAt(0);
+        code = /[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : `Digit${key}`;
+        text = shift ? key.toUpperCase() : key;
+      }
+      const modifiers = (alt ? 1 : 0) | (ctrl ? 2 : 0) | (shift ? 8 : 0);
+      const k = shift && key.length === 1 ? key.toUpperCase() : key;
+      await send('Input.dispatchKeyEvent', { type: text && !ctrl && !alt ? 'keyDown' : 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, text: ctrl || alt ? undefined : text, modifiers });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers });
+      await sleep(30);
+    },
+    async type(text) {
+      await send('Input.insertText', { text });
+      await sleep(30);
+    },
+    async shot(name, clip) {
+      await sleep(120);
+      const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
+      const file = join(OUT, `${name}.png`);
+      writeFileSync(file, Buffer.from(r.data, 'base64'));
+      return file;
+    },
+    close() {
+      ws.close();
+      proc.kill();
+      setTimeout(() => rmSync(profile, { recursive: true, force: true }), 300);
+    },
+  };
+  return api;
+}
+
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

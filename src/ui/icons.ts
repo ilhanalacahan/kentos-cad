@@ -1,0 +1,124 @@
+/**
+ * Hand-drawn 20×20 stroke icon set. Filled squares are CAD grips, so a tool
+ * icon shows where its clicks go. Stroke = currentColor, 1.4 px.
+ */
+const grip = (x: number, y: number) => `<rect x="${x - 1.5}" y="${y - 1.5}" width="3" height="3" fill="currentColor" stroke="none"/>`;
+
+const ICONS = {
+  // Tools
+  select: '<path d="M5 3.2 15 9.3l-4.4 1.2-2.3 4.3z"/>',
+  pan: '<path d="M7.2 10V4.7a1.2 1.2 0 0 1 2.4 0V9M9.6 8.6V3.6a1.2 1.2 0 0 1 2.4 0V9M12 9V4.8a1.2 1.2 0 0 1 2.4 0V11c0 3.4-2 6-5.3 6-2.2 0-3.5-1.2-4.6-3.1l-1.6-2.8a1.25 1.25 0 0 1 2.1-1.4L7.2 12"/>',
+  point: '<path d="M10 3.5v13M3.5 10h13"/><circle cx="10" cy="10" r="3.2"/>',
+  line: `<path d="M4.5 15.5 15.5 4.5"/>${grip(4.5, 15.5)}${grip(15.5, 4.5)}`,
+  polyline: `<path d="m3.5 15 4-8 5 5 4-8"/>${grip(3.5, 15)}${grip(7.5, 7)}${grip(12.5, 12)}${grip(16.5, 4)}`,
+  arc: `<path d="M3.5 16A12.5 12.5 0 0 1 16 3.5"/>${grip(3.5, 16)}${grip(16, 3.5)}${grip(7.2, 7.2)}`,
+  circle: `<circle cx="10" cy="10" r="6.5"/><path d="M10 10h6.5"/>${grip(10, 10)}`,
+  rectangle: `<rect x="3.5" y="5.5" width="13" height="9"/>${grip(3.5, 14.5)}${grip(16.5, 5.5)}`,
+  polygon: `<path d="m3.8 8 6-4.5 6.5 3.5-1.8 9H5.6z" fill="currentColor" fill-opacity=".14"/>${grip(3.8, 8)}${grip(9.8, 3.5)}${grip(16.3, 7)}${grip(14.5, 16)}${grip(5.6, 16)}`,
+  spline: `<path d="M3 15c2.6-8.5 5.8-8.5 7 0 1.2 8.2 4.5 4 7-9"/>${grip(3, 15)}${grip(17, 6)}`,
+  text: '<path d="M4.5 5V3.8h11V5M10 3.8v12.4M7.5 16.2h5"/>',
+  dimension: '<path d="M3.5 5v10M16.5 5v10M3.5 12h13"/><path d="m5.8 10.5-2.3 1.5 2.3 1.5M14.2 10.5l2.3 1.5-2.3 1.5"/><path d="M8 8.5h4"/>',
+  hatch: '<rect x="3.5" y="3.5" width="13" height="13"/><path d="m3.5 9.5 6-6M3.5 15.5l12-12M9.5 16.5l7-7"/>',
+  move: '<path d="M10 2.5v15M2.5 10h15"/><path d="M7.8 4.7 10 2.5l2.2 2.2M7.8 15.3l2.2 2.2 2.2-2.2M4.7 7.8 2.5 10l2.2 2.2M15.3 7.8l2.2 2.2-2.2 2.2"/>',
+  copy: '<rect x="3.5" y="7.5" width="9" height="9" rx="1"/><path d="M7.5 7.5v-4h9v9h-4"/>',
+  rotate: '<path d="M16 10.5A6 6 0 1 1 13.6 5.7"/><path d="M14 2.6v3.5h-3.5"/>',
+  scale: '<rect x="3.5" y="10.5" width="6" height="6"/><path d="M3.5 7.5v-4h13v13h-4"/><path d="m9.5 10.5 6-6M12 4.5h3.5V8"/>',
+  mirror: '<path d="M10 2.5v15" stroke-dasharray="2 1.8"/><path d="M7.8 5 3 15h4.8zM12.2 5 17 15h-4.8z"/>',
+  offset: '<path d="M3.5 13.5C5 8.5 8.5 5 14.5 4"/><path d="M6.2 16.5c1.4-4.4 4.4-7.3 10-8.2"/>',
+  trim: '<path d="M12.5 3v14"/><path d="M3 10h9.5"/><path d="M12.5 10H17" stroke-dasharray="1.6 1.8"/><path d="m14.2 5.8 2.6-2.6M16.8 5.8l-2.6-2.6"/>',
+  extend: '<path d="M16.5 3v14"/><path d="M3 10h7"/><path d="M10 10h6.5" stroke-dasharray="1.6 1.8"/><path d="m12.6 7.6 2.4 2.4-2.4 2.4"/>',
+  fillet: `<path d="M4 16.5V10a5.5 5.5 0 0 1 5.5-5.5h7"/>${grip(4, 16.5)}${grip(16.5, 4.5)}`,
+  chamfer: `<path d="M4 16.5V9.5l5-5h7.5"/>${grip(4, 9.5)}${grip(9, 4.5)}`,
+  break: `<path d="M3 15 8 12M12 9.6l5-3"/>${grip(8, 12)}${grip(12, 9.6)}<path d="m8.8 6.5 2.4 1.6M8.8 15l2.4 1.6" stroke-dasharray="1.4 1.2"/>`,
+  join: `<path d="M3 15.5 7.5 7.5M12.5 7.5l4.5 8"/><path d="M7.5 7.5h5" stroke-dasharray="1.6 1.4"/>${grip(7.5, 7.5)}${grip(12.5, 7.5)}`,
+  explode: '<path d="M3.5 7.5v-4h4M16.5 7.5v-4h-4M3.5 12.5v4h4M16.5 12.5v4h-4"/><path d="M10 8V6.5M10 13.5V12M8 10H6.5M13.5 10H12"/>',
+  stretch: `<path d="M3.5 5.5h6l6 4.5-6 4.5h-6z"/><rect x="8.5" y="2.5" width="9" height="15" stroke-dasharray="1.8 1.6"/>${grip(15.5, 10)}`,
+  vertex: `<path d="m3 15 5-9 9 5"/>${grip(3, 15)}${grip(8, 6)}${grip(17, 11)}<path d="M12.5 12.5v5M10 15h5"/>`,
+  divide: `<path d="M3 13.5 17 6.5"/><circle cx="7.7" cy="11.2" r="1.3"/><circle cx="12.3" cy="8.8" r="1.3"/>${grip(3, 13.5)}${grip(17, 6.5)}`,
+  array: '<rect x="3.5" y="3.5" width="5" height="5"/><rect x="11.5" y="3.5" width="5" height="5"/><rect x="3.5" y="11.5" width="5" height="5"/><rect x="11.5" y="11.5" width="5" height="5"/>',
+  erase: '<path d="M8.5 16.5h8"/><path d="m11.4 3.9 4.7 4.7a1 1 0 0 1 0 1.4L9.7 16.5H6.4l-2.7-2.7a1 1 0 0 1 0-1.4l6.3-8.5a1 1 0 0 1 1.4 0z"/><path d="m7.3 8.2 4.5 4.5"/>',
+  parcel: `<path d="m3.5 7 6.5-3.5 6.5 3.4-1.4 9.6H5.1z"/><path d="M8.3 12.2h3.4M10 10.5v3.4"/>${grip(3.5, 7)}${grip(10, 3.5)}${grip(16.5, 6.9)}${grip(15.1, 16.5)}${grip(5.1, 16.5)}`,
+  subdivide: '<path d="M3.5 5.5h13v9h-13z"/><path d="m11.2 5.5-2.2 9" stroke-dasharray="2.2 1.6"/>',
+  stakeout: '<circle cx="10" cy="6.5" r="3.3"/><path d="M10 3.2v6.6M6.7 6.5h6.6M10 9.8 5.8 17M10 9.8l4.2 7.2M10 9.8V17"/>',
+  spot: '<path d="M10 4 4.8 13h10.4z"/><path d="M3 16.5h14"/><circle cx="10" cy="10" r=".9" fill="currentColor"/>',
+  measure: '<path d="M2.8 13.6 13.6 2.8l3.6 3.6L6.4 17.2z"/><path d="m5.9 10.5 1.6 1.6M8.4 8l2.2 2.2M10.9 5.5l1.6 1.6"/>',
+  area: '<path d="M3.5 16.5v-13h13v13z" stroke-dasharray="2 1.7"/><path d="M7 13V7h6v6z" fill="currentColor" fill-opacity=".35"/>',
+
+  // App chrome
+  fileNew: '<path d="M5 2.5h6.5L15 6v11.5H5z"/><path d="M11.5 2.5V6H15M10 9.5v5M7.5 12h5"/>',
+  fileOpen: '<path d="M2.5 15.5v-11h5l1.5 2h7v2.5"/><path d="m2.5 15.5 2.4-7h12.6l-2.4 7z"/>',
+  save: '<path d="M3.5 3.5h10l3 3v10h-13z"/><path d="M6.5 3.5v4h6v-4M6 16.5v-5h8v5"/>',
+  cut: '<circle cx="6" cy="14.5" r="2.3"/><circle cx="14" cy="14.5" r="2.3"/><path d="M7.6 12.8 14 3.5M12.4 12.8 6 3.5"/>',
+  paste: '<rect x="4.5" y="4" width="11" height="13.5" rx="1"/><path d="M7.5 4V2.8h5V4M7.5 9h5M7.5 12h5"/>',
+  undo: '<path d="M7 4.8 3.5 8.3 7 11.8"/><path d="M3.5 8.3H12a4.4 4.4 0 0 1 0 8.8H8.5"/>',
+  redo: '<path d="m13 4.8 3.5 3.5-3.5 3.5"/><path d="M16.5 8.3H8a4.4 4.4 0 0 0 0 8.8h3.5"/>',
+  zoomIn: '<circle cx="8.5" cy="8.5" r="5.2"/><path d="m12.4 12.4 4.6 4.6M6.3 8.5h4.4M8.5 6.3v4.4"/>',
+  zoomOut: '<circle cx="8.5" cy="8.5" r="5.2"/><path d="m12.4 12.4 4.6 4.6M6.3 8.5h4.4"/>',
+  zoomExtents: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/><rect x="7" y="7" width="6" height="6"/>',
+  zoomWindow: '<rect x="2.5" y="2.5" width="10" height="8" stroke-dasharray="2 1.6"/><circle cx="12" cy="12" r="3.2"/><path d="m14.4 14.4 3 3"/>',
+  zoomSelection: '<path d="M10 2.5v3M10 14.5v3M2.5 10h3M14.5 10h3"/><circle cx="10" cy="10" r="4.5"/><circle cx="10" cy="10" r="1" fill="currentColor"/>',
+  layers: '<path d="m10 3 7 3.8-7 3.8-7-3.8z"/><path d="m3 10.3 7 3.8 7-3.8"/><path d="m3 13.6 7 3.9 7-3.9"/>',
+  layerAdd: '<path d="m9 3 6.5 3.5L9 10 2.5 6.5z"/><path d="m2.5 10 6.5 3.5 2-1.1M15.5 11.5v6M12.5 14.5h6"/>',
+  folderAdd: '<path d="M2.5 15.5v-10h5l1.5 2h8.5v3"/><path d="M2.5 15.5h9M15 11.5v6M12 14.5h6"/>',
+  folder: '<path d="M2.5 15.5v-10h5l1.5 2h8.5v8z"/>',
+  eye: '<path d="M1.8 10S5 4.6 10 4.6 18.2 10 18.2 10 15 15.4 10 15.4 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.4"/>',
+  eyeOff: '<path d="M4.2 6.3C2.6 7.8 1.8 10 1.8 10S5 15.4 10 15.4c1.4 0 2.6-.4 3.7-1M8 4.8c.6-.1 1.3-.2 2-.2 5 0 8.2 5.4 8.2 5.4s-.7 1.3-2 2.6M3 3l14 14"/>',
+  lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>',
+  unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.2"/><path d="M7 9V6.5a3 3 0 0 1 5.8-1.1"/>',
+  chevronRight: '<path d="m8 5 5 5-5 5"/>',
+  chevronDown: '<path d="m5 8 5 5 5-5"/>',
+  chevronUp: '<path d="m5 12 5-5 5 5"/>',
+  close: '<path d="m5 5 10 10M15 5 5 15"/>',
+  check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
+  search: '<circle cx="8.5" cy="8.5" r="5"/><path d="m12.3 12.3 4.2 4.2"/>',
+  grip: '<circle cx="7.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="7.5" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="7.5" cy="15" r="1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="15" r="1" fill="currentColor" stroke="none"/>',
+  columns: '<rect x="3.5" y="3.5" width="5" height="13" rx=".8"/><rect x="11.5" y="3.5" width="5" height="13" rx=".8"/>',
+  dock: '<rect x="3" y="3.5" width="14" height="13" rx="1"/><path d="M7.5 3.5v13"/>',
+  panelRight: '<rect x="2.5" y="3.5" width="15" height="13" rx="1"/><path d="M12 3.5v13"/>',
+  panelBottom: '<rect x="2.5" y="3.5" width="15" height="13" rx="1"/><path d="M2.5 12h15"/>',
+  toolbox: '<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/>',
+  terminal: '<rect x="2.5" y="4" width="15" height="12" rx="1"/><path d="m6 8 2.5 2L6 12M10.5 12.5h3.5"/>',
+  snap: '<rect x="6.5" y="6.5" width="7" height="7"/><path d="M10 2v4.5M10 13.5V18M2 10h4.5M13.5 10H18"/>',
+  grid: '<path d="M3 7h14M3 13h14M7 3v14M13 3v14"/>',
+  ortho: '<path d="M4 3.5v12.5h12.5"/><path d="M4 12h4v4"/>',
+  polar: '<path d="M3 16.5h14M3 16.5 14.5 5"/><path d="M9 16.5a6 6 0 0 0-1.8-4.2"/>',
+  sun: '<circle cx="10" cy="10" r="3.4"/><path d="M10 2.5v1.8M10 15.7v1.8M2.5 10h1.8M15.7 10h1.8M4.7 4.7l1.3 1.3M14 14l1.3 1.3M4.7 15.3 6 14M14 6l1.3-1.3"/>',
+  moon: '<path d="M15.8 12.6A6.5 6.5 0 0 1 7.4 4.2a6.5 6.5 0 1 0 8.4 8.4z"/>',
+  keyboard: '<rect x="2" y="5" width="16" height="10" rx="1.2"/><path d="M5 8h1M8 8h1M11 8h1M14 8h1M5 11h1M14 11h1M8 11h4"/>',
+  import: '<path d="M10 3v9M6.5 8.5 10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>',
+  export: '<path d="M10 12V3M6.5 6.5 10 3l3.5 3.5"/><path d="M3.5 13v3.5h13V13"/>',
+  print: '<path d="M5.5 7.5v-4h9v4"/><rect x="2.5" y="7.5" width="15" height="6.5" rx="1"/><path d="M5.5 12h9v5h-9z"/>',
+  info: '<circle cx="10" cy="10" r="7"/><path d="M10 9v4.5M10 6.3v.2"/>',
+  warning: '<path d="M10 3 17.5 16h-15z"/><path d="M10 8v3.8M10 13.8v.2"/>',
+  error: '<circle cx="10" cy="10" r="7"/><path d="m7.3 7.3 5.4 5.4M12.7 7.3l-5.4 5.4"/>',
+  success: '<circle cx="10" cy="10" r="7"/><path d="m6.8 10.2 2.3 2.3 4.2-4.6"/>',
+  more: '<circle cx="5" cy="10" r="1" fill="currentColor"/><circle cx="10" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/>',
+  crs: '<circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c-2.5 2-2.5 12 0 14M10 3c2.5 2 2.5 12 0 14"/>',
+  table: '<rect x="2.5" y="3.5" width="15" height="13" rx="1"/><path d="M2.5 7.5h15M2.5 12h15M7.5 7.5v9"/>',
+  history: '<path d="M3.5 10a6.5 6.5 0 1 0 2-4.7"/><path d="M3 3.3v3h3M10 6.5V10l2.5 1.8"/>',
+  clear: '<path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>',
+  settings: '<path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/>',
+  units: '<path d="M3.5 16.5v-13l13 13z"/><path d="M3.5 12.5h2M3.5 9h2M7.5 16.5v-2M11 16.5v-2"/><path d="M6.5 13.5v-3l3 3z"/>',
+  chip: '<rect x="5" y="5" width="10" height="10" rx="1.5"/><rect x="8" y="8" width="4" height="4"/><path d="M8 2.5V5M12 2.5V5M8 15v2.5M12 15v2.5M2.5 8H5M2.5 12H5M15 8h2.5M15 12h2.5"/>',
+  appearance: '<circle cx="10" cy="10" r="6.5"/><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" stroke="none"/>',
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+const NS = 'http://www.w3.org/2000/svg';
+
+export function icon(name: string, size = 18): SVGSVGElement {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.4');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('icon');
+  svg.innerHTML = (ICONS as Record<string, string>)[name] ?? ICONS.more;
+  return svg;
+}

@@ -1,0 +1,331 @@
+import type { Command } from '../core/commands';
+import type { Entity } from '../model/entities';
+import { pasteEntities, PasteTool } from '../tools/editTools';
+import { edgeLabels } from '../model/ops/edgeLabels';
+import type { Signal } from '../core/signal';
+import { TOOL_GROUP_LABEL } from '../tools/Tool';
+import type { AppContext } from './context';
+import type { Theme, UiScale } from './state';
+
+/** Features that exist in the menu but are not built yet say so plainly. */
+function pending(ctx: AppContext, id: string, title: string, category: string, icon?: string): Command {
+  return {
+    id,
+    title,
+    category,
+    icon,
+    run: () => ctx.log.warn(`“${title}” bu sürümde henüz kullanılamıyor.`),
+  };
+}
+
+function toggle(id: string, title: string, s: Signal<boolean>, opts: Partial<Command> = {}): Command {
+  return { id, title, run: () => s.set(!s.value), isChecked: () => s.value, watch: [s], ...opts };
+}
+
+export function applyTheme(ctx: AppContext, theme: Theme): void {
+  document.documentElement.dataset.theme = theme;
+  // Palette first: theme subscribers (layer swatches) read it.
+  ctx.view.refreshPalette();
+  ctx.ui.theme.set(theme);
+}
+
+/** Type scale multiplier; every font/size token is derived from --ui-scale. */
+export const UI_SCALE: Record<UiScale, number> = { standard: 1, large: 1.08, xlarge: 1.16 };
+
+export function applyUiScale(scale: UiScale): void {
+  document.documentElement.style.setProperty('--ui-scale', String(UI_SCALE[scale] ?? 1));
+}
+
+export interface CommandHooks {
+  openShortcuts: () => void;
+  openAbout: () => void;
+  /** Uygulama ayarları — user preferences, stored in the browser. */
+  openAppSettings: (section?: string) => void;
+  /** Proje ayarları — CRS, units, plot scale; stored in the project file. */
+  openProjectSettings: (section?: string) => void;
+  focusCommandLine: () => void;
+}
+
+export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void {
+  const { commands, doc, selection, settings, ui, view, tools, log } = ctx;
+  const selected = () => [...selection.ids.value].map((id) => doc.get(id)).filter((e): e is Entity => !!e);
+  const F = 'Dosya';
+  const E = 'Düzen';
+  const V = 'Görünüm';
+  const K = 'Koordinat';
+  const A = 'Analiz';
+  const M = 'Harita';
+
+  commands.registerAll([
+    // Dosya
+    pending(ctx, 'file.new', 'Yeni proje', F, 'fileNew'),
+    pending(ctx, 'file.open', 'Aç…', F, 'fileOpen'),
+    { id: 'file.save', title: 'Kaydet', category: F, icon: 'save', run: () => (doc.dirty.set(false), log.success(`${doc.name.value} kaydedildi (yerel oturum).`)) },
+    pending(ctx, 'file.saveAs', 'Farklı kaydet…', F),
+    pending(ctx, 'file.import.dxf', 'DXF / DWG…', F),
+    pending(ctx, 'file.import.ncz', 'Netcad NCZ…', F),
+    pending(ctx, 'file.import.shp', 'Shapefile…', F),
+    pending(ctx, 'file.import.geojson', 'GeoJSON…', F),
+    pending(ctx, 'file.import.ncn', 'Koordinat listesi (NCN, TXT, CSV)…', F),
+    pending(ctx, 'file.export.dxf', 'DXF…', F),
+    pending(ctx, 'file.export.geojson', 'GeoJSON…', F),
+    pending(ctx, 'file.export.pdf', 'PDF pafta…', F),
+    pending(ctx, 'file.print', 'Yazdır ve pafta çıktısı…', F, 'print'),
+    { id: 'file.settings', title: 'Proje ayarları…', category: F, icon: 'folder', aliases: ['PROJE'], run: () => hooks.openProjectSettings() },
+
+    // Düzen
+    {
+      id: 'edit.undo',
+      title: 'Geri al',
+      category: E,
+      icon: 'undo',
+      run: () => {
+        const label = doc.undo();
+        if (label) log.info(`Geri alındı: ${label}`);
+        selection.retain((id) => !!doc.get(id));
+      },
+      isEnabled: () => doc.canUndo.value,
+      watch: [doc.canUndo],
+    },
+    {
+      id: 'edit.redo',
+      title: 'Yinele',
+      category: E,
+      icon: 'redo',
+      run: () => {
+        const label = doc.redo();
+        if (label) log.info(`Yinelendi: ${label}`);
+        selection.retain((id) => !!doc.get(id));
+      },
+      isEnabled: () => doc.canRedo.value,
+      watch: [doc.canRedo],
+    },
+    {
+      id: 'edit.cut',
+      title: 'Kes',
+      category: E,
+      icon: 'cut',
+      run: () => {
+        const ents = selected();
+        const editable = ents.filter((e) => !doc.layers.isLocked(e.layerId));
+        if (editable.length < ents.length) log.warn(`${ents.length - editable.length} nesne kilitli katmanda olduğu için kesilmedi.`);
+        if (!editable.length) return;
+        ctx.clipboard.set(editable);
+        doc.transact('Kes', () => doc.remove(editable.map((e) => e.id)));
+        selection.retain((id) => !!doc.get(id));
+        log.success(`${editable.length} nesne panoya kesildi.`);
+      },
+      isEnabled: () => selection.size > 0,
+      watch: [selection.ids],
+    },
+    {
+      id: 'edit.copy',
+      title: 'Panoya kopyala',
+      category: E,
+      icon: 'copy',
+      run: () => {
+        const ents = selected();
+        if (!ents.length) return;
+        ctx.clipboard.set(ents);
+        log.success(`${ents.length} nesne panoya kopyalandı.`);
+      },
+      isEnabled: () => selection.size > 0,
+      watch: [selection.ids],
+    },
+    {
+      id: 'edit.paste',
+      title: 'Yapıştır',
+      category: E,
+      icon: 'paste',
+      aliases: ['YAPISTIR', 'PASTE'],
+      run: () => {
+        const { items, base } = ctx.clipboard.get();
+        if (items.length) tools.run(new PasteTool(ctx, items, base), 'Yapıştır');
+      },
+      isEnabled: () => ctx.clipboard.count.value > 0,
+      watch: [ctx.clipboard.count],
+    },
+    {
+      id: 'edit.pasteOriginal',
+      title: 'Özgün koordinatlara yapıştır',
+      category: E,
+      aliases: ['PASTEORIG'],
+      description: 'Panodaki nesneleri kopyalandıkları koordinatlara yapıştırır (başka projeye aktarırken).',
+      run: () => {
+        const ids = pasteEntities(ctx, ctx.clipboard.get().items, 0, 0);
+        if (ids.length) selection.set(ids);
+      },
+      isEnabled: () => ctx.clipboard.count.value > 0,
+      watch: [ctx.clipboard.count],
+    },
+    {
+      id: 'edit.selectAll',
+      title: 'Tümünü seç',
+      category: E,
+      run: () => {
+        const ids = [...doc.all()].filter((e) => doc.layers.isVisible(e.layerId)).map((e) => e.id);
+        selection.set(ids);
+        log.info(`${ids.length} nesne seçildi.`);
+      },
+    },
+    { id: 'edit.deselect', title: 'Seçimi kaldır', category: E, run: () => selection.clear(), isEnabled: () => selection.size > 0, watch: [selection.ids] },
+    {
+      id: 'edit.invertSelection',
+      title: 'Seçimi ters çevir',
+      category: E,
+      run: () => selection.set([...doc.all()].filter((e) => doc.layers.isVisible(e.layerId) && !selection.has(e.id)).map((e) => e.id)),
+    },
+
+    // Görünüm
+    { id: 'view.zoomExtents', title: 'Tümünü göster', category: V, icon: 'zoomExtents', aliases: ['ZE', 'TUMU'], run: () => view.zoomExtents() },
+    { id: 'view.zoomIn', title: 'Yakınlaştır', category: V, icon: 'zoomIn', run: () => view.zoomBy(1.5) },
+    { id: 'view.zoomOut', title: 'Uzaklaştır', category: V, icon: 'zoomOut', run: () => view.zoomBy(1 / 1.5) },
+    {
+      id: 'view.zoomSelection',
+      title: 'Seçime yakınlaştır',
+      category: V,
+      icon: 'zoomSelection',
+      run: () => view.zoomToSelection(),
+      isEnabled: () => selection.size > 0,
+      watch: [selection.ids],
+    },
+    toggle('view.toolbox', 'Araç kutusu', ui.toolboxVisible, { category: V, icon: 'toolbox' }),
+    toggle('view.toolboxDock', 'Araç kutusunu kenara sabitle', ui.toolboxDocked, { category: V, icon: 'dock' }),
+    toggle('view.rightPanel', 'Katman ve öznitelik paneli', ui.rightVisible, { category: V, icon: 'panelRight' }),
+    toggle('view.bottomPanel', 'Komut geçmişi paneli', ui.bottomExpanded, { category: V, icon: 'panelBottom' }),
+    {
+      id: 'view.theme.dark',
+      title: 'Koyu',
+      category: V,
+      icon: 'moon',
+      run: () => applyTheme(ctx, 'dark'),
+      isChecked: () => ui.theme.value === 'dark',
+      watch: [ui.theme],
+    },
+    {
+      id: 'view.theme.light',
+      title: 'Açık',
+      category: V,
+      icon: 'sun',
+      run: () => applyTheme(ctx, 'light'),
+      isChecked: () => ui.theme.value === 'light',
+      watch: [ui.theme],
+    },
+    { id: 'view.theme.toggle', title: 'Temayı değiştir', category: V, run: () => applyTheme(ctx, ui.theme.value === 'dark' ? 'light' : 'dark') },
+    {
+      id: 'view.coords',
+      title: 'Koordinat listesi',
+      category: V,
+      icon: 'table',
+      run: () => {
+        ui.bottomTab.set('coords');
+        ui.bottomExpanded.set(true);
+      },
+    },
+
+    // Çizim yardımcıları
+    toggle('draft.snap', 'Kenetleme', settings.snap, { category: 'Çizim yardımcıları', icon: 'snap' }),
+    toggle('draft.grid', 'Izgara', settings.grid, { category: 'Çizim yardımcıları', icon: 'grid' }),
+    toggle('draft.ortho', 'Orto', settings.ortho, { category: 'Çizim yardımcıları', icon: 'ortho' }),
+    toggle('draft.polar', 'Kutupsal izleme', settings.polar, { category: 'Çizim yardımcıları', icon: 'polar' }),
+
+    // Harita / Koordinat / Analiz
+    pending(ctx, 'map.contours', 'Eşyükselti üret…', M),
+    pending(ctx, 'map.profile', 'Boy kesit al…', M),
+    pending(ctx, 'map.sheet', 'Pafta bölümlemesi…', M),
+    pending(ctx, 'map.parcelReport', 'Parsel alan çizelgesi', M),
+    {
+      id: 'map.edgeLengths',
+      title: 'Kenar ölçülerini yaz',
+      category: M,
+      icon: 'dimension',
+      aliases: ['KENAR', 'KENAROLCU'],
+      description: 'Seçili parsel ve çoklu çizgilerin kenar uzunluklarını kenarların dışına yazar.',
+      run: () => {
+        const targets = [...selection.ids.value].map((id) => doc.get(id)).filter((e) => e && (e.kind === 'polygon' || e.kind === 'polyline'));
+        if (!targets.length) return log.warn('Önce kenar ölçüsü yazılacak parselleri ya da çoklu çizgileri seçin.');
+        const layerId = doc.layers.active.value;
+        if (doc.layers.isLocked(layerId)) return log.warn(`“${doc.layers.get(layerId)?.name}” katmanı kilitli; kenar ölçüleri etkin katmana yazılır.`);
+        const height = 0.002 * doc.settings.plotScale.value; // 2 mm on paper
+        let count = 0;
+        doc.transact('Kenar ölçüleri', () => {
+          for (const e of targets) {
+            if (!e || (e.kind !== 'polygon' && e.kind !== 'polyline')) continue;
+            for (const l of edgeLabels(e.pts, e.kind === 'polygon', height, height * 3, e.bulges)) {
+              doc.add({ kind: 'text', layerId, p: l.p, text: ctx.format.length(l.length, false), height, rotation: l.rotation, attrs: { Tür: 'Kenar ölçüsü' } });
+              count++;
+            }
+          }
+        });
+        log.success(`${targets.length} nesneye ${count} kenar ölçüsü yazıldı.`);
+      },
+      isEnabled: () => selection.size > 0,
+      watch: [selection.ids],
+    },
+    { id: 'crs.set', title: 'Koordinat sistemi…', category: K, icon: 'crs', aliases: ['SRID', 'EPSG'], run: () => hooks.openProjectSettings('crs') },
+    pending(ctx, 'crs.transform', 'Datum dönüşümü (ED50 ↔ TUREF)…', K),
+    pending(ctx, 'crs.query', 'Koordinat sorgula', K),
+    pending(ctx, 'crs.points', 'Nokta listesi içe aktar…', K),
+    pending(ctx, 'analysis.volume', 'Hacim hesabı…', A),
+    pending(ctx, 'analysis.slope', 'Eğim analizi…', A),
+
+    // Katmanlar
+    {
+      id: 'layer.new',
+      title: 'Yeni katman',
+      category: 'Katman',
+      icon: 'layerAdd',
+      run: () => {
+        const active = doc.layers.active.value;
+        const node = doc.layers.add({ name: doc.layers.uniqueName('Yeni katman') }, active);
+        doc.layers.setActive(node.id);
+        log.success(`“${node.name}” katmanı eklendi ve etkin yapıldı.`);
+      },
+    },
+    {
+      id: 'layer.newGroup',
+      title: 'Yeni grup',
+      category: 'Katman',
+      icon: 'folderAdd',
+      run: () => {
+        const node = doc.layers.add({ name: doc.layers.uniqueName('Yeni grup'), type: 'group', children: [] }, null);
+        log.success(`“${node.name}” grubu eklendi.`);
+      },
+    },
+    { id: 'layer.showAll', title: 'Tüm katmanları göster', category: 'Katman', run: () => doc.layers.showAll() },
+
+    // Araç akışı
+    { id: 'tool.cancel', title: 'İptal', category: 'Komut', run: () => tools.exit() },
+    {
+      id: 'tool.confirm',
+      title: 'Onayla',
+      category: 'Komut',
+      run: () => {
+        const t = tools.active;
+        t.confirm ? t.confirm() : tools.repeatLast();
+      },
+    },
+    { id: 'tool.repeat', title: 'Son komutu yinele', category: 'Komut', run: () => tools.repeatLast() },
+    { id: 'commandline.focus', title: 'Komut satırına git', category: 'Araçlar', icon: 'terminal', run: hooks.focusCommandLine },
+
+    // Yardım
+    { id: 'help.shortcuts', title: 'Klavye kısayolları', category: 'Yardım', icon: 'keyboard', aliases: ['KISAYOL', 'KEYS'], run: hooks.openShortcuts },
+    { id: 'help.about', title: 'KentOS CAD hakkında', category: 'Yardım', icon: 'info', run: hooks.openAbout },
+    { id: 'tools.options', title: 'Uygulama ayarları…', category: 'Araçlar', icon: 'settings', aliases: ['AYARLAR', 'OPTIONS'], run: () => hooks.openAppSettings() },
+  ]);
+
+  // Every tool becomes a command: menus, toolbox, keymap and command line share it.
+  for (const d of tools.list()) {
+    commands.register({
+      id: `tool.${d.id}`,
+      title: d.label,
+      category: TOOL_GROUP_LABEL[d.group],
+      icon: d.icon,
+      description: d.description,
+      aliases: d.aliases,
+      run: () => tools.activate(d.id),
+      isChecked: () => tools.activeId.value === d.id,
+      watch: [tools.activeId],
+    });
+  }
+}
