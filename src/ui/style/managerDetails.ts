@@ -145,6 +145,7 @@ function actions(host: DetailsHost, item: Sourced, editable: boolean): HTMLEleme
     return b;
   };
   const list: HTMLElement[] = [];
+  if (item.kind === 'asset' && item.format === 'svg') list.push(btn(editable ? 'Düzenle' : 'Kopyasını düzenle', 'edit', () => host.edit(item.id), { title: 'SVG çizim düzenleyicisinde açar' }));
   if (item.kind === 'symbol') {
     list.push(btn(editable ? 'Düzenle' : 'Kopyasını düzenle', 'edit', () => host.edit(item.id), { title: editable ? 'Sembol tasarımcısında açar' : 'Kitaplığım\'a bir kopya alır ve onu açar' }));
     const selected = [...ctx.selection.ids.value];

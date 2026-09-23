@@ -656,6 +656,22 @@ try {
     const r = await b.eval(`window.kentos.doc.layers.get('parsel').style.renderer`);
     check('layer style window classifies by value and applies', r?.type === 'categorized' && r.categories.length > 1, `${r?.type} ${r?.categories?.length}`);
     await b.eval(`(() => { const k = window.kentos; k.doc.layers.setStyle('parsel', { renderer: undefined }); k.styles.library.remove(${JSON.stringify(copy?.id ?? '')}); k.doc.layers.setActive('taslak'); })()`);
+
+    // SVG editor: draw a rectangle by dragging, save it as a drawing of the user's library.
+    await b.eval(`window.kentos.commands.execute('style.svgEditor')`);
+    await sleep(600);
+    const docPt = (x, y) => b.eval(`(() => { const svg = document.querySelector('.svge__svg'); const m = svg.firstElementChild.getCTM(); const r = svg.getBoundingClientRect(); return [Math.round(r.left + m.e + ${x} * m.a), Math.round(r.top + m.f + ${y} * m.d)]; })()`);
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    await b.key('r');
+    const [ax, ay] = await docPt(20, 20);
+    const [bx, by] = await docPt(80, 60);
+    await b.drag(ax, ay, bx, by);
+    await press('.dialog--svge .btn--primary', 'Kaydet');
+    const drawn = await b.eval(`window.kentos.styles.library.items('user').find((i) => i.kind === 'asset' && i.name === 'Yeni çizim')`);
+    check('SVG editor draws a rectangle and saves it as a library drawing', !!drawn && /<rect[^>]*width="60"[^>]*height="40"/.test(drawn.data), drawn?.data?.slice(0, 120));
+    await b.key('Escape');
+    await sleep(200);
+    if (drawn) await b.eval(`window.kentos.styles.library.remove(${JSON.stringify(drawn?.id ?? '')})`);
   }
 
   // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step

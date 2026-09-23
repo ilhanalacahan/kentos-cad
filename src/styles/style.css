@@ -733,3 +733,217 @@
 .rule__tools {
   display: flex;
 }
+
+/* SVG editor */
+.svge {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: calc(210px * var(--ui-scale)) minmax(0, 1fr) calc(330px * var(--ui-scale));
+}
+.svge__left {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px;
+  background: var(--c-panel-head);
+  border-right: 1px solid var(--c-line);
+}
+.svge__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.svge__tool {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.svge__tool:hover {
+  background: var(--c-hover);
+}
+.svge__tool[aria-pressed='true'] {
+  color: var(--c-accent-text);
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+}
+.svge__tool kbd {
+  color: var(--c-text-3);
+  font: 500 var(--fs-2xs) / 1 var(--font-mono, monospace);
+}
+.svge__ltitle {
+  margin: 14px 0 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-line);
+}
+.svge__list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.svge__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  font-size: var(--fs-xs);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.svge__row:hover {
+  background: var(--c-hover);
+}
+.svge__row[aria-selected='true'] {
+  background: var(--c-accent-soft);
+}
+.svge__grp {
+  margin-left: auto;
+  color: var(--c-text-3);
+}
+.svge__center {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--c-field);
+}
+.svge__stage {
+  flex: 1;
+  min-height: 0;
+  outline: none;
+  overflow: hidden;
+  cursor: crosshair;
+}
+.svge__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.svge__paper {
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.35));
+}
+.svge__grid {
+  fill: none;
+  stroke: var(--c-line);
+  opacity: 0.55;
+}
+.svge__frame {
+  stroke: var(--c-line-strong);
+}
+.svge__selbox {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.svge__handle {
+  fill: var(--c-panel);
+  stroke: var(--c-accent);
+  stroke-width: 1.2;
+  cursor: nwse-resize;
+}
+.svge__rot {
+  cursor: grab;
+}
+.svge__marquee {
+  fill: var(--c-accent-soft);
+  stroke: var(--c-accent);
+  stroke-width: 1;
+}
+.svge__draft {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.4;
+}
+.svge__node {
+  fill: var(--c-panel);
+  stroke: var(--c-accent);
+  stroke-width: 1.2;
+  cursor: move;
+}
+.svge__node--on {
+  fill: var(--c-accent);
+}
+.svge__ctrl {
+  fill: var(--c-accent);
+  stroke: var(--c-panel);
+  stroke-width: 1;
+  cursor: move;
+}
+.svge__hline {
+  stroke: var(--c-accent);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+.svge__snap {
+  fill: none;
+  stroke: var(--c-ok);
+  stroke-width: 1.6;
+}
+.svge__right {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--c-panel-head);
+  border-left: 1px solid var(--c-line);
+}
+.svgp__title {
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--c-line);
+}
+.svgp__paint {
+  display: flex;
+  gap: 6px;
+}
+.svgp__paint select {
+  flex: 1;
+}
+.svgp__color {
+  width: 44px;
+  height: var(--ctl-h);
+  padding: 2px;
+  background: var(--c-field);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+}
+.svgp__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-line);
+}
+.svgp__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.svgp__act {
+  width: auto;
+  min-width: 30px;
+  padding: 0 8px;
+  font-size: var(--fs-sm);
+}
+.sdf__assetcol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.svgp__group--tool {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-accent-line);
+  border-radius: var(--r-md);
+  background: var(--c-accent-soft);
+}

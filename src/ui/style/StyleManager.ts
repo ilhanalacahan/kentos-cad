@@ -111,6 +111,8 @@ class StyleManager implements DetailsHost {
           { label: 'Alan sembolü', run: () => this.design({ newKind: 'fill' }) },
           { label: 'Çizgi sembolü', run: () => this.design({ newKind: 'line' }) },
           { label: 'İşaret sembolü', run: () => this.design({ newKind: 'marker' }) },
+          { kind: 'separator' },
+          { label: 'SVG çizimi (düzenleyicide)…', icon: 'edit', run: () => this.drawSvg() },
         ],
         { x: r.left, y: r.bottom + 4 },
       );
@@ -294,9 +296,25 @@ class StyleManager implements DetailsHost {
     );
   }
 
+  /** Opens the SVG editor on a drawing of the library (a system one is saved as a copy) or a new one. */
+  drawSvg(id?: string): void {
+    const lib = this.ctx.styles.library;
+    void import('../svgedit/SvgEditor').then((m) =>
+      m.openSvgEditor(this.ctx, {
+        id,
+        onSaved: (saved) => {
+          this.at = { source: lib.get(saved)?.source ?? 'user', path: lib.get(saved)?.path ?? [] };
+          this.select(saved);
+          this.refreshAll();
+        },
+      }),
+    );
+  }
+
   edit(id: string): void {
     const lib = this.ctx.styles.library;
     const item = lib.get(id);
+    if (item?.kind === 'asset') return item.format === 'svg' ? this.drawSvg(id) : undefined;
     if (!item || item.kind !== 'symbol') return;
     if (lib.canEdit(id)) return this.design({ id });
     const copy = lib.copy(id, 'user', { path: ['Sembollerim', ...item.path.slice(-1)] });
@@ -322,6 +340,14 @@ class StyleManager implements DetailsHost {
   private async importFile(): Promise<void> {
     const picked = await pickStyleFile();
     if (!picked) return;
+    if ('image' in picked) {
+      const lib = this.ctx.styles.library;
+      lib.add('user', picked.image);
+      this.at = { source: 'user', path: picked.image.path };
+      this.select(picked.image.id);
+      this.refreshAll();
+      return this.say(`“${picked.image.name}” Kitaplığım'a alındı: görüntü dolgusunda ya da görüntü işaretinde kullanılabilir.`);
+    }
     const { file, issues } = parseStyleFile(picked.text);
     if (!file) return this.say(`“${picked.name}” okunamadı: ${issues.slice(0, 2).join('; ')}`, 'warn');
     replaceChildren(this.details, renderImport(this, picked.name, file, issues));

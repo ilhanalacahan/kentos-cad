@@ -165,8 +165,10 @@ const WEIGHTS: { value: string; label: string }[] = [
 export interface FormEnv extends FieldEnv {
   /** Assets the symbol may draw with: SVG and raster drawings of the library. */
   assets: readonly { id: string; name: string; format: string }[];
-  /** Adds an SVG file to the user's library; the new asset id, or null. */
+  /** Adds an SVG file or a PNG/JPEG picture to the user's library; the new asset id, or null. */
   importSvg(): Promise<string | null>;
+  /** Opens the SVG editor on a drawing (or a new one); the saved asset id, or null. */
+  drawSvg(id?: string): Promise<string | null>;
   /** Where the layer sits: an area symbol's line layers may choose rings. */
   context: 'fill' | 'line' | 'marker';
 }
@@ -189,9 +191,27 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
   const assetPick = (value: string, key: string) => {
     const options = [{ value: '', label: 'Çizim seçin…' }, ...env.assets.map((a) => ({ value: a.id, label: a.name }))];
     const sel = select(value, options, (v) => set({ [key]: v }), 'Çizim');
-    const add = h('button', { class: 'btn btn--small', type: 'button', title: 'Bilgisayardan bir SVG dosyası alır (Kitaplığım\'a eklenir)' }, 'SVG al…');
-    add.addEventListener('click', () => void env.importSvg().then((id) => id && set({ [key]: id })));
-    return row('Çizim', h('div', { class: 'sdf__assetrow' }, sel, add));
+    const btn = (label: string, title: string, run: () => void) => {
+      const b = h('button', { class: 'btn btn--small', type: 'button', title }, label);
+      b.addEventListener('click', run);
+      return b;
+    };
+    const current = env.assets.find((a) => a.id === value);
+    return row(
+      'Çizim',
+      h(
+        'div',
+        { class: 'sdf__assetcol' },
+        sel,
+        h(
+          'div',
+          { class: 'sdf__assetrow' },
+          btn('Yeni çizim…', 'SVG çizim düzenleyicisinde yeni bir çizim yapar', () => void env.drawSvg().then((id) => id && set({ [key]: id }))),
+          current?.format === 'svg' ? btn('Düzenle…', 'Seçili çizimi düzenleyicide açar (sistem çiziminin kopyası)', () => void env.drawSvg(value).then((id) => id && set({ [key]: id }))) : null,
+          btn('Dosya al…', 'Bilgisayardan SVG, PNG ya da JPEG alır (Kitaplığım\'a eklenir)', () => void env.importSvg().then((id) => id && set({ [key]: id }))),
+        ),
+      ),
+    );
   };
   const specific: Child[] = [];
   switch (l.type) {

@@ -61,6 +61,15 @@ export function registerStyleCommands(ctx: AppContext): void {
       run: () => void manager().then((m) => m.openStyleManager(ctx)),
     },
     {
+      id: 'style.svgEditor',
+      title: 'SVG çizim düzenleyicisi…',
+      category: cat,
+      icon: 'edit',
+      aliases: ['SVG', 'CIZIMDUZENLE', 'PIKTOGRAM'],
+      description: 'İşaret ve desen çizimleri (piktogram) çizer; kaydedince Kitaplığım\'a eklenir.',
+      run: () => void import('../ui/svgedit/SvgEditor').then((m) => m.openSvgEditor(ctx)),
+    },
+    {
       id: 'style.layerStyle',
       title: 'Katman stili…',
       category: cat,

@@ -9,6 +9,7 @@ import { Dialog } from '../widgets/Dialog';
 import { PopupMenu } from '../widgets/PopupMenu';
 import { segmented } from '../widgets/controls';
 import { applyPatch, hasMarker, LAYER_LABEL, LAYER_TYPES, layerForm, newLayer, summary, type AnyLayer, type FormEnv, type LayerType } from './layerForms';
+import { rasterAsset } from './styleFiles';
 import { drawNow } from './thumbs';
 
 /**
@@ -317,6 +318,10 @@ class SymbolDesigner {
       palette: this.ctx.view.palette,
       assets: lib.items().filter((i) => i.kind === 'asset').map((a) => ({ id: a.id, name: `${a.name}${a.source === 'system' ? '' : a.source === 'user' ? ' (Kitaplığım)' : ' (Proje)'}`, format: a.kind === 'asset' ? a.format : 'svg' })),
       importSvg: () => this.importSvg(),
+      drawSvg: (id) =>
+        new Promise((resolve) => {
+          void import('../svgedit/SvgEditor').then((m) => m.openSvgEditor(this.ctx, { id, onSaved: (saved) => resolve(saved) }));
+        }),
       context: this.selected.length === 2 ? 'marker' : this.draft.symbol.type,
     };
     const p = this.selected;
@@ -486,10 +491,18 @@ class SymbolDesigner {
     return new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.svg,image/svg+xml';
+      input.accept = '.svg,image/svg+xml,image/png,image/jpeg';
       input.addEventListener('change', () => {
         const f = input.files?.[0];
         if (!f) return resolve(null);
+        if (/^image\/(png|jpeg)$/.test(f.type)) {
+          void rasterAsset(f).then(({ image }) => {
+            this.ctx.styles.library.add('user', image);
+            this.say(`“${image.name}” Kitaplığım'a eklendi.`);
+            resolve(image.id);
+          });
+          return;
+        }
         void f.text().then((text) => {
           const clean = sanitizeSvg(text);
           if (!/<svg\b/i.test(clean)) {
