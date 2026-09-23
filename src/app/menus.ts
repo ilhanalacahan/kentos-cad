@@ -59,6 +59,7 @@ export const MAIN_MENU: TopMenu[] = [
       '-',
       { label: 'Tema', items: ['view.theme.dark', 'view.theme.light'] },
       { label: 'Çizim motoru', icon: 'chip', items: ['view.renderer.webgl2', 'view.renderer.webgpu'] },
+      { label: 'Sembol boyutu', icon: 'styles', items: ['view.symbols.plot', 'view.symbols.screen'] },
     ],
   },
   {
@@ -158,7 +159,7 @@ export function commandItem(ctx: AppContext, id: string, overrides: Partial<Menu
   const cmd = ctx.commands.get(id);
   if (!cmd) return { label: id, disabled: true };
   const checked = cmd.isChecked?.();
-  const isRadio = (id.startsWith('view.theme.') && id !== 'view.theme.toggle') || id.startsWith('view.renderer.');
+  const isRadio = (id.startsWith('view.theme.') && id !== 'view.theme.toggle') || id.startsWith('view.renderer.') || id.startsWith('view.symbols.');
   // Tools report "active" via isChecked, but in menus they read as actions.
   const isTool = id.startsWith('tool.');
   return {

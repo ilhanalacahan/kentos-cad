@@ -174,6 +174,12 @@ export interface PreferencesData {
   cursorInput: boolean;
   /** Resting the mouse on an object shows its kind, layer and measures. */
   hoverInfo: boolean;
+  /**
+   * Symbol sizes: "plot" = paper mm at the project's plot scale (they grow
+   * and shrink with the map, as on the printed sheet); "screen" = mm on
+   * the screen, the same size at every zoom (browsing).
+   */
+  symbolSize: 'plot' | 'screen';
 }
 
 export const PREFERENCE_DEFAULTS: PreferencesData = {
@@ -195,6 +201,7 @@ export const PREFERENCE_DEFAULTS: PreferencesData = {
   hiDpi: true,
   cursorInput: true,
   hoverInfo: true,
+  symbolSize: 'plot',
 };
 
 export const createPreferences = () => persistedSignals<PreferencesData>('kentos.prefs.v1', PREFERENCE_DEFAULTS);

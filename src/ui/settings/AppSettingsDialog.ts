@@ -72,7 +72,7 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       icon: 'chip',
       title: 'Çizim motoru',
       lead: 'Çizim alanını ekran kartında çizen arka uç ve çözünürlük tercihi.',
-      keys: ['rendererPreference', 'hiDpi'],
+      keys: ['rendererPreference', 'hiDpi', 'symbolSize'],
       render: (api) => engine(api, ctx),
     },
   ];
@@ -249,6 +249,22 @@ function engine(api: DraftApi<AppDraft>, ctx: AppContext) {
         'Yüksek çözünürlük (HiDPI)',
         'Retina ve 4K ekranlarda keskin çizgiler. Kapatıldığında daha az piksel çizilir; çok büyük çizimlerde kaydırma akıcılaşır.',
         toggleSwitch({ label: 'Yüksek çözünürlük', checked: d.hiDpi, onChange: (v) => api.set('hiDpi', v) }),
+      ),
+    ),
+    group(
+      'Sembol boyutu',
+      settingRow(
+        'Semboller',
+        'Çizim ölçeğinde: basılı paftadaki boyları, harita ile büyür ve küçülür (yönetmelik ölçüleri böyle görünür). Ekranda sabit: her yakınlıkta aynı boy, gezinmek için.',
+        segmented({
+          label: 'Sembol boyutu',
+          options: [
+            { value: 'plot', label: 'Çizim ölçeğinde' },
+            { value: 'screen', label: 'Ekranda sabit' },
+          ],
+          value: d.symbolSize,
+          onChange: (v) => api.set('symbolSize', v),
+        }),
       ),
     ),
   ];

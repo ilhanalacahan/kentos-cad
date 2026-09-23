@@ -85,6 +85,9 @@ export class ViewportController {
   /** Images of styled symbols (SVG, text, raster, pattern tiles), shared by the backends. */
   private readonly atlas = new Atlas();
   private allDirty = true;
+  /** The scale symbols were last compiled at, and the wait before recompiling after a zoom (screen-sized symbols). */
+  private builtSymbolScale = 0;
+  private symbolTimer = 0;
   private highlightDirty = true;
   private gridKey = '';
   private frameQueued = false;
@@ -373,7 +376,25 @@ export class ViewportController {
     };
     d.add(selection.ids.subscribe(hl));
     d.add(selection.hover.subscribe(hl));
-    d.add(this.camera.changed.subscribe(() => this.requestRender()));
+    d.add(
+      this.camera.changed.subscribe(() => {
+        this.requestRender();
+        // Screen-sized symbols are recompiled for the new zoom once it settles; until then the GPU scales the last build.
+        if (this.ctx.prefs.symbolSize.value !== 'screen' || this.symbolScale() === this.builtSymbolScale) return;
+        clearTimeout(this.symbolTimer);
+        this.symbolTimer = window.setTimeout(() => {
+          this.allDirty = true;
+          this.requestRender();
+        }, 150);
+      }),
+    );
+    d.add(() => clearTimeout(this.symbolTimer));
+    d.add(
+      this.ctx.prefs.symbolSize.subscribe(() => {
+        this.allDirty = true;
+        this.requestRender();
+      }),
+    );
     d.add(settings.grid.subscribe(() => this.requestRender()));
     d.add(this.ctx.prefs.hiDpi.subscribe(() => this.resize()));
     d.add(this.ctx.prefs.crosshair.subscribe(() => this.requestOverlay()));
@@ -692,16 +713,29 @@ export class ViewportController {
     this.stats = { build: t1 - t0, render: t2 - t1, overlay: t3 - t2 };
   }
 
+  /**
+   * The scale paper-mm symbol sizes are compiled at: the project's plot
+   * scale, or with screen-sized symbols the view's own scale, in quarter
+   * octave steps so a zoom does not rebuild every layer at every wheel tick.
+   */
+  private symbolScale(): number {
+    if (this.ctx.prefs.symbolSize.value !== 'screen') return this.ctx.doc.settings.plotScale.value;
+    const denominator = 1 / (this.camera.scale * 0.00026458);
+    return 2 ** (Math.round(Math.log2(Math.max(denominator, 1)) * 4) / 4);
+  }
+
   private syncLayers(): void {
     const { doc } = this.ctx;
     const backend = this.backend!;
     const ids = this.allDirty ? doc.layers.leaves().map((l) => l.id) : [...this.dirtyLayers];
     this.allDirty = false;
     this.dirtyLayers.clear();
+    const plotScale = this.symbolScale();
+    this.builtSymbolScale = plotScale;
     const style = {
       origin: doc.origin,
       palette: this.palette,
-      plotScale: doc.settings.plotScale.value,
+      plotScale,
       library: this.ctx.styles.library,
       exprs: new ExprCache(),
       layerName: (id: string) => doc.layers.get(id)?.name ?? id,
