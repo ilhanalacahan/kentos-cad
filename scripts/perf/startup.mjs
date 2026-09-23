@@ -29,7 +29,10 @@ const url = server.resolvedUrls.local[0];
 /** One page load with the given browser; `warm` reuses its cache. */
 async function measure(b, warm) {
   const responses = new Map();
-  b.on('Network.responseReceived', (p) => responses.set(p.requestId, { url: p.response.url, type: p.type, mime: p.response.mimeType, bytes: 0 }));
+  b.on('Network.responseReceived', (p) => {
+    const encoding = Object.entries(p.response.headers ?? {}).find(([k]) => k.toLowerCase() === 'content-encoding')?.[1] ?? '';
+    responses.set(p.requestId, { url: p.response.url, status: p.response.status, type: p.type, mime: p.response.mimeType, encoding, bytes: 0 });
+  });
   b.on('Network.loadingFinished', (p) => {
     const r = responses.get(p.requestId);
     if (r) r.bytes = p.encodedDataLength;
@@ -61,6 +64,7 @@ async function measure(b, warm) {
     scriptMs: Math.round((metrics.ScriptDuration ?? 0) * 1000),
     taskMs: Math.round((metrics.TaskDuration ?? 0) * 1000),
     jsHeapMb: Math.round((metrics.JSHeapUsedSize ?? 0) / 1e6),
+    list: list.map((r) => ({ path: new URL(r.url).pathname, status: r.status, bytes: r.bytes, encoding: r.encoding })),
   };
 }
 
@@ -87,7 +91,9 @@ const median = (xs) => {
 const summarize = (warm) => {
   const ls = loads.filter((l) => l.warm === warm);
   const keys = ['interactiveMs', 'requests', 'transferred', 'js', 'css', 'wasm', 'scriptMs', 'taskMs', 'jsHeapMb'];
-  return Object.fromEntries(keys.map((k) => [k, median(ls.map((l) => l[k]).filter((v) => v !== null))]));
+  const out = Object.fromEntries(keys.map((k) => [k, median(ls.map((l) => l[k]).filter((v) => v !== null))]));
+  const t = ls.map((l) => l.interactiveMs).filter((v) => v !== null);
+  return { ...out, interactiveRange: t.length ? [Math.min(...t), Math.max(...t)] : null };
 };
 const cpu = cpus()[0]?.model ?? '?';
 const report = {
@@ -105,6 +111,9 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(`${outDir}/startup-${label}-${day}.json`, `${JSON.stringify(report, null, 2)}\n`);
 const kb = (n) => (n === null ? '–' : `${(n / 1024).toFixed(1)} KB`);
 const ms = (n) => (n === null ? '–' : `${Math.round(n)} ms`);
+const range = (r) => (r ? ` (${Math.round(r[0])}–${Math.round(r[1])})` : '');
+const encodings = [...new Set(loads.flatMap((l) => l.list.map((r) => r.encoding)).filter(Boolean))];
+const first = loads.find((l) => !l.warm);
 const md = [
   `# Başlangıç ölçümü: ${label} (${day}, ${report.commit})`,
   '',
@@ -112,7 +121,7 @@ const md = [
   '',
   '| Ölçüt | Soğuk | Ilık |',
   '|---|---|---|',
-  `| Etkileşime hazır (\`kentos:interactive\`) | ${ms(report.cold.interactiveMs)} | ${ms(report.warm.interactiveMs)} |`,
+  `| Etkileşime hazır (\`kentos:interactive\`; aralık) | ${ms(report.cold.interactiveMs)}${range(report.cold.interactiveRange)} | ${ms(report.warm.interactiveMs)}${range(report.warm.interactiveRange)} |`,
   `| İstek sayısı | ${report.cold.requests} | ${report.warm.requests} |`,
   `| Aktarılan toplam | ${kb(report.cold.transferred)} | ${kb(report.warm.transferred)} |`,
   `| JS aktarımı | ${kb(report.cold.js)} | ${kb(report.warm.js)} |`,
@@ -122,7 +131,15 @@ const md = [
   `| Görev süresi (toplam) | ${ms(report.cold.taskMs)} | ${ms(report.warm.taskMs)} |`,
   `| JS yığını | ${report.cold.jsHeapMb} MB | ${report.warm.jsHeapMb} MB |`,
   '',
-  'Not: `vite preview` sıkıştırma yapmaz; aktarım boyutu burada ham baytır. Sıkıştırılmış karşılık için build envanterindeki gzip/brotli sütunlarına bakın.',
+  encodings.length
+    ? `Aktarım, sunucunun gönderdiği sıkıştırılmış boyuttur (\`content-encoding: ${encodings.join(', ')}\`). Brotli karşılığı için build envanterine bakın.`
+    : 'Aktarım ham baytır: sunucu sıkıştırma yapmadı. Sıkıştırılmış karşılık için build envanterindeki gzip/brotli sütunlarına bakın.',
+  '',
+  'İlk soğuk yüklemenin istekleri:',
+  '',
+  '| Yol | Durum | Aktarım | Kodlama |',
+  '|---|---|---|---|',
+  ...(first?.list ?? []).map((r) => `| \`${r.path}\` | ${r.status} | ${kb(r.bytes)} | ${r.encoding || '–'} |`),
   '',
 ].join('\n');
 writeFileSync(`${outDir}/startup-${label}-${day}.md`, md);
