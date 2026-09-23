@@ -28,10 +28,17 @@ export function extendBounds(b: Bounds, p: Vec2, pad = 0): Bounds {
 
 export const isEmptyBounds = (b: Bounds) => !(b.maxX >= b.minX && b.maxY >= b.minY);
 
-/** Signed shoelace area; positive for counter-clockwise rings. */
+/**
+ * Signed shoelace area; positive for counter-clockwise rings. Coordinates
+ * are taken relative to the first vertex: products of raw TM coordinates
+ * (4.4·10⁶ m) would cancel away the fourth decimal of a parcel area.
+ */
 export function signedArea(pts: readonly Vec2[]): number {
+  if (pts.length < 3) return 0;
+  const ox = pts[0].x;
+  const oy = pts[0].y;
   let a = 0;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j].x - ox) * (pts[i].y - oy) - (pts[i].x - ox) * (pts[j].y - oy);
   return a / 2;
 }
 

@@ -3,6 +3,7 @@ import { apply, compose, isReflection, lengthScale, mirror, rotation, scaling, t
 import { arcThrough, circleThrough, onArc, sweep, TAU } from './arc';
 import { circleCircle, closestOnEdge, intersectEdges, lineLine, rayEdge, segSeg } from './intersect';
 import { offsetPath, sideOf } from './offset';
+import { signedArea } from '../geometry';
 
 const close = (a: { x: number; y: number }, b: { x: number; y: number }, eps = 1e-9) => {
   expect(a.x).toBeCloseTo(b.x, 9);
@@ -119,5 +120,20 @@ describe('offset', () => {
     ];
     const out = offsetPath(spike, 1, false);
     expect(out.length).toBe(4);
+  });
+});
+
+describe('shoelace on survey coordinates', () => {
+  it('keeps the parcel area exact at TM magnitudes', () => {
+    // 20.123 × 30.456 m at E 487 123, N 4 420 100: raw products would lose ~10⁻⁴ m².
+    const E = 487123.456;
+    const N = 4420100.789;
+    const ring = [
+      { x: E, y: N },
+      { x: E + 20.123, y: N },
+      { x: E + 20.123, y: N + 30.456 },
+      { x: E, y: N + 30.456 },
+    ];
+    expect(signedArea(ring)).toBeCloseTo(20.123 * 30.456, 9);
   });
 });
