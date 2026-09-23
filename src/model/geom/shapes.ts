@@ -1,4 +1,4 @@
-import type { Vec2 } from '../geometry';
+import { dist, signedArea, type Vec2 } from '../geometry';
 import { normAngle, type ArcGeom } from './arc';
 import { bulgeArc, tangentBulge } from './bulge';
 
@@ -149,4 +149,24 @@ export function arcStartEndRadius(start: Vec2, end: Vec2, radius: number): ArcGe
 /** Start, end and centre (the radius comes from the start; the end fixes the direction). */
 export function arcStartEndCenter(start: Vec2, end: Vec2, center: Vec2): ArcGeom | null {
   return arcStartCenterEnd(start, center, end);
+}
+
+/** Bulge of the cloud's scallops: about 106° arcs, outward on a counter-clockwise ring. */
+const SCALLOP = 0.5;
+
+/**
+ * Scalloped outline of a closed ring: each side is divided into chords of
+ * about `arc` metres and every chord bulges outwards.
+ */
+export function cloudOf(ring: readonly Vec2[], arc: number): { pts: Vec2[]; bulges: number[] } | null {
+  if (ring.length < 3 || !(arc > 0)) return null;
+  const ccw = signedArea(ring) > 0 ? [...ring] : [...ring].reverse();
+  const pts: Vec2[] = [];
+  for (let i = 0; i < ccw.length; i++) {
+    const a = ccw[i];
+    const b = ccw[(i + 1) % ccw.length];
+    const k = Math.max(1, Math.round(dist(a, b) / arc));
+    for (let j = 0; j < k; j++) pts.push({ x: a.x + ((b.x - a.x) * j) / k, y: a.y + ((b.y - a.y) * j) / k });
+  }
+  return { pts, bulges: pts.map(() => SCALLOP) };
 }

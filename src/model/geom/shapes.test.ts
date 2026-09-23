@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { signedArea } from '../geometry';
 import { arcEnd, arcStart, sweep } from './arc';
+import { bulgeRingArea } from './bulge';
 import {
   arcStartCenterAngle,
+  cloudOf,
   arcStartCenterChord,
   arcStartCenterEnd,
   arcStartEndAngle,
@@ -93,5 +95,16 @@ describe('arc modes', () => {
   });
   it('rejects a radius too small for the chord', () => {
     expect(arcStartEndRadius(v(0, 0), v(10, 0), 4)).toBeNull();
+  });
+});
+
+describe('revizyon bulutu', () => {
+  it('divides the sides into chords of about the arc length, all bulging outwards', () => {
+    // Clockwise input is turned counter-clockwise, so positive bulges point outside.
+    const c = cloudOf([v(0, 0), v(0, 10), v(20, 10), v(20, 0)], 5)!;
+    expect(c.pts).toHaveLength(2 + 4 + 2 + 4);
+    expect(c.bulges.every((b) => b > 0)).toBe(true);
+    expect(bulgeRingArea(c.pts, c.bulges)).toBeGreaterThan(200);
+    expect(cloudOf([v(0, 0), v(1, 1)], 5)).toBeNull();
   });
 });

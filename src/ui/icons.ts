@@ -54,6 +54,8 @@ const ICONS = {
   arrayPolar: '<circle cx="10" cy="10" r="6.5" stroke-dasharray="2 2"/><rect x="8.3" y="1.8" width="3.4" height="3.4"/><rect x="14.8" y="8.3" width="3.4" height="3.4"/><rect x="8.3" y="14.8" width="3.4" height="3.4"/><rect x="1.8" y="8.3" width="3.4" height="3.4"/><circle cx="10" cy="10" r=".9" fill="currentColor" stroke="none"/>',
   align: `<path d="M4 9.5 8.5 4.5l4 3.6" stroke-dasharray="2 1.5"/><path d="M4 16h9v-5"/>${grip(4, 16)}${grip(13, 16)}`,
   lengthen: `<path d="M3 13h9"/><path d="M12 13h5.5" stroke-dasharray="2 1.5"/><path d="m15 10.5 2.5 2.5-2.5 2.5"/>${grip(12, 13)}`,
+  donut: '<path d="M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13zm0 3.5a3 3 0 1 0 0 6 3 3 0 1 0 0-6z" fill="currentColor" fill-opacity=".35" fill-rule="evenodd"/>',
+  revcloud: '<path d="M5 8.2a2.2 2.2 0 0 1 3.5-2 2.4 2.4 0 0 1 4-.2 2.2 2.2 0 0 1 3.4 1.9 2.2 2.2 0 0 1 .3 4.2 2.3 2.3 0 0 1-3 3 2.4 2.4 0 0 1-4 .3 2.3 2.3 0 0 1-3.6-1.9A2.2 2.2 0 0 1 5 8.2z"/>',
   // Alan işlemleri
   boundary: '<path d="M3 15h14M5 17 11 3M9 3l6 14"/><path d="M5.86 15h8.28L10 5.33z" fill="currentColor" fill-opacity=".3" stroke="none"/><circle cx="10" cy="11.8" r="1" fill="currentColor" stroke="none"/>',
   toArea: '<path d="m3.8 8 6-4.5 6.5 3.5-1.8 9H5.6z" fill="currentColor" fill-opacity=".3" stroke-dasharray="2.2 1.5"/>',

@@ -516,6 +516,21 @@ try {
   await key('t');
   await key('Escape');
 
+  // Çoklu çizgi yay seçenekleri: Uzunluk, then an arc by radius.
+  await key('p');
+  await cmd(`${AX + 100},${N - 70}`);
+  await cmd(`${AX + 110},${N - 70}`);
+  await key('u');
+  await cmd('5');
+  await key('y');
+  await key('r');
+  await cmd('5');
+  await cmd(`${AX + 120},${N - 65}`);
+  await key('Enter');
+  const pw = await newest();
+  check('çoklu çizgi: Uzunluk and a Yarıçap arc', pw.kind === 'polyline' && pw.pts[2].x === AX + 115 && Math.abs(pw.bulges[2] - Math.tan(Math.PI / 8)) < 1e-9);
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
