@@ -1,4 +1,5 @@
-import { DimensionTool, HatchTool, TextTool } from './annotateTools';
+import { DimensionTool, TextTool } from './annotateTools';
+import { HatchTool } from './hatchTool';
 import { ArcTool, CircleTool, SplineTool } from './curveTools';
 import { RayTool, XlineTool } from './constructionTools';
 import { EllipseTool } from './ellipseTool';

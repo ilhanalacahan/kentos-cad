@@ -1,9 +1,8 @@
 import type { AppContext } from '../app/context';
-import type { Disposable } from '../core/disposable';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type NewEntity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { faceIndex, intersectAreas, netArea, splitArea, subtractAreas, unionAreas, type Area, type FaceIndex, type Source } from '../model/geom/region';
+import { faceIndex, intersectAreas, netArea, splitArea, subtractAreas, unionAreas, type Area, type Source } from '../model/geom/region';
 import { areaOfEntity, lineSource, polygonOfArea, polylinesOfPolygon } from '../model/ops/areas';
 import type { ViewTransform } from '../viewport/Camera';
 import { SelectionActionTool } from './editTools';
@@ -12,6 +11,7 @@ import { drawArea, drawTag, strokeGeometry, strokePath, tint } from './preview';
 import { writableLayer } from './targetLayer';
 import type { Tool, ToolPointer } from './Tool';
 import { drawTracking } from './tracking';
+import { VisibleFaces } from './visibleFaces';
 
 /**
  * Area operations (Netcad "Alan işlemleri"): union, intersection,
@@ -414,33 +414,29 @@ export class BoundaryTool implements Tool {
   readonly snaps = false;
   private static islands = true;
   private readonly ctx: AppContext;
-  private layer: string | null = null;
   private pickingLayer = false;
-  private index: FaceIndex | null = null;
-  private key = '';
+  private readonly faces: VisibleFaces;
   private hover: { at: Vec2; area: Area | null } | null = null;
   private hoverEntity: Entity | null = null;
-  private subs: Disposable[] = [];
 
   constructor(ctx: AppContext) {
     this.ctx = ctx;
+    this.faces = new VisibleFaces(ctx);
   }
 
   activate(): void {
-    // Any change to the drawing or to what is visible invalidates the faces.
-    const drop = () => (this.index = null);
-    this.subs = [this.ctx.doc.events.on('changed', drop), this.ctx.doc.layers.events.on('state', drop), this.ctx.doc.layers.events.on('structure', drop)];
+    this.faces.attach();
     this.refresh();
   }
 
   deactivate(): void {
-    this.subs.forEach((d) => d());
-    this.subs = [];
+    this.faces.detach();
     this.ctx.selection.hover.set(null);
   }
 
   private refresh(): void {
-    const layerName = this.layer ? (this.ctx.doc.layers.get(this.layer)?.name ?? '—') : 'tümü';
+    const layer = this.faces.layer;
+    const layerName = layer ? (this.ctx.doc.layers.get(layer)?.name ?? '—') : 'tümü';
     this.prompt.set(
       this.pickingLayer
         ? 'İçine tıklayarak alan: sınır olacak katmandan bir nesneye tıklayın [Tüm katmanlar (K)]'
@@ -449,27 +445,13 @@ export class BoundaryTool implements Tool {
     this.ctx.view.requestOverlay();
   }
 
-  /** Faces of the visible line work, rebuilt when the view, the drawing or the boundary set changes. */
-  private faces(): FaceIndex {
-    const b = this.ctx.view.camera.visibleBounds();
-    const key = `${b.minX}|${b.minY}|${b.maxX}|${b.maxY}|${this.layer}`;
-    if (!this.index || key !== this.key) {
-      const lines = this.ctx.view
-        .entitiesIn(b)
-        .filter((e) => (!this.layer || e.layerId === this.layer) && e.kind !== 'point' && e.kind !== 'text' && e.kind !== 'dimension' && e.kind !== 'hatch');
-      this.index = faceIndex([lineSource(lines)]);
-      this.key = key;
-    }
-    return this.index;
-  }
-
   pointerMove(p: ToolPointer): void {
     if (this.pickingLayer) {
       this.hoverEntity = this.ctx.view.pick(p.screen);
       this.ctx.selection.hover.set(this.hoverEntity?.id ?? null);
       return;
     }
-    this.hover = { at: p.raw, area: this.faces().at(p.raw, BoundaryTool.islands) };
+    this.hover = { at: p.raw, area: this.faces.at(p.raw, BoundaryTool.islands) };
     this.ctx.view.requestOverlay();
   }
 
@@ -479,13 +461,12 @@ export class BoundaryTool implements Tool {
     if (this.pickingLayer) {
       const e = ctx.view.pick(p.screen);
       if (!e) return ctx.log.warn('Sınır katmanını seçmek için bir nesneye tıklayın.');
-      this.layer = e.layerId;
+      this.faces.setLayer(e.layerId);
       this.pickingLayer = false;
-      this.index = null;
       ctx.selection.hover.set(null);
       return this.refresh();
     }
-    const area = this.faces().at(p.raw, BoundaryTool.islands);
+    const area = this.faces.at(p.raw, BoundaryTool.islands);
     if (!area) return ctx.log.warn('Tıklanan yer kapalı bir bölgenin içinde değil. Bölgeyi saran çizgiler birleşmeli ya da kesişmeli; görünüm dışındaki çizgiler sayılmaz.');
     const layerId = writableLayer(ctx);
     if (!layerId) return;
@@ -501,15 +482,14 @@ export class BoundaryTool implements Tool {
     const t = text.trim().toLocaleUpperCase('tr-TR');
     if (t === 'A' && !this.pickingLayer) {
       BoundaryTool.islands = !BoundaryTool.islands;
-      if (this.hover) this.hover.area = this.faces().at(this.hover.at, BoundaryTool.islands);
+      if (this.hover) this.hover.area = this.faces.at(this.hover.at, BoundaryTool.islands);
       this.refresh();
       return true;
     }
     if (t === 'K') {
-      if (this.pickingLayer || this.layer) {
-        this.layer = null;
+      if (this.pickingLayer || this.faces.layer) {
+        this.faces.setLayer(null);
         this.pickingLayer = false;
-        this.index = null;
       } else this.pickingLayer = true;
       this.ctx.selection.hover.set(null);
       this.refresh();

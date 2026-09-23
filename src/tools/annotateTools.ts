@@ -1,15 +1,10 @@
 import type { AppContext } from '../app/context';
-import { Signal } from '../core/signal';
-import { entityArea, HATCH_PATTERN_LABEL, polygonHoles, type HatchPattern } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
 import { layoutDimension, signedOffset } from '../model/geom/dimension';
-import { hatchLines } from '../model/geom/hatch';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
-import { drawArea, drawTag, strokePath, tint } from './preview';
-import { writableLayer } from './targetLayer';
-import type { Tool, ToolPointer } from './Tool';
+import { drawTag, strokePath } from './preview';
 
 /** Paper sizes (mm) converted to world metres at the project's plot scale. */
 const paper = (ctx: AppContext, mm: number) => (mm / 1000) * ctx.doc.settings.plotScale.value;
@@ -206,98 +201,5 @@ export class DimensionTool extends PointInputTool {
       return;
     }
     super.draw(g, view);
-  }
-}
-
-// ── Tarama ──────────────────────────────────────────────────────────────
-
-const PRESETS: { name: string; type: HatchPattern['type']; angle: number; mm: number }[] = [
-  { name: 'Çizgili 45°', type: 'lines', angle: 45, mm: 3 },
-  { name: 'Çapraz 45°', type: 'cross', angle: 45, mm: 3 },
-  { name: 'Yatay çizgili', type: 'lines', angle: 0, mm: 2 },
-  { name: 'Dolu', type: 'solid', angle: 0, mm: 3 },
-];
-
-/** Click inside a closed shape; the hatch copies its boundary (not associative). */
-export class HatchTool implements Tool {
-  readonly id = 'hatch';
-  readonly prompt = new Signal('');
-  readonly cursor = 'pick' as const;
-  readonly snaps = false;
-  private static preset = 0;
-  private hover: { ring: Vec2[]; holes: Vec2[][] } | null = null;
-  private readonly ctx: AppContext;
-
-  constructor(ctx: AppContext) {
-    this.ctx = ctx;
-  }
-
-  activate(): void {
-    this.refresh();
-  }
-
-  private refresh(): void {
-    this.prompt.set(`Tarama: taranacak kapalı alanın içine tıklayın [Desen (D): ${PRESETS[HatchTool.preset].name}]`);
-    this.ctx.view.requestOverlay();
-  }
-
-  private pattern(): HatchPattern {
-    const p = PRESETS[HatchTool.preset];
-    return { type: p.type, angle: p.angle, spacing: paper(this.ctx, p.mm) };
-  }
-
-  /** Boundary around a point: the smallest closed shape, with a holed polygon's islands left out. */
-  private boundary(p: Vec2): { ring: Vec2[]; holes: Vec2[][] } | null {
-    const r = this.ctx.view.enclosingRing(p);
-    return r ? { ring: r.ring, holes: polygonHoles(r.entity) } : null;
-  }
-
-  pointerMove(p: ToolPointer): void {
-    this.hover = this.boundary(p.raw);
-    this.ctx.view.requestOverlay();
-  }
-
-  pointerDown(p: ToolPointer): void {
-    if (p.button !== 0) return;
-    const r = this.boundary(p.raw);
-    if (!r) return this.ctx.log.warn('Tıklanan noktayı çevreleyen kapalı bir alan, daire ya da kapalı eğri yok.');
-    const pattern = this.pattern();
-    if (pattern.type !== 'solid' && hatchLines(r.ring, pattern.angle, pattern.spacing, r.holes).capped) {
-      return this.ctx.log.warn('Desen bu alan için çok sık; çizim ölçeğini büyütün ya da başka bir desen seçin.');
-    }
-    const layerId = writableLayer(this.ctx);
-    if (!layerId) return;
-    const hatch = this.ctx.doc.add({
-      kind: 'hatch',
-      ring: r.ring.map((q) => ({ ...q })),
-      ...(r.holes.length && { holes: r.holes.map((h) => h.map((q) => ({ ...q }))) }),
-      pattern,
-      layerId,
-      color: this.ctx.settings.color.value ?? undefined,
-      attrs: {},
-    });
-    this.ctx.log.success(`${HATCH_PATTERN_LABEL[pattern.type]} tarama eklendi: ${this.ctx.format.area(entityArea(hatch) ?? 0)}${r.holes.length ? `, ${r.holes.length} ada boş bırakıldı` : ''}`);
-  }
-
-  input(text: string): boolean {
-    if (text.trim().toLocaleUpperCase('tr-TR') !== 'D') return false;
-    HatchTool.preset = (HatchTool.preset + 1) % PRESETS.length;
-    this.refresh();
-    return true;
-  }
-
-  draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (!this.hover) return;
-    const pal = this.ctx.view.palette;
-    const area = { outer: { pts: this.hover.ring }, holes: this.hover.holes.map((pts) => ({ pts })) };
-    const pat = this.pattern();
-    drawArea(g, view, area, { color: pal.accent, dash: [4, 3], width: 1.5, fill: pat.type === 'solid' ? tint(pal.accent, 0.25) : undefined });
-    if (pat.type === 'solid') return;
-    const { segments } = hatchLines(this.hover.ring, pat.angle, pat.spacing, this.hover.holes);
-    if (segments.length > 3000) return; // preview only; the real hatch is drawn on the GPU
-    g.save();
-    g.globalAlpha = 0.6;
-    for (const [a, b] of segments) strokePath(g, view, [a, b], { color: pal.accent });
-    g.restore();
   }
 }

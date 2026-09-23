@@ -434,6 +434,16 @@ try {
   const [faceId] = await selected();
   check('Shift+B: a click inside crossing lines makes the enclosed area', Math.abs((await netOf(faceId)) - 26 * 26) < 1e-6);
   await key('Escape');
+  await b.eval(`window.kentos.doc.remove([${faceId}])`);
+  await key('h');
+  await key('b');
+  await b.click(...(await toScreen(AX + 70, N + 10)));
+  await sleep(100);
+  const byLines = await b.eval('[...window.kentos.doc.all()].at(-1)');
+  const hatchRingArea = (r) => Math.abs(r.reduce((s, p, i) => s + (p.x - r[0].x) * (r[(i + 1) % r.length].y - r[0].y) - (r[(i + 1) % r.length].x - r[0].x) * (p.y - r[0].y), 0)) / 2;
+  check('hatch by lines (B) fills the region the crossing lines close', byLines.kind === 'hatch' && Math.abs(hatchRingArea(byLines.ring) - 26 * 26) < 1e-6);
+  await key('b');
+  await key('Escape');
 
   // Paralel çizgi (Y): typed distances and axis; Dik çık (O) on its first leg.
   await key('y');
