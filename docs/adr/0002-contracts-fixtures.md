@@ -41,7 +41,7 @@ Tarayıcı, WASM, API ve saklanan dosyalar aynı veriyi konuşacak. Tipler iki d
   - TypeScript: `src/model/geom/golden.test.ts`;
   - yerel Rust: `crates/geometry-core/tests/golden.rs`;
   - WASM: `src/wasm/golden.wasm.test.ts`, `pnpm test:rust` ile. Bağımsız referanslar da (`reference.json`) aynı sınırlarla WASM'da sınanır.
-- **Tolerans:** `|gerçek − beklenen| ≤ 1e-9 + 1e-14·max(|gerçek|, |beklenen|)`.
+- **Tolerans:** `|gerçek − beklenen| ≤ 1e-9 + 1e-14·max(|gerçek|, |beklenen|)`. Sınır CRS türüne göre yazılır (§14): dosya koordinatlarının metre cinsinden bir projeksiyon düzleminde olduğunu `crs` alanında söyler; iki okuyucu da bunu denetler. Coğrafi (derece) koordinat ve jeodezik hesap ayrı dosya ve ayrı sınırla gelir.
   - Formüller ve işlem sırası iki dilde aynı olduğu için toplama ve çarpma aynı sonucu verir.
   - Fark yalnızca `atan2`, `sin`, `hypot` gibi kütüphane işlevlerinin son bitinden gelebilir.
   - TM koordinatlarında (4,4·10⁶ m) 1 ulp ≈ 9·10⁻¹⁰ m'dir. Göreli terim bu ölçekte 4,4·10⁻⁸ m'ye izin verir; bu da milimetrenin çok altıdır.
@@ -51,6 +51,13 @@ Tarayıcı, WASM, API ve saklanan dosyalar aynı veriyi konuşacak. Tipler iki d
   - nokta-çokgen testi;
   - düz şekillerin ve dairenin sınır kutusu.
 - **Bilinen fark:** TypeScript `entityBounds`, yaylı yolların ve yayların sınırını 72 parçalı ana hatla bulur (yaklaşık). Rust'a kesin yay sınırı taşınırken iki taraf birlikte değişecek; o güne kadar bu işlevler golden setinde yoktur.
+
+### CRS kaydı
+
+- `fixtures/crs/v1/registry.json`, `src/geo/crs.ts`'ten üretilir (`scripts/fixtures/record-crs.test.ts`, `GOLDEN_WRITE=1`). Kaynak TypeScript kaydı kalır (§5).
+- `src/geo/crs.test.ts`, dosya kayıttan ayrılınca kırılır.
+- `crates/contracts/tests/crs.rs` dosyayı bağımsız olarak EPSG değerlerine göre denetler: SRID ile dilim eşlemesi, elipsoit, ölçek katsayısı, başlangıç ötelemesi. TUREF dilim önerisini de aynı kuralla (en yakın orta meridyen, sınırda batı dilimi) yeniden hesaplar.
+- Dönüşüm (datum, dilim) Faz B/C'de PROJ/PostGIS ile, sabitlenmiş grid verisiyle gelir. O zaman bu dosyaya dönüşüm referans noktaları eklenir.
 
 ## Sonuçlar
 

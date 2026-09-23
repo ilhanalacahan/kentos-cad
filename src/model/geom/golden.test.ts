@@ -16,6 +16,8 @@ const file = JSON.parse(text) as GoldenFile;
 describe('golden geometry cases (shared with Rust)', () => {
   it('has a versioned file with every case recorded', () => {
     expect([file.format, file.version]).toEqual(['kentos.geometry-fixtures', 1]);
+    // The tolerance is written for projected metres; other systems need their own file and bound.
+    expect([file.crs.kind, file.crs.unit]).toEqual(['projected', 'metre']);
     expect(file.cases.every((c) => 'expected' in c)).toBe(true);
     expect(new Set(file.cases.map((c) => c.name)).size).toBe(file.cases.length);
   });

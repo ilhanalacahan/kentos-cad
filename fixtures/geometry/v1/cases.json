@@ -5,6 +5,11 @@
     "abs": 1e-9,
     "rel": 1e-14
   },
+  "crs": {
+    "kind": "projected",
+    "unit": "metre",
+    "note": "Koordinatlar metre cinsinden bir projeksiyon düzlemindedir (TUREF TM, UTM ya da yerel). Tolerans bu birim içindir. Coğrafi (derece) koordinatlar bu işlemlere verilmez; jeodezik hesaplar ayrı fixture ve ayrı sınırla gelir."
+  },
   "cases": [
     {
       "name": "yarım daire (bulge 1)",

@@ -108,6 +108,9 @@ fn golden_cases_match_the_typescript_reference() {
         .expect("fixture JSON");
     assert_eq!(file["format"], "kentos.geometry-fixtures");
     assert_eq!(file["version"], 1);
+    // The tolerance is written for projected metres; other systems need their own file and bound.
+    assert_eq!(file["crs"]["kind"], "projected");
+    assert_eq!(file["crs"]["unit"], "metre");
     let abs = file["tolerance"]["abs"].as_f64().unwrap();
     let rel = file["tolerance"]["rel"].as_f64().unwrap();
     let cases = file["cases"].as_array().expect("cases");

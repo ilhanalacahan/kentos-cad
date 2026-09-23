@@ -1,0 +1,398 @@
+{
+  "format": "kentos.crs-registry",
+  "version": 1,
+  "source": "src/geo/crs.ts",
+  "defaultSrid": 5256,
+  "systems": [
+    {
+      "srid": 5253,
+      "name": "TUREF / TM27",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 27,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "25.5°–28.5° D (3° dilim)"
+    },
+    {
+      "srid": 5254,
+      "name": "TUREF / TM30",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 30,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "28.5°–31.5° D (3° dilim)"
+    },
+    {
+      "srid": 5255,
+      "name": "TUREF / TM33",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 33,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "31.5°–34.5° D (3° dilim)"
+    },
+    {
+      "srid": 5256,
+      "name": "TUREF / TM36",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 36,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "34.5°–37.5° D (3° dilim)"
+    },
+    {
+      "srid": 5257,
+      "name": "TUREF / TM39",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 39,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "37.5°–40.5° D (3° dilim)"
+    },
+    {
+      "srid": 5258,
+      "name": "TUREF / TM42",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 42,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "40.5°–43.5° D (3° dilim)"
+    },
+    {
+      "srid": 5259,
+      "name": "TUREF / TM45",
+      "kind": "projected",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 45,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "43.5°–46.5° D (3° dilim)"
+    },
+    {
+      "srid": 5252,
+      "name": "TUREF",
+      "kind": "geographic",
+      "datum": "TUREF",
+      "ellipsoid": "GRS80",
+      "unit": "degree",
+      "area": "Türkiye, coğrafi (enlem/boylam)"
+    },
+    {
+      "srid": 2319,
+      "name": "ED50 / TM27",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 27,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "25.5°–28.5° D (3° dilim)"
+    },
+    {
+      "srid": 2320,
+      "name": "ED50 / TM30",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 30,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "28.5°–31.5° D (3° dilim)"
+    },
+    {
+      "srid": 2321,
+      "name": "ED50 / TM33",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 33,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "31.5°–34.5° D (3° dilim)"
+    },
+    {
+      "srid": 2322,
+      "name": "ED50 / TM36",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 36,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "34.5°–37.5° D (3° dilim)"
+    },
+    {
+      "srid": 2323,
+      "name": "ED50 / TM39",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 39,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "37.5°–40.5° D (3° dilim)"
+    },
+    {
+      "srid": 2324,
+      "name": "ED50 / TM42",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 42,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "40.5°–43.5° D (3° dilim)"
+    },
+    {
+      "srid": 2325,
+      "name": "ED50 / TM45",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "Transverse Mercator",
+      "centralMeridian": 45,
+      "scaleFactor": 1,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "43.5°–46.5° D (3° dilim)"
+    },
+    {
+      "srid": 23035,
+      "name": "ED50 / UTM 35N",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "UTM",
+      "centralMeridian": 27,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "24°–30° D (6° dilim)"
+    },
+    {
+      "srid": 23036,
+      "name": "ED50 / UTM 36N",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "UTM",
+      "centralMeridian": 33,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "30°–36° D (6° dilim)"
+    },
+    {
+      "srid": 23037,
+      "name": "ED50 / UTM 37N",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "UTM",
+      "centralMeridian": 39,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "36°–42° D (6° dilim)"
+    },
+    {
+      "srid": 23038,
+      "name": "ED50 / UTM 38N",
+      "kind": "projected",
+      "datum": "ED50",
+      "ellipsoid": "International 1924",
+      "projection": "UTM",
+      "centralMeridian": 45,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "42°–48° D (6° dilim)"
+    },
+    {
+      "srid": 32635,
+      "name": "WGS 84 / UTM 35N",
+      "kind": "projected",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "projection": "UTM",
+      "centralMeridian": 27,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "24°–30° D (6° dilim)"
+    },
+    {
+      "srid": 32636,
+      "name": "WGS 84 / UTM 36N",
+      "kind": "projected",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "projection": "UTM",
+      "centralMeridian": 33,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "30°–36° D (6° dilim)"
+    },
+    {
+      "srid": 32637,
+      "name": "WGS 84 / UTM 37N",
+      "kind": "projected",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "projection": "UTM",
+      "centralMeridian": 39,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "36°–42° D (6° dilim)"
+    },
+    {
+      "srid": 32638,
+      "name": "WGS 84 / UTM 38N",
+      "kind": "projected",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "projection": "UTM",
+      "centralMeridian": 45,
+      "scaleFactor": 0.9996,
+      "falseEasting": 500000,
+      "falseNorthing": 0,
+      "unit": "metre",
+      "area": "42°–48° D (6° dilim)"
+    },
+    {
+      "srid": 4326,
+      "name": "WGS 84",
+      "kind": "geographic",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "unit": "degree",
+      "area": "Dünya, coğrafi (enlem/boylam)"
+    },
+    {
+      "srid": 3857,
+      "name": "WGS 84 / Pseudo-Mercator",
+      "kind": "projected",
+      "datum": "WGS84",
+      "ellipsoid": "WGS84",
+      "projection": "Pseudo-Mercator",
+      "unit": "metre",
+      "area": "Web haritaları (altlık karolar)"
+    }
+  ],
+  "zoneSuggestions": [
+    {
+      "lon": 20,
+      "srid": 5253
+    },
+    {
+      "lon": 25.9,
+      "srid": 5253
+    },
+    {
+      "lon": 27,
+      "srid": 5253
+    },
+    {
+      "lon": 28.4999,
+      "srid": 5253
+    },
+    {
+      "lon": 28.5,
+      "srid": 5253
+    },
+    {
+      "lon": 28.5001,
+      "srid": 5254
+    },
+    {
+      "lon": 32.85,
+      "srid": 5255
+    },
+    {
+      "lon": 36,
+      "srid": 5256
+    },
+    {
+      "lon": 38.7,
+      "srid": 5257
+    },
+    {
+      "lon": 41.2,
+      "srid": 5258
+    },
+    {
+      "lon": 43.5,
+      "srid": 5258
+    },
+    {
+      "lon": 44.8,
+      "srid": 5259
+    },
+    {
+      "lon": 50,
+      "srid": 5259
+    }
+  ]
+}

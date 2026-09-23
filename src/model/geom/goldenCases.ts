@@ -24,6 +24,8 @@ export interface GoldenFile {
   version: 1;
   /** |actual − expected| ≤ abs + rel·max(|actual|, |expected|). */
   tolerance: { abs: number; rel: number };
+  /** The coordinates' kind of system and unit: the tolerance holds for these (CLAUDE.md §14). */
+  crs: { kind: 'projected'; unit: 'metre'; note: string };
   cases: Case[];
 }
 
