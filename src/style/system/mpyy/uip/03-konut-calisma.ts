@@ -1,4 +1,4 @@
-import { BLACK, WHITE, along, circle, crossHatch, grid, groupedHatch, hatch, label, rgb, shape, sheet, solid, stroke, text } from '../dsl';
+import { BLACK, WHITE, along, crossHatch, grid, groupedHatch, hatch, label, rgb, shape, sheet, solid, stroke, text } from '../dsl';
 import { code, codeMarks, gridDots, parenBelow, picto, pictoMarks } from './common';
 
 /**
@@ -53,19 +53,10 @@ calisma.area('sanayi-tesis-alani', 'Sanayi tesis alanı', [solid(rgb(170, 102, 2
 });
 
 /**
- * "Dişli" (EK-1e s.66): a filled toothed disc of 7 mm outer diameter,
- * drawn as a disc with 12 rounded teeth (EK-1d shows 12 lobes).
+ * "Dişli" (EK-1e s.66): a filled toothed disc of 7 mm outer diameter; EK-1d
+ * draws 12 shallow teeth.
  */
-function disli(d = 7): ReturnType<typeof circle>[] {
-  const tooth = d * 0.19;
-  const r = d / 2 - tooth / 2;
-  const out = [circle(d - tooth * 1.1, { fill: BLACK })];
-  for (let i = 0; i < 12; i++) {
-    const a = (i * Math.PI) / 6;
-    out.push(circle(tooth, { fill: BLACK, offset: [Math.round(r * Math.cos(a) * 1000) / 1000, Math.round(r * Math.sin(a) * 1000) / 1000] }));
-  }
-  return out;
-}
+const disli = (d = 7) => ({ ...shape('gear', d, { fill: BLACK }), teeth: 12, teethDepth: 0.12 });
 
 calisma.area(
   'endustriyel-gelisme-bolgesi',
@@ -80,7 +71,7 @@ calisma.area(
   ],
   {
     ref: 'EK-1d s.4; EK-1e s.66',
-    note: 'Tarama: 0.2 mm, 1 mm tarama çiftleri ile 45° çapraz tarama, çiftler arası 5 mm. Sınır: 0.3 mm, 7 mm çizgi, 2 mm boşluk, 1 mm aralı 7 mm dış çaplı 2 dolu dişli, 2 mm boşluk (ikinci boşluk metinde yok, simetrik alındı). Dişli 12 dişli bir disk olarak çizildi (EK-1d çizimi).',
+    note: 'Tarama: 0.2 mm, 1 mm tarama çiftleri ile 45° çapraz tarama, çiftler arası 5 mm. Sınır: 0.3 mm, 7 mm çizgi, 2 mm boşluk, 1 mm aralı 7 mm dış çaplı 2 dolu dişli, 2 mm boşluk (ikinci boşluk metinde yok, simetrik alındı). Dişli EK-1d\'deki gibi 12 sığ dişli dolu disk (diş derinliği yarıçapın %12\'si, çizimden).',
   },
 );
 calisma.area('kucuk-sanayi-alani', 'Küçük sanayi alanı', [solid(rgb(170, 102, 205)), groupedHatch(45, 7, 2, 1, 0.2), hatch(135, 7, 0.2), code('KSA', 3.4, { weight: 900 })], {

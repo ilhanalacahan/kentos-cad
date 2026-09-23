@@ -240,6 +240,11 @@ export interface ShapeOptions {
   offset?: readonly [number, number];
   anchor?: Anchor;
   opacity?: number;
+  /** Round hole (share of the radius), gear teeth and depth, arc opening (degrees). */
+  hole?: number;
+  teeth?: number;
+  teethDepth?: number;
+  sweep?: number;
 }
 
 export const shape = (name: ShapeName, size: number, o: ShapeOptions = {}): Draft<ShapeMarker> => ({
@@ -254,6 +259,10 @@ export const shape = (name: ShapeName, size: number, o: ShapeOptions = {}): Draf
   offset: o.offset,
   anchor: o.anchor,
   opacity: o.opacity,
+  hole: o.hole,
+  teeth: o.teeth,
+  teethDepth: o.teethDepth,
+  sweep: o.sweep,
 });
 
 export const circle = (size: number, o: ShapeOptions = {}): Draft<ShapeMarker> => shape('circle', size, o);

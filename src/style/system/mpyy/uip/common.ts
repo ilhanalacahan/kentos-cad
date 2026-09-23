@@ -1,5 +1,5 @@
 import type { Color } from '../../../../model/style';
-import { BLACK, WHITE, along, circle, dotGrid, framed, hatch, label, pattern, rgb, shape, stipple, stroke, svg, text, type FrameOptions } from '../dsl';
+import { BLACK, WHITE, along, dotGrid, framed, hatch, label, pattern, rgb, shape, stipple, stroke, svg, text, type FrameOptions } from '../dsl';
 import { pic, type PictogramName } from '../pictograms';
 
 /**
@@ -110,23 +110,12 @@ export const freeDots = (dot = 0.4, seed = 7) => stipple(2.2, dot, BLACK, 0.95, 
  * "6 mm çapında serbest noktalama 18 mm karolaj merkezlerinde (şaşırtmalı
  * sıra)" (turizm): a 6 mm blob of random speckles, 18 mm apart along a row,
  * rows staggered by half. Both annexes draw the rows half the row spacing
- * apart (9 mm), a diamond lattice. The legend's blob is a bitmap speckle
- * of about half cover; it is drawn as a faint disc of the pen colour under
- * `count` 0.3 mm dots in a sunflower layout with gaps (each shape marker in
- * a pattern costs a pass, so the dots are not as many as the bitmap's).
+ * apart (9 mm), a diamond lattice. The blob is the legend's own bitmap
+ * speckle, traced as the "benek" pictogram (its drawing spans 88 of the
+ * 100 units, hence the marker size).
  */
-export function speckleBlobs(diameter = 6, spacing = 18, dot = 0.3, count = 70): ReturnType<typeof pattern> {
-  const marks: ReturnType<typeof circle>[] = [circle(diameter * 0.9, { fill: BLACK, opacity: 0.42 })];
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const n = Math.round(count / 0.7);
-  for (let i = 0; i < n; i++) {
-    // Leave some out at random-looking places so it reads as speckle, not a screen.
-    if ((i * 7919) % 10 < 3) continue;
-    const r = (diameter / 2 - dot / 2) * Math.sqrt((i + 0.5) / n);
-    const a = i * golden;
-    marks.push(circle(dot, { fill: BLACK, offset: [round(r * Math.cos(a)), round(r * Math.sin(a))] }));
-  }
-  return pattern(marks, spacing, spacing / 2, { stagger: true });
+export function speckleBlobs(diameter = 6, spacing = 18): ReturnType<typeof pattern> {
+  return pattern(svg(pic('benek'), round(diameter / 0.88), { fill: BLACK }), spacing, spacing / 2, { stagger: true });
 }
 
 const round = (v: number) => Math.round(v * 1000) / 1000;

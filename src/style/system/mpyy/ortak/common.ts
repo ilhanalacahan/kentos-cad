@@ -133,22 +133,14 @@ const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /**
  * A cog wheel (TGB, serbest bölge, OSB, endüstri bölgesi): `outer` across
- * the teeth, a hole of `inner` (none: a solid wheel). The legend draws 12
- * square teeth about half the rim's depth; EK-1e gives only the two
- * diameters.
+ * the teeth, a round hole of `inner` (none: a solid wheel). The legend
+ * draws 12 square teeth about 45% of the rim's depth; EK-1e gives only the
+ * two diameters (a solid wheel takes the teeth of a 0.72 hole).
  */
-export function gear(outer: number, inner: number | null, color: Color = BLACK): MarkerDraft[] {
-  const depth = (outer - (inner ?? outer * 0.72)) / 2;
-  const tooth = r3(depth * 0.45);
-  const body = r3(outer - 2 * tooth);
-  const out: MarkerDraft[] = [];
-  if (inner === null) out.push(circle(body, { fill: color }));
-  else out.push(circle(r3((body + inner) / 2), { stroke: color, strokeWidth: r3((body - inner) / 2) }));
-  const pitch = (Math.PI * body) / 12;
-  for (let k = 0; k < 12; k++) {
-    out.push(shape('rectangle', r3(tooth + 0.15), { height: r3(pitch * 0.5), fill: color, rotation: k * 30, offset: [r3(body / 2 + tooth / 2 - 0.075), 0] }));
-  }
-  return out;
+export function gear(outer: number, inner: number | null, color: Color = BLACK): MarkerDraft {
+  const hole = inner === null ? 0 : inner / outer;
+  const teethDepth = r3(0.45 * (1 - (inner === null ? 0.72 : hole)));
+  return { ...shape('gear', outer, { fill: color }), teeth: 12, teethDepth, ...(hole > 0 ? { hole: r3(hole) } : {}) };
 }
 
 /** A circle with a plus inside, the plus's arms along and across the line (⊕). */

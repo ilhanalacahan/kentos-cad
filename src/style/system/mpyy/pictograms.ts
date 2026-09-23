@@ -100,6 +100,7 @@ export const PICTOGRAM_NAMES = [
   'biyolojik-tehlike', // biohazard: three crescents, inner ring, central hole (tehlikeli atık tesisleri)
   'kaptaj', // three wavy lines above an open trapezoid basin (su kaynakları toplama yeri)
   'benekli-daire', // disc of free stippling: small dots at random inside a circle, no outline (turizm, günübirlik, golf discs)
+  'benek', // speckle blob traced from EK-1d's turizm hatch: a 16 × 16 bitmap disc of about half cover (6 mm serbest noktalama)
   // MSP (EK-1e I): white pictograms on rounded tiles are drawn with the tile
   'msp-liman', // black rounded tile with a white anchor
   'msp-havalimani', // black rounded tile with a white airplane

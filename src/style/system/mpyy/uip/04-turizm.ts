@@ -12,7 +12,7 @@ export const turizm = sheet('uip', ['Turizm alanları'], 'turizm', 50);
 const TURIZM = rgb(255, 115, 0);
 const GUNUBIRLIK = rgb(255, 173, 0);
 const HATCH = 'Tarama: 0.3 mm, 6 mm çapında serbest noktalama, 18 mm karolaj merkezlerinde, şaşırtmalı sıra (iki ekin çiziminde de sıralar 9 mm aralı).';
-const blobs = () => speckleBlobs(6, 18, 0.3);
+const blobs = () => speckleBlobs(6, 18);
 
 turizm.area('pansiyon-alani', 'Pansiyon alanı', [solid(TURIZM), blobs(), code('PA', 5, { weight: 900 })], { ref: 'EK-1d s.5; EK-1e s.71', note: HATCH });
 turizm.area('apart-otel-alani', 'Apart otel alanı', [solid(TURIZM), blobs(), code('AO', 5, { weight: 900 })], { ref: 'EK-1d s.5; EK-1e s.72', note: HATCH });

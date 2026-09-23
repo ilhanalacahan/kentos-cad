@@ -46,19 +46,18 @@ acikYesil.area(
 /** Bakı ve seyir terası: a small eye circle, two rays to the right and an arc across them near the eye (EK-1d). */
 function viewpoint() {
   const eye: [number, number] = [-3.6, 0.2];
-  const out = [shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), circle(1.2, { stroke: BLACK, strokeWidth: 0.25, offset: eye }), seg(eye[0] + 0.5, eye[1] + 0.35, 4.8, 4.2, 0.25), seg(eye[0] + 0.5, eye[1] - 0.35, 4.8, -3.8, 0.25)];
-  // The arc (radius 3.9 about the eye, between the rays) as short chords.
-  const r = 3.9;
-  const a0 = -33;
-  const a1 = 37;
-  const n = 5;
-  for (let i = 0; i < n; i++) {
-    const p = (a: number): [number, number] => [eye[0] + r * Math.cos((a * Math.PI) / 180), eye[1] + r * Math.sin((a * Math.PI) / 180)];
-    const [x1, y1] = p(a0 + ((a1 - a0) * i) / n);
-    const [x2, y2] = p(a0 + ((a1 - a0) * (i + 1)) / n);
-    out.push(seg(x1, y1, x2, y2, 0.25));
-  }
-  return out;
+  // The arc: radius 3.9 about the eye, 70° wide, facing +2°. An arc shape opens on its top, so it is turned
+  // by −88°; a turned marker's offset is in its own frame.
+  const t = (-88 * Math.PI) / 180;
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  const off: [number, number] = [r3(eye[0] * Math.cos(t) + eye[1] * Math.sin(t)), r3(-eye[0] * Math.sin(t) + eye[1] * Math.cos(t))];
+  return [
+    shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }),
+    circle(1.2, { stroke: BLACK, strokeWidth: 0.25, offset: eye }),
+    seg(eye[0] + 0.5, eye[1] + 0.35, 4.8, 4.2, 0.25),
+    seg(eye[0] + 0.5, eye[1] - 0.35, 4.8, -3.8, 0.25),
+    { ...shape('arc', 7.8, { stroke: BLACK, strokeWidth: 0.25, rotation: -88, offset: off }), sweep: 70 },
+  ];
 }
 acikYesil.area('baki-ve-seyir-terasi', 'Bakı ve seyir terası', [solid(YESIL), freeDots(0.4, 29), label(viewpoint())], {
   ref: 'EK-1d s.12; EK-1e s.141',

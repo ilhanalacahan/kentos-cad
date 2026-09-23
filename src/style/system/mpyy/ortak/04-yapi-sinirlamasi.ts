@@ -1,5 +1,4 @@
-import { BLACK, along, circle, double, rgb, shape, solid, stroke, svg, text } from '../dsl';
-import { pic } from '../pictograms';
+import { BLACK, along, circle, double, rgb, shape, solid, stroke, text } from '../dsl';
 import { RED, crossBoxMarks, sections, stack } from './common';
 
 /**
@@ -8,9 +7,9 @@ import { RED, crossBoxMarks, sections, stack } from './common';
  *
  * Sulak alan boundaries are 5 mm sine waves with dots between them. EK-1e
  * gives no pen for them: 0.3 mm, as EK-1a draws them, and a wave height of
- * ±0.22 mm (EK-1a/EK-1e drawings). Each wave is the `dalga` drawing placed
- * along the line, so the dots stay in step with the waves (a wavy stroke
- * is centred on the path and could not be phased with markers).
+ * ±0.22 mm (EK-1a/EK-1e drawings). The waves start at the path's start
+ * (`wave.offsetAlong`), so the dots, placed with the same period, stay in
+ * the gaps between them.
  */
 
 const WATER = rgb(115, 223, 235);
@@ -27,8 +26,6 @@ function wellLine(n: number) {
 const wellNote = (n: number) =>
   `Şeffaf. 0.3 mm kırmızı: 2 mm çapında içi noktalı ${n > 1 ? `teğet ${n} adet ` : ''}daire, 2 mm boşluk, 7 mm düz çizgi. Daire içindeki nokta 0.6 mm (çizimden). Daire sayısı 4/3/2/1 mutlak/kısa/orta/uzun mesafeyi gösterir.`;
 
-/** One 5 mm wave marker (the line's pen, 0.3 mm). */
-const wave = () => svg(pic('dalga'), 5, { fill: RED });
 const dot = () => circle(1, { fill: RED });
 
 /**
@@ -39,7 +36,7 @@ function wetLine(waves: number, gap: number, dots: number, dotStep: number) {
   const run = 5 * waves;
   const period = run + gap;
   return [
-    along(wave(), period, { offsetAlong: run / 2, group: waves > 1 ? { count: waves, spacing: 5 } : undefined }),
+    ...Array.from({ length: waves }, (_, k) => stroke(RED, 0.3, { wave: { shape: 'sine', length: 5, amplitude: 0.22, spacing: period, connect: false, offsetAlong: 5 * k } })),
     along(dot(), period, { offsetAlong: run + gap / 2, rotate: true, group: dots > 1 ? { count: dots, spacing: dotStep } : undefined }),
   ];
 }
