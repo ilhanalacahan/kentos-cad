@@ -949,7 +949,8 @@ try {
     await b.waitFor(`!window.kentos.files.busy.value`, 3000).catch(() => {});
     const failed = await b.eval(`window.kentos.log.entries.value.at(-1)?.text ?? ''`);
     check('a failed write keeps the drawing unsaved', await b.eval('window.kentos.doc.dirty.value'), failed);
-    await b.eval(`(() => { const k = window.kentos; k.commands.execute('edit.undo'); k.files.picker = window.__files.original; k.files.handle = null; k.selection.clear(); })()`);
+    // The unsaved edit stays: the undo/redo round trip below takes it back and forth.
+    await b.eval(`(() => { const k = window.kentos; k.files.picker = window.__files.original; k.files.handle = null; k.selection.clear(); })()`);
   }
 
   // Undo / redo round trip
