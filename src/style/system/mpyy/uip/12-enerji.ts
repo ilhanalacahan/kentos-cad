@@ -1,5 +1,5 @@
-import { BLACK, along, groupedHatch, hatch, rgb, shape, sheet, solid, stroke, text } from '../dsl';
-import { code, picto, seg } from './common';
+import { BLACK, along, groupedHatch, hatch, rgb, shape, sheet, solid, stroke, text, ticks } from '../dsl';
+import { code, metresToMm, picto, sidePair } from './common';
 
 /**
  * UİP (EK-1d s.18–20) › Enerji üretim-dağıtım ve depolama; su-atıksu ve
@@ -62,7 +62,7 @@ export const su = sheet('uip', ['Su-atıksu ve atık sistemleri'], 'su', 120);
 su.line(
   'atik-su-ana-kollektoru',
   'Atık su ana kollektörü',
-  [stroke(BLACK, 0.4), along([seg(1.25, 0, -1.25, 1.5, 0.4), seg(1.25, 0, -1.25, -1.5, 0.4)], 10, { offsetAlong: 5 })],
+  [stroke(BLACK, 0.4), along(shape('chevron', 2.5, { height: 3, stroke: BLACK, strokeWidth: 0.4 }), 10, { offsetAlong: 5 })],
   { ref: 'EK-1d s.19; EK-1e s.185', note: '0.4 mm düz çizgi, üzerinde 10 mm aralıkla 3 mm uzunluğunda açık oklar (">", akış yönünde; ok ölçüsü EK-1d\'den 2.5×3 mm).' },
 );
 su.line(
@@ -71,7 +71,7 @@ su.line(
   [
     // The line stops at each triangle: dash 10 − 2.6 mm, the triangle (3 mm side, 2.6 mm long) fills the gap.
     stroke(BLACK, 0.4, { dash: [10 - (3 * Math.sqrt(3)) / 2, (3 * Math.sqrt(3)) / 2], cap: 'butt' }),
-    along(shape('triangle', 3, { height: 3.9, stroke: BLACK, strokeWidth: 0.2, rotation: -90 }), 10, { offsetAlong: 10 - (3 * Math.sqrt(3)) / 2 + Math.sqrt(3) / 2 }),
+    along(shape('triangle', 3, { stroke: BLACK, strokeWidth: 0.2, rotation: -90 }), 10, { offsetAlong: 10 - (3 * Math.sqrt(3)) / 2 + Math.sqrt(3) / 2 }),
   ],
   { ref: 'EK-1d s.20; EK-1e s.186', note: '0.4 mm düz çizgi, 10 mm aralıkla 3 mm kenarlı içi boş eşkenar üçgenler (akış yönünde); çizgi üçgende kesilir. Üçgen çizgisi verilmemiş, EK-1d\'deki gibi ince (0.2 mm).' },
 );
@@ -86,33 +86,30 @@ su.line(
 );
 
 /**
- * Sulama hattı: the canal's two lines at its real width ("Genişlik", m)
- * with the channel colour between them, and 3 mm ticks every 15 mm from
- * each line into the channel, staggered. The ticks are half-width lines
- * from the axis, anchored at it; a narrower channel-coloured stroke hides
- * all but their last 3 mm.
+ * Sulama hattı: the canal's two lines at its real width ("Genişlik", m),
+ * the channel colour between them, and 3 mm ticks every 15 mm from each
+ * line into the channel, staggered by half.
  */
 const CANAL = rgb(115, 223, 235);
 const W = 'varsayılan([Genişlik], 8)';
-const mWide = (color: string, expr: string, fallback: number) => ({ ...stroke(color, fallback, { cap: 'butt' }), unit: 'm' as const, width: { expr, fallback } });
-const halfTick = (side: 1 | -1) => ({
-  ...shape('line', 4, { stroke: BLACK, strokeWidth: 0.3, rotation: 90, anchor: side > 0 ? 'left' : 'right' }),
-  unit: 'm' as const,
-  size: { expr: `${W} / 2`, fallback: 4 },
+const HALF = `${W} / 2`;
+const edgeTicks = (side: 1 | -1, offsetAlong: number) => ({
+  // On the left line (side 1) the ticks point right, into the channel, and the other way round.
+  ...ticks(BLACK, 0.3, 3, 15, side === 1 ? -1 : 1, { offsetAlong }),
+  offset: { expr: `${side < 0 ? '-' : ''}${metresToMm(HALF)}`, fallback: side * 4 },
 });
 su.line(
   'sulama-hatti',
   'Sulama hattı',
   [
-    mWide(BLACK, `${W} + 0.3`, 8.3),
-    mWide(CANAL, `${W} - 0.3`, 7.7),
-    along(halfTick(1), 15, { offsetAlong: 3.75 }),
-    along(halfTick(-1), 15, { offsetAlong: 11.25 }),
-    mWide(CANAL, `${W} - 6`, 2),
+    { ...stroke(CANAL, 8, { cap: 'butt' }), width: { expr: metresToMm(W), fallback: 8 } },
+    ...sidePair(BLACK, 0.3, W, 8),
+    edgeTicks(1, 3.75),
+    edgeTicks(-1, 11.25),
     along(text({ expr: `varsayılan([Durum], '')` }, 2.5, { font: 'sans', weight: 700 }), 0, { placement: 'center' }),
   ],
   {
     ref: 'EK-1d s.20; EK-1e s.99',
-    note: 'Çizgi kanalın eksenidir: kanal genişliğindeki ("Genişlik", m; boşsa 8) 0.3 mm iki hat çizgisi, araları 115/223/235, hat çizgilerine 15 mm aralıklarla dik 3 mm karşılıklı şaşırtmalı çizgiler. Açık, kapalı, yeraltı, hemzemin ya da havai hat olduğu hat üstünde belirtilir: "Durum" alanı doluysa eksene yazılır. Genişlik 1/1000 ölçeğinde metreye çevrildi; 6 m\'den dar kanalda tırnaklar kanalı boydan boya keser.',
+    note: 'Çizgi kanalın eksenidir: kanal genişliğindeki ("Genişlik", m; boşsa 8) 0.3 mm iki hat çizgisi, araları 115/223/235, hat çizgilerine 15 mm aralıklarla dik 3 mm karşılıklı şaşırtmalı çizgiler. Açık, kapalı, yeraltı, hemzemin ya da havai hat olduğu hat üstünde belirtilir: "Durum" alanı doluysa eksene yazılır. Genişlik çizim ölçeğine göre kâğıda çevrilir.',
   },
 );

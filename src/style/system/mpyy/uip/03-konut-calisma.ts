@@ -1,5 +1,5 @@
-import { BLACK, WHITE, along, circle, crossHatch, grid, groupedHatch, hatch, rgb, shape, sheet, solid, stroke, text } from '../dsl';
-import { code, codeMarks, gridDots, parenBelow, picto, pictoMarks, stack } from './common';
+import { BLACK, WHITE, along, circle, crossHatch, grid, groupedHatch, hatch, label, rgb, shape, sheet, solid, stroke, text } from '../dsl';
+import { code, codeMarks, gridDots, parenBelow, picto, pictoMarks } from './common';
 
 /**
  * UİP (EK-1d s.3–5) › Konut alanları, Kentsel çalışma alanları. Fills are
@@ -30,16 +30,16 @@ calisma.area('ticaret-turizm-konut-alani', 'Ticaret-turizm-konut alanı', [solid
   note: '0.3 mm, 3 mm ara ile karelaj (öteki ticaret karışımları 4 mm). RGB 255/117/0 iki ekte de böyle yazılı (öteki turizm alanları 255/115/0).',
 });
 calisma.area('toptan-ticaret-alani', 'Toptan ticaret alanı', [solid(rgb(224, 0, 33)), karelaj(4), code('TT', 5)], { ref: 'EK-1d s.4; EK-1e s.60', note: '0.3 mm, 4 mm ara ile karelaj.' });
-calisma.area('toplu-isyerleri', 'Toplu işyerleri (…)', [solid(rgb(224, 0, 33)), pairs45(3), stack([...codeMarks('Ti', 5), parenBelow('Faaliyet')])], {
+calisma.area('toplu-isyerleri', 'Toplu işyerleri (…)', [solid(rgb(224, 0, 33)), pairs45(3), label([...codeMarks('Ti', 5), parenBelow('Faaliyet')])], {
   ref: 'EK-1d s.4; EK-1e s.68',
   note: '0.2 mm, 1 mm tarama çiftleri ile 45° karelaj, çiftler arası 3 mm. Kod EK-1d\'deki gibi "Ti" (EK-1e "Tİ" yazar). AÇIKLAMA 12: planda öngörülen faaliyetin adı parantez içinde büyük harfle yazılır: "Faaliyet" alanı doluysa çerçevenin altına yazılır.',
 });
-calisma.area('belediye-hizmet-alani', 'Belediye hizmet alanı (…)', [solid(rgb(102, 153, 205)), gridDots(7, 1.2), stack([...codeMarks('BHA', 4.1), parenBelow('Kullanım')])], {
+calisma.area('belediye-hizmet-alani', 'Belediye hizmet alanı (…)', [solid(rgb(102, 153, 205)), gridDots(7, 1.2), label([...codeMarks('BHA', 4.1), parenBelow('Kullanım')])], {
   ref: 'EK-1d s.4; EK-1e s.61',
   note: '7×7 mm karolaj merkezlerinde 1.2 mm noktalama (EK-1d örneği daha küçük ve sık noktalar gösteriyor; metin esas). AÇIKLAMA 5: belirlenecek kullanım parantez içinde belirtilir: "Kullanım" alanı doluysa çerçevenin altına yazılır.',
 });
 calisma.area('idari-hizmet-alani', 'İdari hizmet alanı', [solid(rgb(102, 153, 205)), gridDots(7, 1.2), code('İHA', 4.1)], { ref: 'EK-1d s.4; EK-1e s.62', note: '7×7 mm karolaj merkezlerinde 1.2 mm noktalama. EK-1d örneği daha küçük ve sık noktalar gösteriyor; metin esas alındı.' });
-calisma.area('resmi-kurum-alani', 'Resmi kurum alanı (…)', [solid(rgb(102, 153, 205)), gridDots(7, 1.2), stack([...pictoMarks('resmi-kurum', { frame: 'rect', frameSize: 11.5, height: 9.5, size: 4.8 }), parenBelow('Kurum', 9.5)])], {
+calisma.area('resmi-kurum-alani', 'Resmi kurum alanı (…)', [solid(rgb(102, 153, 205)), gridDots(7, 1.2), label([...pictoMarks('resmi-kurum', { frame: 'rect', frameSize: 11.5, height: 9.5, size: 4.8 }), parenBelow('Kurum', 9.5)])], {
   ref: 'EK-1d s.4; EK-1e s.63',
   note: '7×7 mm karolaj merkezlerinde 1.2 mm noktalama (EK-1d örneği daha küçük ve sık noktalar gösteriyor; metin esas). Sembol: yarısı dolu daire, EK-1d\'deki gibi 11.5×9.5 mm yatay çerçevede (EK-1e kare çiziyor; ölçü verilmemiş). AÇIKLAMA 6: kurumun adı parantez içinde: "Kurum" alanı doluysa çerçevenin altına yazılır.',
 });
@@ -121,7 +121,7 @@ calisma.area(
 calisma.area('osb-hizmet-ve-destek-alanlari', 'Organize sanayi bölgesi hizmet ve destek alanları', [
   solid(rgb(224, 190, 230)),
   karelaj(2, 0.2),
-  stack([
+  label([
     shape('rectangle', 16, { height: 14, fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }),
     text('OSB', 4.2, { font: 'sans', weight: 700, offset: [0, 2.4] }),
     text('HDA', 4.2, { font: 'sans', weight: 700, offset: [0, -2.4] }),

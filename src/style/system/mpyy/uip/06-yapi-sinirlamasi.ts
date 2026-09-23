@@ -1,6 +1,6 @@
-import { BLACK, along, circle, double, hatch, rgb, sheet, solid, stroke, svg, ticks } from '../dsl';
+import { BLACK, along, circle, double, hatch, label, rgb, sheet, solid, stroke, svg, ticks } from '../dsl';
 import { pic } from '../pictograms';
-import { BELT_FILL, RED, beltEdge, crossBoxMarks, picto, stack } from './common';
+import { BELT_FILL, RED, beltEdge, crossBoxMarks, picto } from './common';
 
 /**
  * UİP (EK-1d s.8–9) › Korunacak alanlar › Yapı sınırlaması getirilerek
@@ -15,7 +15,7 @@ const BELT_NOTE =
   'Alan 245/122/122. Sınır: 0.3 mm kırmızı (255/0/0), 7 mm düz çizgi aralıklı 3 mm uzunluğunda çarpı; ara (4.4 mm) ≈1:1 çizimden. "Uygun aralıklarla sınır üzerine … yazılacak": kod her dördüncü çizgi parçasının üstüne (alanın içine) 2.5 mm siyah yazılır; aralık ve boyut verilmemiş. Sembol: çift kare, iç karenin köşegenleri, altında kod.';
 
 const belt = (id: string, name: string, codeText: string, ref: string) =>
-  yapiSinirlamasi.area(id, name, [solid(BELT_FILL), beltEdge(codeText), stack(crossBoxMarks(codeText))], { ref, note: BELT_NOTE });
+  yapiSinirlamasi.area(id, name, [solid(BELT_FILL), beltEdge(codeText), label(crossBoxMarks(codeText))], { ref, note: BELT_NOTE });
 
 yapiSinirlamasi.area(
   'nukleer-enerji-uretim-alani-koruma-kusagi',

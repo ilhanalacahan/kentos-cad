@@ -1,5 +1,5 @@
-import { BLACK, WHITE, circle, rgb, shape, sheet, solid, text } from '../dsl';
-import { FRAME_LINE, code, picto, speckleBlobs, stack } from './common';
+import { BLACK, WHITE, circle, label, rgb, shape, sheet, solid, text } from '../dsl';
+import { FRAME_LINE, code, picto, speckleBlobs } from './common';
 
 /**
  * UİP (EK-1d s.5–6) › Turizm alanları. Every item has the same hatch
@@ -33,7 +33,7 @@ turizm.area('gunubirlik-tesis-alani', 'Günübirlik tesis alanı', [solid(GUNUBI
 turizm.area(
   'golf-turizm-tesis-alani',
   'Golf turizm tesis alanı',
-  [solid(rgb(161, 194, 114)), blobs(), stack([circle(12.5, { fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }), text('GTT', 4, { font: 'sans', weight: 400 })])],
+  [solid(rgb(161, 194, 114)), blobs(), label([circle(12.5, { fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }), text('GTT', 4, { font: 'sans', weight: 400 })])],
   {
     ref: 'EK-1d s.6; EK-1e s.57 (Golf turizmi)',
     note: `${HATCH} Sembol: 12.5 mm kalın daire içinde "GTT" (EK-1d). EK-1e "ölçeğine göre sembol" diyerek GTB, GTA, GTT verir; UİP lejantı GTT kullanır.`,
@@ -43,6 +43,6 @@ turizm.area('kis-sporlari-ve-kayak-tesisi-alani', 'Kış sporları ve kayak tesi
 turizm.area(
   'ekoturizm-kirsal-turizm-tesis-alani',
   'Ekoturizm / kırsal turizm tesis alanı',
-  [solid(TURIZM), blobs(), stack([shape('rectangle', 15, { height: 14, fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), text('ET/K', 4.8, { font: 'sans', weight: 700, offset: [0, 1.4] })])],
+  [solid(TURIZM), blobs(), label([shape('rectangle', 15, { height: 14, fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), text('ET/K', 4.8, { font: 'sans', weight: 700, offset: [0, 1.4] })])],
   { ref: 'EK-1d s.6; EK-1e s.77 (Ekoturizm/kırsal turizm)', note: `${HATCH} Çerçeve EK-1d'deki gibi 15×14 mm, yazı üst yarıda.` },
 );

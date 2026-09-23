@@ -46,18 +46,8 @@ export function codeMarks(code: TextValue, textSize = 5, o: FrameOptions = {}): 
   ];
 }
 
-/**
- * Markers at the area's inside point, each in its own layer. The layers of
- * one centroid marker share a drawing level, and markers of the same look
- * are batched across the objects of a CAD layer, so a paper-filled frame
- * of one symbol could be drawn over the cross of another; separate layers
- * keep the stacking order.
- */
-type MarkerDraft = Markers[number];
-export const stack = (markers: MarkerDraft | readonly MarkerDraft[]) => (Array.isArray(markers) ? (markers as readonly MarkerDraft[]) : [markers as MarkerDraft]).map((m) => label(m));
-
 /** A code in a 10 mm frame at the area's inside point. */
-export const code = (code: TextValue, textSize = 5, o: FrameOptions = {}) => stack(codeMarks(code, textSize, o));
+export const code = (code: TextValue, textSize = 5, o: FrameOptions = {}) => label(codeMarks(code, textSize, o));
 
 export interface PictoOptions {
   /** Pictogram width (default 0.8 of the frame). */
@@ -85,7 +75,7 @@ export function pictoMarks(name: PictogramName, o: PictoOptions = {}): Markers {
 }
 
 /** A pictogram in a frame at the area's inside point. */
-export const picto = (name: PictogramName, o: PictoOptions = {}) => stack(pictoMarks(name, o));
+export const picto = (name: PictogramName, o: PictoOptions = {}) => label(pictoMarks(name, o));
 
 /**
  * The double square with a cross (koruma kuşakları, SEG, tescilli bina;
@@ -146,7 +136,9 @@ const round = (v: number) => Math.round(v * 1000) / 1000;
  * 3 mm "çarpı" (strokes 3 mm long, 2.12 mm across) centred in each gap; the
  * gap (4.4 mm) is measured from the ≈1:1 drawing. The belt's code "is
  * written on the boundary at suitable intervals": every fourth dash, black,
- * standing on the line on the inner side (as SEG in EK-1d s.7).
+ * standing on the line on the inner side (as SEG in EK-1d s.7). The text is
+ * moved inward by its own offset, not the line's: an inset ring is shorter,
+ * so places along it would drift off the dashes.
  */
 export function beltEdge(codeText: string, color = RED, gap = 4.4): ReturnType<typeof stroke | typeof along>[] {
   const period = 7 + gap;
@@ -154,7 +146,7 @@ export function beltEdge(codeText: string, color = RED, gap = 4.4): ReturnType<t
     stroke(color, 0.3, { dash: [7, gap] }),
     along(shape('x', 3, { stroke: color, strokeWidth: 0.3 }), period, { offsetAlong: 7 + gap / 2 }),
   ];
-  if (codeText) out.push(along(text(codeText, 2.5, { font: 'sans', weight: 700 }), period * 4, { offsetAlong: 3.5 + period, offset: 1.25 }));
+  if (codeText) out.push(along(text(codeText, 2.5, { font: 'sans', weight: 700, offset: [0, 1.25] }), period * 4, { offsetAlong: 3.5 + period }));
   return out;
 }
 
@@ -186,4 +178,26 @@ export function seg(x1: number, y1: number, x2: number, y2: number, width: numbe
 export const staggeredDashes = (angle: number, spacing: number, dash: number, gap: number, width: number, color: Color = BLACK) => [
   hatch(angle, spacing * 2, width, color, { dash: [dash, gap] }),
   hatch(angle, spacing * 2, width, color, { dash: [dash, gap], offset: spacing, dashOffset: (dash + gap) / 2 }),
+];
+
+/**
+ * A length in metres (an expression over the object's fields) as paper mm
+ * at the drawing's scale, for data-defined offsets and sizes: things drawn
+ * at their real width (roads, canals) keep it at any plot scale.
+ */
+export const metresToMm = (metres: string) => `(${metres}) * 1000 / $ölçek`;
+
+/**
+ * A line `halfWidth` metres (an expression) to the left (`side` 1) or the
+ * right (−1) of the drawn axis; `fallback` is the half width in metres
+ * shown when the expression gives nothing.
+ */
+export function sideLine(color: Color, width: number, halfWidth: string, side: 1 | -1, fallback: number, o: Parameters<typeof stroke>[2] = {}) {
+  return { ...stroke(color, width, { cap: 'butt', ...o }), offset: { expr: `${side < 0 ? '-' : ''}${metresToMm(halfWidth)}`, fallback: side * fallback } };
+}
+
+/** Two lines of `width` mm, `fullWidth` metres apart (an expression), centred on the axis. */
+export const sidePair = (color: Color, width: number, fullWidth: string, fallback: number, o: Parameters<typeof stroke>[2] = {}) => [
+  sideLine(color, width, `(${fullWidth}) / 2`, 1, fallback / 2, o),
+  sideLine(color, width, `(${fullWidth}) / 2`, -1, fallback / 2, o),
 ];

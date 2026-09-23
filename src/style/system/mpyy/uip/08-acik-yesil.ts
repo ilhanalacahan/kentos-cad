@@ -1,5 +1,5 @@
-import { BLACK, WHITE, circle, pattern, rgb, shape, sheet, solid, text } from '../dsl';
-import { FRAME, FRAME_LINE, code, freeDots, gridDots, picto, seg, stack } from './common';
+import { BLACK, WHITE, circle, label, pattern, rgb, shape, sheet, solid, text } from '../dsl';
+import { FRAME, FRAME_LINE, code, freeDots, gridDots, picto, seg } from './common';
 
 /**
  * UİP (EK-1d s.12–13) › Açık ve yeşil alanlar. "Serbest noktalama" is
@@ -12,7 +12,7 @@ const YESIL = rgb(36, 156, 34);
 const PASIF = rgb(99, 186, 82);
 const FREE = 'Tarama: 0.4 mm serbest noktalama; yoğunluk verilmemiş, EK-1d örneği gibi ≈2.2 mm hücrede bir nokta.';
 
-acikYesil.area('park', 'Park', [solid(YESIL), freeDots(), stack(text('PARK', 4.2, { font: 'sans', weight: 700 }))], { ref: 'EK-1d s.12; EK-1e s.134', note: `${FREE} Sembol: çerçevesiz "PARK".` });
+acikYesil.area('park', 'Park', [solid(YESIL), freeDots(), label(text('PARK', 4.2, { font: 'sans', weight: 700 }))], { ref: 'EK-1d s.12; EK-1e s.134', note: `${FREE} Sembol: çerçevesiz "PARK".` });
 acikYesil.area('cocuk-bahcesi-ve-oyun-alani', 'Çocuk bahçesi ve oyun alanı', [solid(YESIL), freeDots(0.4, 11), picto('tahterevalli', { size: 9, caption: 'ÇB' })], { ref: 'EK-1d s.12; EK-1e s.135', note: FREE });
 acikYesil.area('pasif-yesil-alan', 'Pasif yeşil alan', [solid(PASIF), freeDots(0.4, 13)], { ref: 'EK-1d s.12; EK-1e s.135', note: `${FREE} Sembol yok.` });
 acikYesil.area('rekreasyon-alani', 'Rekreasyon alanı', [solid(YESIL), freeDots(0.4, 17), picto('rekreasyon', { size: 9, strokeWidth: 0.5 })], { ref: 'EK-1d s.12; EK-1e s.137', note: FREE });
@@ -31,7 +31,7 @@ acikYesil.area(
   'Meydan',
   [
     solid(rgb(255, 229, 207)),
-    stack([
+    label([
       shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }),
       ...bracket(-1, 1),
       ...bracket(1, 1),
@@ -60,13 +60,13 @@ function viewpoint() {
   }
   return out;
 }
-acikYesil.area('baki-ve-seyir-terasi', 'Bakı ve seyir terası', [solid(YESIL), freeDots(0.4, 29), stack(viewpoint())], {
+acikYesil.area('baki-ve-seyir-terasi', 'Bakı ve seyir terası', [solid(YESIL), freeDots(0.4, 29), label(viewpoint())], {
   ref: 'EK-1d s.12; EK-1e s.141',
   note: `${FREE} Sembol: bakış noktası (küçük daire), iki ışın ve aralarında yay (şekillerden kuruldu; "manzara" piktogramından farklı).`,
 });
 
 /** "10 mm karolaj merkezlerinde 3 mm kenarlı içi boş eşkenar üçgen", 0.3 mm. */
-const forest = () => pattern(shape('triangle', 3, { height: 3.9, stroke: BLACK, strokeWidth: 0.3 }), 10, 10);
+const forest = () => pattern(shape('triangle', 3, { stroke: BLACK, strokeWidth: 0.3 }), 10, 10);
 
 acikYesil.area('kent-ormani', 'Kent ormanı', [solid(PASIF), forest(), picto('kent-ormani', { size: 9 })], { ref: 'EK-1d s.13; EK-1e s.141', note: '0.3 mm, 10 mm karolaj merkezlerinde 3 mm kenarlı içi boş eşkenar üçgen.' });
 acikYesil.area('arboretum-botanik-parki', 'Arboretum - botanik parkı', [solid(YESIL), freeDots(0.4, 31), picto('arboretum', { size: 9 })], { ref: 'EK-1d s.13; EK-1e s.142', note: FREE });
@@ -78,7 +78,7 @@ acikYesil.area(
     solid(PASIF),
     freeDots(0.4, 37),
     // An open-topped trapezoid (EK-1d, scaled to the 10 mm frame).
-    stack([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), seg(-4.4, 2.1, -2.5, -1.6, 0.45), seg(-2.5, -1.6, 2.5, -1.6, 0.45), seg(2.5, -1.6, 4.4, 2.1, 0.45)]),
+    label([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), seg(-4.4, 2.1, -2.5, -1.6, 0.45), seg(-2.5, -1.6, 2.5, -1.6, 0.45), seg(2.5, -1.6, 4.4, 2.1, 0.45)]),
   ],
   { ref: 'EK-1d s.13; EK-1e s.143', note: `${FREE} Sembol: üstü açık yamuk (şekillerden kuruldu). EK-1d çerçeveyi gri çiziyor; EK-1e siyah der.` },
 );

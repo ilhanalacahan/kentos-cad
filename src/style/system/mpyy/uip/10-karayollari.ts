@@ -1,14 +1,12 @@
-import { BLACK, WHITE, along, circle, grid, hatch, rgb, shape, sheet, solid, stroke, text } from '../dsl';
-import { CAPTION, FRAME, FRAME_LINE, code, picto, seg, stack } from './common';
+import { BLACK, WHITE, along, circle, grid, hatch, label, rgb, shape, sheet, solid, stroke, text } from '../dsl';
+import { CAPTION, FRAME, FRAME_LINE, code, metresToMm, picto, seg, sidePair } from './common';
 
 /**
  * UİP (EK-1d s.14–15) › Teknik altyapı › Ulaşım › Karayolları (EK-1e
  * s.147–156). Roads are drawn "at their real width": the object is the
- * road's axis and the width is data. The engine has no data-defined
- * parallel offset, so each pair of parallel lines is a wide stroke of the
- * line's colour with a narrower paper stroke over it (both widths from the
- * fields, in metres); the carriageway thus shows paper. Paper weights are
- * turned into metres at the UİP scale, 1/1000 (1 mm = 1 m).
+ * road's axis and the widths are data (metres), turned into offsets on
+ * paper at the drawing's scale ($ölçek). Only the lines are drawn; the
+ * carriageway between them is left transparent.
  */
 
 /** The legend's top sections; their children carry the items. */
@@ -17,34 +15,23 @@ export const ulasim = sheet('uip', ['Teknik altyapı', 'Ulaşım'], 'ulasim', 10
 
 export const karayollari = sheet('uip', ['Teknik altyapı', 'Ulaşım', 'Karayolları'], 'karayollari', 10);
 
-/** A stroke whose width (metres) is an expression; `fallback` is shown in previews. */
-const mStroke = (color: string, expr: string, fallback: number, o: { dash?: readonly number[] } = {}) => ({ ...stroke(color, fallback, { dash: o.dash, cap: 'butt' }), unit: 'm' as const, width: { expr, fallback } });
-
-/**
- * Two parallel lines of `weight` mm, `width` apart (centre to centre):
- * a stroke `width + weight` wide and a paper stroke `width - weight` over it.
- */
-function pair(color: string, width: string, fallback: number, weight: number, o: { dash?: readonly number[] } = {}) {
-  return [mStroke(color, `${width} + ${weight}`, fallback + weight, o), mStroke(WHITE, `${width} - ${weight}`, fallback - weight)];
-}
-
 const KERB = rgb(255, 0, 0);
 const MEDIAN = rgb(99, 186, 82);
 
 /**
- * A road: cephe lines (black, `cephe` mm) at the road's width, kerb lines
- * (red 0.3 mm) inside them by the sidewalk width, and, with `median`, the
- * refüj's two green 0.3 mm lines.
+ * A road: cephe lines (black, `cephe` mm) on its edges, kerb lines (red
+ * 0.3 mm) inside them by the sidewalk width, and, with `r0`, the refüj's
+ * two green 0.3 mm lines.
  */
 function road(cephe: number, w0: number, k0: number, r0?: number) {
   const W = `varsayılan([Genişlik], ${w0})`;
-  const layers = [...pair(BLACK, W, w0, cephe), ...pair(KERB, `${W} - 2 * varsayılan([Kaldırım], ${k0})`, w0 - 2 * k0, 0.3)];
-  if (r0 !== undefined) layers.push(...pair(MEDIAN, `varsayılan([Refüj], ${r0})`, r0, 0.3));
+  const layers = [...sidePair(BLACK, cephe, W, w0), ...sidePair(KERB, 0.3, `${W} - 2 * varsayılan([Kaldırım], ${k0})`, w0 - 2 * k0)];
+  if (r0 !== undefined) layers.push(...sidePair(MEDIAN, 0.3, `varsayılan([Refüj], ${r0})`, r0));
   return layers;
 }
 
 const ROAD_NOTE = (w0: number, k0: number, r0?: number) =>
-  `Çizgi yolun eksenidir; yol gerçek genişliğinde çizilir: "Genişlik" (cepheden cepheye, m; boşsa ${w0}), "Kaldırım" (m; boşsa ${k0})${r0 !== undefined ? `, "Refüj" (m; boşsa ${r0})` : ''} alanlarından. Paralel kaydırma veriye bağlanamadığı için çizgiler çizgi rengiyle geniş, kâğıt rengiyle dar iki vuruşla kurulur; taşıt yolu kâğıt rengi görünür. Kâğıt kalınlıkları 1/1000 ölçeğinde metreye çevrildi. Lejanttaki "…" yazılı elips kesme (devam) işaretidir, çizgi tipine dahil değildir.`;
+  `Çizgi yolun eksenidir; yol gerçek genişliğinde çizilir: "Genişlik" (cepheden cepheye, m; boşsa ${w0}), "Kaldırım" (m; boşsa ${k0})${r0 !== undefined ? `, "Refüj" (m; boşsa ${r0})` : ''} alanlarından. Çizgiler eksenden çizim ölçeğine göre kaydırılır; araları şeffaftır. Lejanttaki "…" yazılı elips kesme (devam) işaretidir, çizgi tipine dahil değildir.`;
 
 karayollari.line('erisme-kontrollu-karayolu-otoyol', 'Erişme kontrollü karayolu (otoyol)', [road(2.5, 16, 2.5, 2)], {
   ref: 'EK-1d s.14; EK-1e s.147',
@@ -86,9 +73,9 @@ karayollari.line(
   'bisiklet-yolu',
   'Bisiklet yolu',
   [
-    ...pair(BLACK, 'varsayılan([Genişlik], 3)', 3, 0.3),
+    ...sidePair(BLACK, 0.3, 'varsayılan([Genişlik], 3)', 3),
     // Rungs across the whole path every 3 mm: a line marker as long as the width.
-    along({ ...shape('line', 3, { stroke: BLACK, strokeWidth: 0.3, rotation: 90 }), unit: 'm' as const, size: { expr: 'varsayılan([Genişlik], 3)', fallback: 3 } }, 3, { offsetAlong: 1.5 }),
+    along({ ...shape('line', 3, { stroke: BLACK, strokeWidth: 0.3, rotation: 90 }), size: { expr: metresToMm('varsayılan([Genişlik], 3)'), fallback: 3 } }, 3, { offsetAlong: 1.5 }),
     along(bicycleMarks(), 0, { placement: 'center', rotate: false }),
   ],
   {
@@ -96,13 +83,13 @@ karayollari.line(
     note: 'Çizgi yolun eksenidir: 0.3 mm iki kenar çizgisi yolun gerçek genişliğinde ("Genişlik", m; boşsa 3) ve 3 mm aralıkla yola dik çizgiler. Lejantın sembol sütunundaki bisiklet çizginin ortasına konur (piktogram setinde bisiklet yok: şekillerden kuruldu).',
   },
 );
-karayollari.area('bisiklet-parki', 'Bisiklet parkı', [solid(rgb(255, 229, 207)), stack(bicycleMarks())], {
+karayollari.area('bisiklet-parki', 'Bisiklet parkı', [solid(rgb(255, 229, 207)), label(bicycleMarks())], {
   ref: 'EK-1d s.15; EK-1e s.154',
   note: 'Düz dolgu 255/229/207 ve çerçevede bisiklet (piktogram setinde yok: şekillerden kuruldu).',
 });
-karayollari.line('yaya-yolu-ve-bolgesi', 'Yaya yolu ve bölgesi', [pair(BLACK, 'varsayılan([Genişlik], 5)', 5, 0.4)], {
+karayollari.line('yaya-yolu-ve-bolgesi', 'Yaya yolu ve bölgesi', [sidePair(BLACK, 0.4, 'varsayılan([Genişlik], 5)', 5)], {
   ref: 'EK-1d s.15; EK-1e s.155',
-  note: 'Çizgi yolun eksenidir: 0.4 mm iki cephe çizgisi gerçek genişlikte ("Genişlik", m; boşsa 5); arası kâğıt rengi. Lejanttaki "…" yazılı elips kesme işaretidir.',
+  note: 'Çizgi yolun eksenidir: 0.4 mm iki cephe çizgisi gerçek genişlikte ("Genişlik", m; boşsa 5); arası şeffaf. Lejanttaki "…" yazılı elips kesme işaretidir.',
 });
 
 /**
@@ -123,16 +110,16 @@ karayollari.line('kopru', 'Köprü', [winged(0.5)], { ref: 'EK-1d s.15; EK-1e s.
 /** Yaya geçitleri: the walkway along its axis at real width, three stair rungs at each end. */
 const stairs = (w0: number) =>
   ['first', 'last'].map((p) =>
-    along({ ...shape('line', w0, { stroke: BLACK, strokeWidth: 0.25, rotation: 90 }), unit: 'm' as const, size: { expr: `varsayılan([Genişlik], ${w0})`, fallback: w0 } }, 0, {
+    along({ ...shape('line', w0, { stroke: BLACK, strokeWidth: 0.25, rotation: 90 }), size: { expr: metresToMm(`varsayılan([Genişlik], ${w0})`), fallback: w0 } }, 0, {
       placement: p as 'first' | 'last',
       group: { count: 5, spacing: 0.8 },
     }),
   );
-karayollari.line('yaya-ust-gecidi', 'Yaya üst geçidi', [...pair(BLACK, 'varsayılan([Genişlik], 3)', 3, 0.5), ...stairs(3)], {
+karayollari.line('yaya-ust-gecidi', 'Yaya üst geçidi', [...sidePair(BLACK, 0.5, 'varsayılan([Genişlik], 3)', 3), ...stairs(3)], {
   ref: 'EK-1d s.15; EK-1e s.156',
-  note: 'Gerçek ölçüleri ile çizilir: çizgi geçidin eksenidir, iki kenar 0.5 mm gerçek genişlikte ("Genişlik", m; boşsa 3), iki uçta basamak çizgileri (0.8 mm aralı, üç). Kalınlıklar verilmemiş, EK-1d\'den.',
+  note: 'Gerçek ölçüleri ile çizilir: çizgi geçidin eksenidir, iki kenar 0.5 mm gerçek genişlikte ("Genişlik", m; boşsa 3), iki uçta basamak çizgileri (0.8 mm aralı, beş; EK-1e 4–5 basamak der). Kalınlıklar verilmemiş, EK-1d\'den.',
 });
-karayollari.line('yaya-alt-gecidi', 'Yaya alt geçidi', [...pair(BLACK, 'varsayılan([Genişlik], 3)', 3, 0.3, { dash: [2, 1] }), ...stairs(3)], {
+karayollari.line('yaya-alt-gecidi', 'Yaya alt geçidi', [...sidePair(BLACK, 0.3, 'varsayılan([Genişlik], 3)', 3, { dash: [2, 1] }), ...stairs(3)], {
   ref: 'EK-1d s.15; EK-1e s.156',
   note: 'Gerçek ölçüleri ile çizilir; yeraltındaki izleri 2 mm çizgi, 1 mm ara. Çizgi geçidin eksenidir, iki kenar gerçek genişlikte ("Genişlik", m; boşsa 3), iki uçta basamak çizgileri. EK-1d giriş merdivenini ayrıca kutu olarak çizer; bu çizgi tipinde yok.',
 });
@@ -142,7 +129,7 @@ karayollari.area(
   'Katlı otopark',
   [
     solid(OTOPARK),
-    stack([
+    label([
       shape('rectangle', 15, { height: 14, fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }),
       text('P', 8, { font: 'sans', weight: 400, offset: [-1.2, 0.6] }),
       text('k', 4.5, { font: 'sans', weight: 400, offset: [2.4, -1.4] }),
@@ -161,7 +148,7 @@ karayollari.area('elektronik-haberlesme-altyapi-alani', 'Elektronik haberleşme 
 karayollari.area(
   'motokurye-park-alani',
   'Motokurye park alanı',
-  [solid(rgb(255, 183, 185)), stack([shape('rectangle', 24, { height: 18, fill: WHITE, stroke: BLACK, strokeWidth: 0.75 }), shape('rectangle', 9.8, { height: 12, stroke: BLACK, strokeWidth: FRAME_LINE })]), picto('motosiklet', { frame: 'none', size: 8 })],
+  [solid(rgb(255, 183, 185)), label([shape('rectangle', 24, { height: 18, fill: WHITE, stroke: BLACK, strokeWidth: 0.75 }), shape('rectangle', 9.8, { height: 12, stroke: BLACK, strokeWidth: FRAME_LINE })]), picto('motosiklet', { frame: 'none', size: 8 })],
   { ref: 'EK-1d s.15; EK-1e s.192', note: 'Düz dolgu 255/183/185. Sembol: kalın 24×18 mm çerçeve içinde 9.8×12 mm çerçevede motosiklet (ölçüler EK-1d\'den).' },
 );
 

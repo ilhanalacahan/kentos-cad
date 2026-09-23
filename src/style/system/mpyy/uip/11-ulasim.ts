@@ -1,5 +1,5 @@
-import { BLACK, WHITE, along, circle, double, hatch, pattern, rgb, shape, sheet, solid, stroke, text } from '../dsl';
-import { FRAME, FRAME_LINE, captionMark, picto, seg, stack } from './common';
+import { BLACK, WHITE, along, circle, double, hatch, label, pattern, rgb, shape, sheet, solid, stroke, text } from '../dsl';
+import { FRAME, FRAME_LINE, captionMark, picto, seg } from './common';
 
 /**
  * UİP (EK-1d s.16–18) › Teknik altyapı › Ulaşım: demiryolları,
@@ -74,11 +74,11 @@ denizyollari.area('tekne-imal-ve-cekek-yeri', 'Tekne imal ve çekek yeri', [soli
   note: `${STRIP_NOTE(2, 5, 330)} Renk 178/178/178 (komşu deniz kullanımları 204/204/204).`,
 });
 denizyollari.area('gemi-sokum-yeri', 'Gemi söküm yeri', [solid(DENIZ), strips(2, 5, 330), picto('gemi-sokum', { size: 9, caption: 'GS' })], { ref: 'EK-1d s.16; EK-1e s.165', note: STRIP_NOTE(2, 5, 330) });
-denizyollari.area('menfez', 'Menfez', [solid(DENIZ), strips(2, 5, 330), stack([...pier(), captionMark('ME')])], {
+denizyollari.area('menfez', 'Menfez', [solid(DENIZ), strips(2, 5, 330), label([...pier(), captionMark('ME')])], {
   ref: 'EK-1d s.16; EK-1e s.166',
   note: `${STRIP_NOTE(2, 5, 330)} Sembol şekillerden kuruldu (piktogram setinde yok). AÇIKLAMA 14: kıyı koruma yapılarındandır.`,
 });
-denizyollari.area('mahmuz', 'Mahmuz', [solid(DENIZ), strips(2, 5, 330), stack([...pier(), captionMark('MA')])], {
+denizyollari.area('mahmuz', 'Mahmuz', [solid(DENIZ), strips(2, 5, 330), label([...pier(), captionMark('MA')])], {
   ref: 'EK-1d s.17; EK-1e s.166',
   note: `${STRIP_NOTE(2, 5, 330)} Sembol şekillerden kuruldu (piktogram setinde yok). AÇIKLAMA 14: kıyı koruma yapılarındandır.`,
 });
@@ -93,7 +93,7 @@ denizyollari.area('liman', 'Liman', [solid(DENIZ), strips(5, 5, 330), picto('cap
   note: `${STRIP_NOTE(5, 5, 330)} Çerçeve EK-1d'deki gibi 11×13.5 mm dikey dikdörtgen.`,
 });
 denizyollari.area('tekne-imal-ve-bakim-yeri', 'Tekne imal ve bakım yeri', [solid(DENIZ), strips(5, 5, 330), picto('yelkenli-dolu', { size: 9, caption: 'TİB' })], { ref: 'EK-1d s.17; EK-1e s.165', note: STRIP_NOTE(5, 5, 330) });
-denizyollari.area('kiyi-koruma-yapilari', 'Kıyı koruma yapıları', [solid(DENIZ), strips(2, 5, 330), stack([...pier(), captionMark('KKY')])], {
+denizyollari.area('kiyi-koruma-yapilari', 'Kıyı koruma yapıları', [solid(DENIZ), strips(2, 5, 330), label([...pier(), captionMark('KKY')])], {
   ref: 'EK-1d s.17; EK-1e s.107',
   note: `${STRIP_NOTE(2, 5, 330)} Sembol şekillerden kuruldu (piktogram setinde yok). AÇIKLAMA 14: dalgakıran, köprü, menfez, istinat duvarı, mendirek ve mahmuz gibi yapılar.`,
 });
@@ -103,7 +103,7 @@ denizyollari.area(
   [
     solid(DENIZ),
     strips(2, 5, 330),
-    stack([
+    label([
       shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }),
       shape('square', FRAME - 3, { stroke: BLACK, strokeWidth: 0.25 }),
       seg(0, 3.5, -3.5, -3.5, 0.25),
@@ -118,7 +118,7 @@ denizyollari.area(
 havayollari.area(
   'helikopter-inis-alani',
   'Helikopter iniş alanı',
-  [solid(rgb(178, 178, 178)), strips(2, 5, 330, 0.3), stack([circle(9.5, { fill: WHITE, stroke: BLACK, strokeWidth: 0.35 }), text('H', 5.3, { font: 'sans', weight: 400 })])],
+  [solid(rgb(178, 178, 178)), strips(2, 5, 330, 0.3), label([circle(9.5, { fill: WHITE, stroke: BLACK, strokeWidth: 0.35 }), text('H', 5.3, { font: 'sans', weight: 400 })])],
   { ref: 'EK-1d s.17; EK-1e s.169', note: `${STRIP_NOTE(2, 5, 330).replace('0.2 mm', '0.3 mm')} Eğik çizgilerin aralığı verilmemiş (1 mm alındı). Sembol: çerçevesiz dairede "H".` },
 );
 
@@ -150,7 +150,7 @@ topluTasima.area(
   'Toplutaşım türleri arası değişim ve aktarma alanı',
   [
     solid(rgb(178, 178, 178)),
-    stack([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), shape('square', 6.4, { fill: BLACK }), shape('x', 6.4 * Math.SQRT2, { stroke: WHITE, strokeWidth: 0.35 })]),
+    label([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }), shape('square', 6.4, { fill: BLACK }), shape('x', 6.4 * Math.SQRT2, { stroke: WHITE, strokeWidth: 0.35 })]),
   ],
   { ref: 'EK-1d s.18; EK-1e s.172', note: 'Düz dolgu 178/178/178, tarama yok. Sembol: çerçevede dolu siyah kare ve beyaz köşegenleri (şekillerden kuruldu).' },
 );

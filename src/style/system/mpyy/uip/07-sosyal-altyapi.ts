@@ -1,5 +1,5 @@
-import { BLACK, WHITE, rgb, shape, sheet, solid, text } from '../dsl';
-import { FRAME, FRAME_LINE, captionMark, code, gridDots, picto, stack } from './common';
+import { BLACK, WHITE, label, rgb, shape, sheet, solid, text } from '../dsl';
+import { FRAME, FRAME_LINE, captionMark, code, gridDots, picto } from './common';
 
 /**
  * UİP (EK-1d s.9–12) › Sosyal altyapı alanları: eğitim, sağlık, sosyal ve
@@ -17,17 +17,13 @@ export const egitim = sheet('uip', ['Sosyal altyapı alanları', 'Eğitim tesisl
 const EGITIM = rgb(0, 143, 255);
 /** School triangles: equilateral, 10.5 mm side (EK-1d), caption in Times under the base. */
 const TRI = 10.5;
-/**
- * A triangle centred on its centroid reaches 0.58 of its side above it,
- * past the marker's square box, and is cut there: a taller box (height)
- * keeps the apex; the side stays `size`.
- */
-const tri = (side: number, strokeWidth: number) => shape('triangle', side, { height: side * 1.3, stroke: BLACK, strokeWidth });
+/** An outline triangle of `side`, centred on its centroid. */
+const tri = (side: number, strokeWidth: number) => shape('triangle', side, { stroke: BLACK, strokeWidth });
 const triCaption = (c: string) => text(c, 3.8, { font: 'serif', weight: 400, offset: [0, -(TRI * Math.sqrt(3)) / 6 - 2.75], halo: { color: WHITE, width: 0.4 } });
-const thin = (c: string) => stack([tri(TRI, 0.3), triCaption(c)]);
-const doubled = (c: string) => stack([tri(TRI, 0.3), tri(TRI - 2 * 0.7 * Math.sqrt(3), 0.3), triCaption(c)]);
-// The stroke is centred on the path: the path is drawn smaller so the outer edge stays 10.5 mm.
-const thick = (c: string) => stack([tri(TRI - 1.2 * Math.sqrt(3), 1.2), triCaption(c)]);
+const thin = (c: string) => label([tri(TRI, 0.3), triCaption(c)]);
+const doubled = (c: string) => label([tri(TRI, 0.3), tri(TRI - 2 * 0.7 * Math.sqrt(3), 0.3), triCaption(c)]);
+// The stroke is centred on the path (mitered): the path is drawn smaller so the outer edge stays 10.5 mm.
+const thick = (c: string) => label([tri(TRI - 1.2 * Math.sqrt(3), 1.2), triCaption(c)]);
 const TRI_NOTE = 'EK-1d örneğinin noktaları daha küçük ve sık; metin esas. Sembol: 10.5 mm eşkenar üçgen (EK-1d): anaokulu, ilkokul ve özel eğitimde ince, ortaokulda çift, lise ve meslek liselerinde kalın çizgili; altında Times yazı (EK-1e kalın Arial diye tarif eder, lejantın görünüşü esas alındı).';
 
 egitim.area('anaokulu-alani', 'Anaokulu alanı', [solid(EGITIM), gridDots(5, 0.8), thin('ANA')], { ref: 'EK-1d s.9; EK-1e s.117', note: `5 mm karolaj merkezlerinde 0.8 mm noktalama. ${TRI_NOTE}` });
@@ -52,7 +48,7 @@ export const saglik = sheet('uip', ['Sosyal altyapı alanları', 'Sağlık tesis
 
 const SAGLIK = rgb(0, 169, 230);
 /** Two concentric squares (the inner 60 %), caption under them. */
-const health = (c: string) => stack([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: 0.4 }), shape('square', FRAME * 0.6, { stroke: BLACK, strokeWidth: 0.3 }), captionMark(c)]);
+const health = (c: string) => label([shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: 0.4 }), shape('square', FRAME * 0.6, { stroke: BLACK, strokeWidth: 0.3 }), captionMark(c)]);
 const HEALTH_NOTE = '7 mm karolaj merkezlerinde 0.8 mm noktalama (EK-1d örneği daha küçük ve sık; metin esas). Sembol: iç içe iki kare (içteki %60), altında yazı.';
 
 saglik.area('saglik-tesisi-alani', 'Sağlık tesisi alanı', [solid(SAGLIK), gridDots(7, 0.8), health('S')], { ref: 'EK-1d s.10; EK-1e s.121', note: HEALTH_NOTE });
@@ -72,7 +68,7 @@ sosyalKulturel.area(
   [
     solid(SOSYAL),
     gridDots(7, 1.2),
-    stack([
+    label([
       shape('square', FRAME, { fill: WHITE, stroke: BLACK, strokeWidth: FRAME_LINE }),
       // Two outline diamonds side by side, overlapping; the overlap is filled (measured from EK-1d).
       shape('diamond', 5.8, { height: 6.2, stroke: BLACK, strokeWidth: 0.35, offset: [-1.65, 0] }),
@@ -99,7 +95,7 @@ sosyalKulturel.area(
   [
     solid(SPOR),
     gridDots(7, 1.2),
-    stack([
+    label([
       shape('rectangle', 14.4, { height: 11.3, fill: WHITE, stroke: BLACK, strokeWidth: 0.5 }),
       // The flag: pole on the left, outline pennant pointing right with "SSA" in it (measured from EK-1d).
       // A turned marker's offset is in its own frame: [along the pole, across it].
@@ -113,7 +109,7 @@ sosyalKulturel.area(
 sosyalKulturel.area(
   'cemevi-alani',
   'Cemevi alanı',
-  [solid(rgb(102, 153, 205)), gridDots(7, 1.2), stack([shape('square', 12.5, { fill: WHITE, stroke: rgb(0, 32, 96), strokeWidth: FRAME_LINE }), text('CEMEVİ', 2.8, { font: 'sans', weight: 700 })])],
+  [solid(rgb(102, 153, 205)), gridDots(7, 1.2), label([shape('square', 12.5, { fill: WHITE, stroke: rgb(0, 32, 96), strokeWidth: FRAME_LINE }), text('CEMEVİ', 2.8, { font: 'sans', weight: 700 })])],
   { ref: 'EK-1d s.11; EK-1e s.130', note: `${DOTS_NOTE} Alan 102/153/205 (öteki sosyal tesislerden koyu). Çerçeve EK-1d'deki gibi lacivert (0/32/96), 12.5 mm; yazı siyah.` },
 );
 

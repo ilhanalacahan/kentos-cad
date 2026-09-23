@@ -1,5 +1,5 @@
-import { BLACK, WHITE, along, circle, crossHatch, edge, groupedHatch, hatch, pattern, rgb, shape, sheet, solid, stroke, text } from '../dsl';
-import { RED, code, crossBoxMarks, freeDots, picto, pictoMarks, stack } from './common';
+import { BLACK, WHITE, along, circle, crossHatch, edge, groupedHatch, hatch, label, pattern, rgb, shape, sheet, solid, stroke, text } from '../dsl';
+import { RED, code, crossBoxMarks, freeDots, picto, pictoMarks } from './common';
 
 /**
  * UİP (EK-1d s.6–8) › Korunacak alanlar and its first sub-group, bugünkü
@@ -16,7 +16,7 @@ korunacak.area('tescilli-anit-yapi', 'Tescilli anıt yapı', [tescilHatch(), edg
   ref: 'EK-1d s.6; EK-1e s.77',
   note: 'Şeffaf; yapı alanında 0.2 mm, 1 mm ara ile 45° çapraz tarama; sınır 0.4 mm düz çizgi (yapı sınırı).',
 });
-korunacak.area('tescilli-bina', 'Tescilli bina', [tescilHatch(), edge(BLACK, 0.4), stack(crossBoxMarks('TES', { outer: 0.5, inner: 0.25, captionFont: 'sans' }))], {
+korunacak.area('tescilli-bina', 'Tescilli bina', [tescilHatch(), edge(BLACK, 0.4), label(crossBoxMarks('TES', { outer: 0.5, inner: 0.25, captionFont: 'sans' }))], {
   ref: 'EK-1d s.6; EK-1e s.78',
   note: 'Şeffaf; 0.2 mm, 1 mm ara ile çapraz tarama; sınır 0.4 mm. Sembol: dışı kalın çift kare ve iç karenin köşegenleri, altında "TES" (Arial kalın). Ölçüler EK-1d\'den.',
 });
@@ -30,12 +30,7 @@ korunacak.area('tescilli-tabiat-varligi', 'Tescilli tabiat varlığı', [hatch(0
 });
 
 /** "5.5 mm boş daire içerisinde 3 mm çaplı dolu daire" on a 0.3 mm red line with 7 mm pieces (12.5 mm period). */
-// Ring and disc are separate layers: markers of one layer share a drawing level with same-looking markers of other symbols.
-const bullseye = () => [
-  stroke(RED, 0.3, { dash: [7, 5.5] }),
-  along(circle(5.5, { fill: WHITE, stroke: RED, strokeWidth: 0.3 }), 12.5, { offsetAlong: 9.75 }),
-  along(circle(3, { fill: RED }), 12.5, { offsetAlong: 9.75 }),
-];
+const bullseye = () => [stroke(RED, 0.3, { dash: [7, 5.5] }), along([circle(5.5, { fill: WHITE, stroke: RED, strokeWidth: 0.3 }), circle(3, { fill: RED })], 12.5, { offsetAlong: 9.75 })];
 
 korunacak.area(
   'sit-etkilesim-gecis-alani-siniri',
@@ -43,9 +38,9 @@ korunacak.area(
   [
     bullseye(),
     // "SEG" standing on each 7 mm piece (inside), three short ticks under it (outside), as EK-1d draws it.
-    along(text('SEG', 2.5, { font: 'sans', weight: 700 }), 12.5, { offsetAlong: 3.5, offset: 0.3 + 0.35 * 2.5 }),
+    along(text('SEG', 2.5, { font: 'sans', weight: 700, offset: [0, 0.3 + 0.35 * 2.5] }), 12.5, { offsetAlong: 3.5 }),
     along(shape('line', 1, { stroke: RED, strokeWidth: 0.2, rotation: 90, offset: [-0.65, 0] }), 12.5, { offsetAlong: 3.5, group: { count: 3, spacing: 0.8 } }),
-    stack(crossBoxMarks('SEG', { captionSize: 4.2 })),
+    label(crossBoxMarks('SEG', { captionSize: 4.2 })),
   ],
   {
     ref: 'EK-1d s.7; EK-1e s.84',
