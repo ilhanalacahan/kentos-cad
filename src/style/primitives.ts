@@ -90,6 +90,8 @@ export type MarkerStyle =
       readonly fill: Color | null;
       readonly stroke: Color | null;
       readonly strokeWidth: number;
+      /** Hole (share of the radius), teeth, arc opening (radians), tooth depth (share of the radius). */
+      readonly params: ShapeParams;
       readonly common: MarkerCommon;
     }
   | { readonly kind: 'svg'; readonly asset: string; readonly size: number; readonly fill: Color | null; readonly stroke: Color | null; readonly common: MarkerCommon }
@@ -108,6 +110,10 @@ export type MarkerStyle =
     };
 
 export type ShapeMarkStyle = Extract<MarkerStyle, { kind: 'shape' }>;
+
+/** Shape parameters as the shaders read them: hole, teeth, opening (radians), tooth depth. */
+export type ShapeParams = readonly [number, number, number, number];
+export const NO_SHAPE_PARAMS: ShapeParams = [0, 12, Math.PI, 0.2];
 
 export interface MarkerCommon {
   readonly unit: PrimUnit;

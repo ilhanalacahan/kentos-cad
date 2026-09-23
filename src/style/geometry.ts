@@ -243,6 +243,8 @@ export interface WaveSpec {
   readonly spacing: number;
   /** Straight line between waves when the repeat is longer than a wave. */
   readonly connect: boolean;
+  /** Start of the first wave from the path's start; absent = waves centred on the path. */
+  readonly offsetAlong?: number;
 }
 
 /** Height of a wave at t ∈ [0, 1] of its length, in amplitudes (starts and ends on the line). */
@@ -265,7 +267,10 @@ export function wavePaths(pts: readonly Vec2[], closed: boolean, w: WaveSpec): V
   const along = walker(pts, closed);
   if (!along) return [];
   const total = along.total;
-  const count = Math.min(MAX_MARKERS_PER_PATH, Math.floor((total + 1e-9) / spacing));
+  const anchored = w.offsetAlong !== undefined;
+  // Anchored: waves from `offsetAlong` on, as many as fit (a closed path wraps the start into its first repeat).
+  const first = !anchored ? 0 : closed ? ((w.offsetAlong! % spacing) + spacing) % spacing : Math.max(0, w.offsetAlong!);
+  const count = Math.min(MAX_MARKERS_PER_PATH, anchored ? Math.floor((total - first - w.length + 1e-9) / spacing) + 1 : Math.floor((total + 1e-9) / spacing));
   if (count < 1) return [pts.slice()];
   const out: Vec2[][] = [];
   let current: Vec2[] = [];
@@ -273,15 +278,15 @@ export function wavePaths(pts: readonly Vec2[], closed: boolean, w: WaveSpec): V
     const p = along.at(s);
     current.push({ x: p.at.x - Math.sin(p.angle) * h, y: p.at.y + Math.cos(p.angle) * h });
   };
-  // Waves centred along the path, the rest shared at both ends.
-  const start = (total - count * spacing) / 2 + (spacing - w.length) / 2;
+  // Waves centred along the path, the rest shared at both ends (or from the anchor on).
+  const start = anchored ? first : (total - count * spacing) / 2 + (spacing - w.length) / 2;
   const steps = w.shape === 'square' ? 0 : WAVE_STEPS;
   for (let k = 0; k < count; k++) {
     const s0 = start + k * spacing;
     if (w.connect) {
       if (k === 0) push(0, 0);
       // The corners of the path between waves stay corners.
-      along.cornersBetween(k === 0 ? 0 : s0 - (spacing - w.length), s0).forEach((c) => current.push(c));
+      along.cornersBetween(k === 0 ? 0 : Math.max(0, s0 - (spacing - w.length)), s0).forEach((c) => current.push(c));
     } else if (current.length) {
       out.push(current);
       current = [];

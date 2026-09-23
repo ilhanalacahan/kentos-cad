@@ -120,7 +120,12 @@ export const SHAPES: { value: ShapeName; label: string }[] = [
   { value: 'chevron', label: 'Açık ok ucu (V)' },
   { value: 'semicircle', label: 'Yarım daire' },
   { value: 'quartercircle', label: 'Çeyrek daire' },
+  { value: 'gear', label: 'Dişli' },
+  { value: 'arc', label: 'Yay (açık)' },
 ];
+
+/** Shapes drawn as lines only: they have no fill and no hole. */
+const OPEN_SHAPE_NAMES = new Set<ShapeName>(['cross', 'x', 'line', 'arrow', 'chevron', 'arc']);
 
 const PLACEMENTS: { value: MarkerPlacement; label: string }[] = [
   { value: 'interval', label: 'Aralıklı' },
@@ -186,7 +191,7 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
   const common: Child[] = [
     row('Birim', select(l.unit ?? 'mm', UNITS, (v) => set({ unit: v }), 'Birim'), 'Kâğıt mm çizim ölçeğiyle büyür; ekran px sabit kalır; harita m gerçek boydur.'),
     row('Saydamlık', numberInput(Math.round((1 - (l.opacity ?? 1)) * 100), (v) => set({ opacity: 1 - Math.min(100, Math.max(0, v)) / 100 }), { label: 'Saydamlık', unit: '%', step: 5, min: 0, max: 100 })),
-    row('Görünür', dataDefined(l.enabled ?? true, true, (v) => set({ enabled: v }), (v, s) => checkbox(v, s, 'Çizilsin'), 'Görünür'), 'ƒ ile koşula bağlanabilir: ör. "Nitelik" = \'Arsa\''),
+    row('Görünür', dataDefined(l.enabled ?? true, true, (v) => set({ enabled: v }), (v, s) => checkbox(v, s, 'Çizilsin'), 'Görünür'), 'ƒ ile koşula bağlanabilir: ör. [Nitelik] = \'Arsa\''),
   ];
   const assetPick = (value: string, key: string) => {
     const options = [{ value: '', label: 'Çizim seçin…' }, ...env.assets.map((a) => ({ value: a.id, label: a.name }))];
@@ -276,6 +281,12 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
         ddColor('Dolgu', l.fill, 'fill', true),
         ddColor('Çizgi', l.stroke, 'stroke', true),
         n('Çizgi kalınlığı', l.strokeWidth ?? 0.2, 'strokeWidth', { min: 0 }),
+        l.shape === 'gear'
+          ? pair(n('Diş sayısı', l.teeth ?? 12, 'teeth', { unit: 'adet', min: 3, max: 64, step: 1 }), n('Diş derinliği', Math.round((l.teethDepth ?? 0.2) * 100), 'teethDepthPct', { unit: '%', min: 2, max: 60, step: 1 }))
+          : null,
+        l.shape === 'arc' ? n('Açıklık', l.sweep ?? 180, 'sweep', { unit: '°', min: 1, max: 360, step: 5 }) : null,
+        !OPEN_SHAPE_NAMES.has(l.shape) ? n('Delik', Math.round((l.hole ?? 0) * 100), 'holePct', { unit: '%', min: 0, max: 95, step: 5 }) : null,
+        !OPEN_SHAPE_NAMES.has(l.shape) ? h('div', { class: 'sdf__hint' }, 'Delik, yarıçapın yüzdesi kadar ortadan yuvarlak boşluk bırakır (dişli göbeği, pul).') : null,
         ...placementRows(l, set, u),
       );
       break;
@@ -287,7 +298,7 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
       break;
     case 'text':
       specific.push(
-        row('Metin', dataDefined(l.text, '', (v) => set({ text: v }), (v, s) => textInput(v, s, { label: 'Metin' }), 'Metin'), 'ƒ ile öznitelikten: ör. \'E=\' || "Emsal"'),
+        row('Metin', dataDefined(l.text, '', (v) => set({ text: v }), (v, s) => textInput(v, s, { label: 'Metin' }), 'Metin'), 'ƒ ile öznitelikten: ör. \'E=\' || [Emsal]'),
         ddNum('Harf yüksekliği', l.size, 'size', 3, { min: 0 }),
         pair(row('Yazı tipi', select(l.font ?? 'ui', FONTS, (v) => set({ font: v }), 'Yazı tipi')), row('Kalınlık', select(String(l.weight ?? 400), WEIGHTS, (v) => set({ weight: Number(v) as TextMarker['weight'] }), 'Kalınlık'))),
         row('Stil', checkbox(!!l.italic, (v) => set({ italic: v }), 'İtalik')),
@@ -333,6 +344,11 @@ function waveForm(w: LineWave | undefined, set: (w: LineWave | undefined) => voi
       parts.push(
         pair(row('Dalga boyu', numberInput(cur.length, (v) => upd({ length: v }), { label: 'Dalga boyu', unit: u, min: 0.01 })), row('Genlik', numberInput(cur.amplitude, (v) => upd({ amplitude: v }), { label: 'Genlik', unit: u, min: 0 }))),
         pair(row('Tekrar', numberInput(cur.spacing ?? cur.length, (v) => upd({ spacing: v }), { label: 'Tekrar', unit: u, min: 0.01 })), row('Aralar', checkbox(cur.connect !== false, (v) => upd({ connect: v }), 'Düz çizgiyle bağla'))),
+        pair(
+          row('Evre', checkbox(cur.offsetAlong !== undefined, (v) => (upd({ offsetAlong: v ? 0 : undefined }), render(cur)), 'Çizgi başından')),
+          cur.offsetAlong !== undefined ? row('İlk dalga', numberInput(cur.offsetAlong, (v) => upd({ offsetAlong: v }), { label: 'İlk dalga', unit: u, min: 0 })) : null,
+        ),
+        h('div', { class: 'sdf__hint' }, 'Çizgi başından başlayan dalgalar, aynı aralık ve ilk uzaklıkla yerleşen işaretlerle adım adım gider; kapalıyken dalgalar çizgiye ortalanır.'),
       );
     }
     host.replaceChildren(h('div', { class: 'sdf__grouptitle' }, 'Dalga'), ...parts.flat().filter(Boolean) as Node[]);
@@ -351,6 +367,11 @@ export function applyPatch(l: AnyLayer, patch: Patch): AnyLayer {
     delete p.offsetX;
     delete p.offsetY;
   }
+  for (const [from, to] of [['holePct', 'hole'], ['teethDepthPct', 'teethDepth']] as const)
+    if (from in p) {
+      p[to] = Number(p[from]) / 100;
+      delete p[from];
+    }
   if ('jitterPct' in p) {
     p.jitter = Number(p.jitterPct) / 100;
     delete p.jitterPct;

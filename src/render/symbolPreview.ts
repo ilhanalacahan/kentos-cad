@@ -325,7 +325,7 @@ function drawFill(view: View, paint: FillPaint, rings: readonly (readonly Vec2[]
     const sw = unitMm(m.strokeWidth);
     const ext = Math.hypot(w / 2, h / 2) + sw / 2;
     const jitter = [Math.max(0, size[0] - 2 * ext) * paint.jitter, Math.max(0, size[1] - 2 * ext) * paint.jitter];
-    const look = { kind: 'shape' as const, shape: m.shape as ShapeId, fill: rgba(view, m.fill), stroke: rgba(view, m.stroke), strokeWidth: 0 };
+    const look = { kind: 'shape' as const, shape: m.shape as ShapeId, fill: rgba(view, m.fill), stroke: rgba(view, m.stroke), strokeWidth: 0, params: m.params };
     g.globalAlpha = paint.opacity * m.common.opacity;
     for (let row = Math.floor(qy0 / size[1]); row * size[1] <= qy1; row++) {
       const sx = paint.stagger && ((row % 2) + 2) % 2 === 1 ? size[0] / 2 : 0;
@@ -391,8 +391,8 @@ function drawMarker(view: View, m: MarkerStyle, at: Vec2, angle: number): void {
     const h = len(view, m.height || m.size, u);
     g.translate(-anchor[0] * w, anchor[1] * h);
     g.scale(1, -1);
-    const look = { kind: 'shape' as const, shape: m.shape as ShapeId, fill: rgba(view, m.fill), stroke: rgba(view, m.stroke), strokeWidth: 0 };
-    drawShape(g, look, w, h, Math.max(len(view, m.strokeWidth, u), m.stroke || look.shape === 'cross' || look.shape === 'x' || look.shape === 'line' || look.shape === 'arrow' || look.shape === 'chevron' ? 0.75 : 0));
+    const look = { kind: 'shape' as const, shape: m.shape as ShapeId, fill: rgba(view, m.fill), stroke: rgba(view, m.stroke), strokeWidth: 0, params: m.params };
+    drawShape(g, look, w, h, Math.max(len(view, m.strokeWidth, u), m.stroke || look.shape === 'cross' || look.shape === 'x' || look.shape === 'line' || look.shape === 'arrow' || look.shape === 'chevron' || look.shape === 'arc' ? 0.75 : 0));
     return;
   }
   if (m.kind === 'text') {

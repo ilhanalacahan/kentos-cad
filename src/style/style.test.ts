@@ -160,6 +160,24 @@ describe('compiling symbols', () => {
     const plain = placeAlong([...ring], true, 'interval', 5).length;
     expect(count(code('SEG'), ring)).toBe(plain);
   });
+  it('passes gear teeth, holes and arc openings to the shaders', () => {
+    const sym: MarkerSymbol = {
+      type: 'marker',
+      layers: [
+        { id: 'g', type: 'shape', shape: 'gear', size: 7, fill: 'ink', hole: 5 / 7, teeth: 12, teethDepth: 0.13 },
+        { id: 'a', type: 'shape', shape: 'arc', size: 4, stroke: 'ink', strokeWidth: 0.2, sweep: 90 },
+        { id: 'c', type: 'shape', shape: 'circle', size: 2, fill: 'ink', hole: 2 },
+      ],
+    };
+    const out = new PrimitiveList();
+    compileSymbol(sym, { cls: 'marker', point: v(0, 0) }, { entity: line([]), index: 1 }, env(1000), out);
+    const params = out.markers.map((m) => (m.style.kind === 'shape' ? m.style.params : null));
+    expect(params[0]).toEqual([5 / 7, 12, Math.PI, 0.13]);
+    expect(params[1]![2]).toBeCloseTo(Math.PI / 2, 12);
+    // Out-of-range values are held to what the shaders can draw.
+    expect(params[2]![0]).toBe(0.95);
+    expect(validateSymbol(sym)).toEqual([]);
+  });
   it('gives each mark of a nested marker symbol its own level, in order', () => {
     const sym: FillSymbol = {
       type: 'fill',
@@ -305,6 +323,20 @@ describe('placement and waves', () => {
     expect(dashed).toHaveLength(2);
     expect(dashed[0][0].x).toBeCloseTo(4, 9);
     expect(dashed[1][dashed[1].length - 1].x).toBeCloseTo(16, 9);
+  });
+  it('anchors waves at the path start so markers with the same interval stay in step', () => {
+    const path = [v(0, 0), v(20, 0)];
+    const waves = wavePaths(path, false, { shape: 'sine', length: 4, amplitude: 1, spacing: 5, connect: false, offsetAlong: 1 });
+    // Waves start at 1, 6, 11 and 16; the last one ends exactly at the path's end.
+    expect(waves.map((w) => w[0].x)).toEqual([1, 6, 11, 16].map((x) => expect.closeTo(x, 9)));
+    expect(waves[3][waves[3].length - 1].x).toBeCloseTo(20, 9);
+    // The gaps are where interval markers from the same start sit.
+    const dots = placeAlong(path, false, 'interval', 5, 0);
+    expect(dots.map((d) => d.at.x)).toEqual([0, 5, 10, 15, 20]);
+    // A closed square wraps the anchor into the first repeat.
+    const ring = wavePaths(square(10), true, { shape: 'sine', length: 4, amplitude: 1, spacing: 5, connect: false, offsetAlong: 11 });
+    expect(ring).toHaveLength(8);
+    expect(ring[0][0].x).toBeCloseTo(1, 9);
   });
 });
 

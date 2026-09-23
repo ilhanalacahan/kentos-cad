@@ -255,9 +255,27 @@ float sdStar(vec2 p, float r, float rf) {
   float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
   return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
+/** Gear: body circle and n square teeth (one on +x), each half a pitch wide at mid depth. */
+float sdGear(vec2 p, float r, float n, float depth) {
+  float rb = r * (1.0 - depth);
+  if (dot(p, p) < 1e-12) return -rb;
+  float a = 6.2831853 / n;
+  float k = floor(atan(p.y, p.x) / a + 0.5) * a;
+  vec2 q = vec2(cos(k) * p.x + sin(k) * p.y, -sin(k) * p.x + cos(k) * p.y);
+  float hw = 0.25 * a * (rb + 0.5 * (r - rb));
+  float x0 = rb - 0.5 * (r - rb);
+  return min(length(p) - rb, mBox(q - vec2(0.5 * (x0 + r), 0.0), vec2(0.5 * (r - x0), hw)));
+}
+/** Open arc of radius r centred on +y; ap is half the opening (radians). */
+float sdArc(vec2 p, float r, float ap) {
+  p.x = abs(p.x);
+  vec2 sc = vec2(sin(ap), cos(ap));
+  return (sc.y * p.x > sc.x * p.y) ? length(p - sc * r) : abs(length(p) - r);
+}
 // Shape ids: 0 circle 1 ring 2 square 3 rectangle 4 diamond 5 triangle 6 pentagon 7 hexagon 8 octagon
-// 9 star 10 cross 11 x 12 line 13 arrow 14 arrowhead 15 chevron 16 semicircle 17 quartercircle
-float shapeDist(int s, vec2 p, vec2 hs) {
+// 9 star 10 cross 11 x 12 line 13 arrow 14 arrowhead 15 chevron 16 semicircle 17 quartercircle 18 gear 19 arc
+// sp: hole (share of the radius), teeth, opening (radians), tooth depth.
+float shapeBase(int s, vec2 p, vec2 hs, vec4 sp) {
   float r = min(hs.x, hs.y);
   if (s == 0 || s == 1) return length(p) - r;
   if (s == 2) return mBox(p, vec2(r));
@@ -280,9 +298,17 @@ float shapeDist(int s, vec2 p, vec2 hs) {
   }
   if (s == 15) return min(sdSeg(p, vec2(-hs.x, hs.y), vec2(hs.x, 0.0)), sdSeg(p, vec2(hs.x, 0.0), vec2(-hs.x, -hs.y)));
   if (s == 16) return max(length(p) - r, -p.y);
+  if (s == 18) return sdGear(p, r, max(sp.y, 3.0), sp.w);
+  if (s == 19) return sdArc(p, r, min(sp.z * 0.5, 3.1415927));
   return max(length(p) - r, max(-p.x, -p.y));
 }
-bool isOpen(int s) { return s == 10 || s == 11 || s == 12 || s == 13 || s == 15; }
+bool isOpen(int s) { return s == 10 || s == 11 || s == 12 || s == 13 || s == 15 || s == 19; }
+/** A shape's field with its round hole cut out (closed shapes). */
+float shapeDist(int s, vec2 p, vec2 hs, vec4 sp) {
+  float d = shapeBase(s, p, hs, sp);
+  if (sp.x > 0.0 && !isOpen(s)) d = max(d, sp.x * min(hs.x, hs.y) - length(p));
+  return d;
+}
 /** A shape's colour (premultiplied) from its distance d in device px; q is the point in px (ring dot). */
 vec4 shapeColor(int shape, float d, vec2 q, vec2 halfPx, vec4 fill, vec4 strokeIn, float swIn, float dpr) {
   bool open = isOpen(shape);
@@ -312,6 +338,7 @@ flat in vec2 v_half;
 flat in float v_sw;
 uniform int u_kind;      // 0 shape, 1 atlas image
 uniform int u_shape;
+uniform vec4 u_sp;       // shape parameters (see shapeDist)
 uniform vec4 u_fill;     // alpha 0 = none
 uniform vec4 u_stroke;   // alpha 0 = none
 uniform sampler2D u_atlas;
@@ -327,7 +354,7 @@ void main() {
     if (any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) discard;
     col = textureLod(u_atlas, u_rect.xy + vec2(t.x, 1.0 - t.y) * u_rect.zw, 0.0);
   } else {
-    col = shapeColor(u_shape, shapeDist(u_shape, v_local, v_half), v_local, v_half, u_fill, u_stroke, v_sw, u_dpr);
+    col = shapeColor(u_shape, shapeDist(u_shape, v_local, v_half, u_sp), v_local, v_half, u_fill, u_stroke, v_sw, u_dpr);
   }
   col *= u_opacity;
   if (col.a < 0.004) discard;
@@ -360,6 +387,7 @@ uniform int u_shape;
 uniform vec2 u_half;
 uniform vec2 u_markOff;
 uniform vec2 u_markRot;
+uniform vec4 u_sp;
 uniform vec4 u_fill;
 uniform vec4 u_stroke;
 uniform float u_strokeW;
@@ -399,7 +427,7 @@ void main() {
         vec2 c = vec2((cell.x + 0.5) * u_size.x + sx, (row + 0.5) * u_size.y) + (h.xy - 0.5) * u_jitter;
         vec2 q = p - c - u_markOff;
         q = vec2(u_markRot.x * q.x + u_markRot.y * q.y, -u_markRot.y * q.x + u_markRot.x * q.y) * k;
-        float d = shapeDist(u_shape, q, u_half * k);
+        float d = shapeDist(u_shape, q, u_half * k, u_sp);
         if (d < best) { best = d; bestQ = q; }
       }
     }
@@ -413,4 +441,4 @@ void main() {
 }`;
 
 /** Shape ids in the order shapeDist knows them. */
-export const SHAPE_IDS = ['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'chevron', 'semicircle', 'quartercircle'] as const;
+export const SHAPE_IDS = ['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'chevron', 'semicircle', 'quartercircle', 'gear', 'arc'] as const;

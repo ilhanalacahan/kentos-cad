@@ -133,6 +133,12 @@ export function markerStyle(layer: MarkerLayer, level: number, t: CompileTarget,
         fill: ddColor(layer.fill, t, env),
         stroke: ddColor(layer.stroke, t, env),
         strokeWidth: layer.strokeWidth !== undefined ? conv(layer.strokeWidth) : 0,
+        params: [
+          Math.min(0.95, Math.max(0, layer.hole ?? 0)),
+          Math.round(Math.min(64, Math.max(3, layer.teeth ?? 12))),
+          Math.min(360, Math.max(1, layer.sweep ?? 180)) * DEG,
+          Math.min(0.6, Math.max(0.02, layer.teethDepth ?? 0.2)),
+        ],
         common,
       };
     case 'svg':
@@ -236,7 +242,7 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
     const w = layer.wave;
     if (w && w.length > 0) {
       const len = (v: number) => toWorld(v, layer.unit, env);
-      const spec = { shape: w.shape, length: len(w.length), amplitude: len(w.amplitude), spacing: len(w.spacing ?? w.length), connect: w.connect !== false };
+      const spec = { shape: w.shape, length: len(w.length), amplitude: len(w.amplitude), spacing: len(w.spacing ?? w.length), connect: w.connect !== false, offsetAlong: w.offsetAlong !== undefined ? len(w.offsetAlong) : undefined };
       for (const piece of wavePaths(path, closed, spec)) sink.stroke(style, piece, false);
     } else sink.stroke(style, path, closed);
     return;

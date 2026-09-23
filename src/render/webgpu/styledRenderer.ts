@@ -172,6 +172,7 @@ export class WebGPUStyledRenderer {
         f.set([p.half[0], p.half[1], p.markOffset[0], p.markOffset[1]], 16);
         f.set([Math.cos(p.markRotation), Math.sin(p.markRotation), p.coverage, p.seed], 20);
         f.set([p.strokeWidth, p.tint, p.opacity, 0], 24);
+        f.set(p.params, 28);
         u.set([p.unit === 'world' ? 0 : 1, p.stagger ? 1 : 0, SHAPE_INDEX.get(p.shape) ?? 0, r.reach], 32);
       } else {
         f.set([p.size[0], p.size[1], Math.cos(p.angle), Math.sin(p.angle)], 20);
@@ -185,6 +186,7 @@ export class WebGPUStyledRenderer {
         f.set(look.fill ?? [0, 0, 0, 0], 0);
         f.set(look.stroke ?? [0, 0, 0, 0], 4);
         f.set([1, look.strokeWidth, b.opacity, 0], 24);
+        f.set(look.params, 28);
         u.set([b.unit === 'world' ? 0 : 1, 0, SHAPE_INDEX.get(look.shape) ?? 0, 0], 32);
       } else {
         f.set([1, 0, b.opacity, 0], 24);

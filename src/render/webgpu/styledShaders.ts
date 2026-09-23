@@ -221,7 +221,25 @@ fn sdStar(q: vec2f, r: f32, rf: f32) -> f32 {
   let h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
   return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
-fn shapeDist(s: u32, p: vec2f, hs: vec2f) -> f32 {
+// Gear and open arc (see the GLSL twin).
+fn sdGear(p: vec2f, r: f32, n: f32, depth: f32) -> f32 {
+  let rb = r * (1.0 - depth);
+  if (dot(p, p) < 1e-12) { return -rb; }
+  let a = 6.2831853 / n;
+  let k = floor(atan2(p.y, p.x) / a + 0.5) * a;
+  let q = vec2f(cos(k) * p.x + sin(k) * p.y, -sin(k) * p.x + cos(k) * p.y);
+  let hw = 0.25 * a * (rb + 0.5 * (r - rb));
+  let x0 = rb - 0.5 * (r - rb);
+  return min(length(p) - rb, mBox(q - vec2f(0.5 * (x0 + r), 0.0), vec2f(0.5 * (r - x0), hw)));
+}
+fn sdArc(q: vec2f, r: f32, ap: f32) -> f32 {
+  let p = vec2f(abs(q.x), q.y);
+  let sc = vec2f(sin(ap), cos(ap));
+  if (sc.y * p.x > sc.x * p.y) { return length(p - sc * r); }
+  return abs(length(p) - r);
+}
+// sp: hole (share of the radius), teeth, opening (radians), tooth depth.
+fn shapeBase(s: u32, p: vec2f, hs: vec2f, sp: vec4f) -> f32 {
   let r = min(hs.x, hs.y);
   switch s {
     case 0u, 1u: { return length(p) - r; }
@@ -248,10 +266,17 @@ fn shapeDist(s: u32, p: vec2f, hs: vec2f) -> f32 {
     }
     case 15u: { return min(sdSeg(p, vec2f(-hs.x, hs.y), vec2f(hs.x, 0.0)), sdSeg(p, vec2f(hs.x, 0.0), vec2f(-hs.x, -hs.y))); }
     case 16u: { return max(length(p) - r, -p.y); }
+    case 18u: { return sdGear(p, r, max(sp.y, 3.0), sp.w); }
+    case 19u: { return sdArc(p, r, min(sp.z * 0.5, 3.1415927)); }
     default: { return max(length(p) - r, max(-p.x, -p.y)); }
   }
 }
-fn isOpen(s: u32) -> bool { return s == 10u || s == 11u || s == 12u || s == 13u || s == 15u; }
+fn isOpen(s: u32) -> bool { return s == 10u || s == 11u || s == 12u || s == 13u || s == 15u || s == 19u; }
+fn shapeDist(s: u32, p: vec2f, hs: vec2f, sp: vec4f) -> f32 {
+  var d = shapeBase(s, p, hs, sp);
+  if (sp.x > 0.0 && !isOpen(s)) { d = max(d, sp.x * min(hs.x, hs.y) - length(p)); }
+  return d;
+}
 // A shape's colour (premultiplied) from its distance d in device px; q is the point in px (ring dot).
 fn shapeColor(shape: u32, d: f32, q: vec2f, hs: vec2f, fill: vec4f, strokeIn: vec4f, swIn: f32) -> vec4f {
   let open = isOpen(shape);
@@ -315,7 +340,7 @@ fn hash3(p: vec2f) -> vec3f {
         var q = p - c - st.rect.zw;
         let mr = st.a.xy;
         q = vec2f(mr.x * q.x + mr.y * q.y, -mr.y * q.x + mr.x * q.y) * k;
-        let d = shapeDist(shape, q, st.rect.xy * k);
+        let d = shapeDist(shape, q, st.rect.xy * k, st.c);
         if (d < best) { best = d; bestQ = q; }
       }
     }
@@ -337,7 +362,7 @@ fn hash3(p: vec2f) -> vec3f {
     col = textureSampleLevel(atlasTex, atlasSmp, st.rect.xy + vec2f(t.x, 1.0 - t.y) * st.rect.zw, 0.0);
   } else {
     let shape = st.flags.z;
-    col = shapeColor(shape, shapeDist(shape, i.local, i.hs), i.local, i.hs, st.color, st.stroke, i.sw);
+    col = shapeColor(shape, shapeDist(shape, i.local, i.hs, st.c), i.local, i.hs, st.color, st.stroke, i.sw);
   }
   col *= st.b.z;
   if (col.a < 0.004) { discard; }

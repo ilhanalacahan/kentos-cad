@@ -40,6 +40,7 @@ const UNITS = ['mm', 'px', 'm'];
 const SHAPE_NAMES: Record<ShapeName, true> = {
   circle: true, ring: true, square: true, rectangle: true, diamond: true, triangle: true, pentagon: true, hexagon: true, octagon: true,
   star: true, cross: true, x: true, line: true, arrow: true, arrowhead: true, chevron: true, semicircle: true, quartercircle: true,
+  gear: true, arc: true,
 };
 const SHAPES = Object.keys(SHAPE_NAMES);
 const PLACEMENTS = ['interval', 'vertex', 'innerVertex', 'first', 'last', 'center', 'segmentCenter'];
@@ -88,6 +89,10 @@ export function validateSymbol(sym: unknown, where = 'sembol'): string[] {
           color(lw, l.fill, 'dolgu', true);
           color(lw, l.stroke, 'çizgi rengi', true);
           num(lw, l.strokeWidth, 'çizgi kalınlığı', { min: 0 });
+          num(lw, l.hole, 'delik', { min: 0 });
+          num(lw, l.teeth, 'diş sayısı', { min: 3 });
+          num(lw, l.teethDepth, 'diş derinliği', { min: 0 });
+          num(lw, l.sweep, 'yay açıklığı', { min: 0 });
           break;
         case 'svg':
         case 'raster':
@@ -107,6 +112,16 @@ export function validateSymbol(sym: unknown, where = 'sembol'): string[] {
             else if (l.dash.length && l.dash.every((d) => d === 0)) bad(lw, 'kesik deseninin toplamı sıfır olamaz');
           }
           num(lw, l.offset, 'kaydırma', { dd: true });
+          if (l.wave !== undefined) {
+            const w = l.wave;
+            if (!isObj(w) || !['sine', 'zigzag', 'square'].includes(String(w.shape))) bad(lw, 'dalga biçimi sine, zigzag ya da square olmalı');
+            else {
+              num(lw, w.length, 'dalga boyu', { min: 0.0001, optional: false });
+              num(lw, w.amplitude, 'dalga genliği', { min: 0, optional: false });
+              num(lw, w.spacing, 'dalga tekrarı', { min: 0.0001 });
+              num(lw, w.offsetAlong, 'ilk dalga uzaklığı');
+            }
+          }
           break;
         case 'markerLine':
           if (!PLACEMENTS.includes(String(l.placement))) bad(lw, `bilinmeyen yerleşim “${String(l.placement)}”`);

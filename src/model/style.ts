@@ -55,7 +55,9 @@ export type ShapeName =
   | 'arrowhead'
   | 'chevron'
   | 'semicircle'
-  | 'quartercircle';
+  | 'quartercircle'
+  | 'gear'
+  | 'arc';
 
 export type Anchor = 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -77,6 +79,13 @@ export interface ShapeMarker extends MarkerBase {
   readonly fill?: DataDefined<Color> | null;
   readonly stroke?: DataDefined<Color> | null;
   readonly strokeWidth?: number;
+  /** Closed shapes: a round hole, as a share of the radius (0–0.95; a gear's axle, a washer). */
+  readonly hole?: number;
+  /** "gear": number of square teeth (default 12) and their depth as a share of the radius (default 0.2). */
+  readonly teeth?: number;
+  readonly teethDepth?: number;
+  /** "arc": the opening in degrees, centred on the top (default 180). */
+  readonly sweep?: number;
 }
 
 export interface SvgMarker extends MarkerBase {
@@ -142,6 +151,12 @@ export interface LineWave {
   readonly amplitude: number;
   readonly spacing?: number;
   readonly connect?: boolean;
+  /**
+   * Where the first wave starts, from the path's start. When absent the
+   * waves are centred on the path; when set, marker lines with the same
+   * interval and offset stay in step with the waves (sulak alan dots).
+   */
+  readonly offsetAlong?: number;
 }
 
 export type MarkerPlacement = 'interval' | 'vertex' | 'innerVertex' | 'first' | 'last' | 'center' | 'segmentCenter';

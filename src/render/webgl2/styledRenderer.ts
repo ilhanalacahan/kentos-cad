@@ -42,7 +42,7 @@ export interface StyledFrame {
 
 const FRAME_UNIFORMS = ['u_cam', 'u_pxPerM', 'u_dpr', 'u_viewPx'];
 const DASH_UNIFORMS = ['u_dash0', 'u_dash1', 'u_dashTotal', 'u_dashOn', 'u_dashOffset'];
-const PATTERN_UNIFORMS = ['u_size', 'u_rot', 'u_shift', 'u_stagger', 'u_jitter', 'u_coverage', 'u_seed', 'u_reach', 'u_unit', 'u_shape', 'u_half', 'u_markOff', 'u_markRot', 'u_fill', 'u_stroke', 'u_strokeW', 'u_tint', 'u_opacity'];
+const PATTERN_UNIFORMS = ['u_size', 'u_rot', 'u_shift', 'u_stagger', 'u_jitter', 'u_coverage', 'u_seed', 'u_reach', 'u_unit', 'u_shape', 'u_sp', 'u_half', 'u_markOff', 'u_markRot', 'u_fill', 'u_stroke', 'u_strokeW', 'u_tint', 'u_opacity'];
 const SHAPE_INDEX = new Map<string, number>(SHAPE_IDS.map((s, i) => [s, i]));
 const NONE: RGBA = [0, 0, 0, 0];
 
@@ -99,7 +99,7 @@ void main() { outColor = u_color; }`;
     this.hatch = make(AREA_VS, HATCH_FS, ['a_pos'], [...FRAME_UNIFORMS, ...DASH_UNIFORMS, 'u_color', 'u_dir', 'u_spacing', 'u_width', 'u_offset', 'u_unit']);
     this.tile = make(AREA_VS, TILE_FS, ['a_pos'], [...FRAME_UNIFORMS, 'u_atlas', 'u_rect', 'u_tile', 'u_rot', 'u_shift', 'u_opacity', 'u_unit']);
     this.pattern = make(AREA_VS, PATTERN_FS, ['a_pos'], [...FRAME_UNIFORMS, ...PATTERN_UNIFORMS]);
-    this.marker = make(MARKER_VS, MARKER_FS, ['a_i0', 'a_i1'], [...FRAME_UNIFORMS, 'u_unit', 'u_offset', 'u_anchor', 'u_fit', 'u_aspect', 'u_strokeW', 'u_kind', 'u_shape', 'u_fill', 'u_stroke', 'u_atlas', 'u_rect', 'u_opacity']);
+    this.marker = make(MARKER_VS, MARKER_FS, ['a_i0', 'a_i1'], [...FRAME_UNIFORMS, 'u_unit', 'u_offset', 'u_anchor', 'u_fit', 'u_aspect', 'u_strokeW', 'u_kind', 'u_shape', 'u_sp', 'u_fill', 'u_stroke', 'u_atlas', 'u_rect', 'u_opacity']);
   }
 
   useAtlas(atlas: AtlasSource): void {
@@ -294,6 +294,7 @@ void main() { outColor = u_color; }`;
           gl.uniform1i(p.u.u_reach, r.reach);
           gl.uniform1i(p.u.u_unit, paint.unit === 'world' ? 0 : 1);
           gl.uniform1i(p.u.u_shape, SHAPE_INDEX.get(paint.shape) ?? 0);
+          gl.uniform4fv(p.u.u_sp, paint.params);
           gl.uniform2f(p.u.u_half, paint.half[0], paint.half[1]);
           gl.uniform2f(p.u.u_markOff, paint.markOffset[0], paint.markOffset[1]);
           gl.uniform2f(p.u.u_markRot, Math.cos(paint.markRotation), Math.sin(paint.markRotation));
@@ -332,6 +333,7 @@ void main() { outColor = u_color; }`;
           gl.uniform1i(p.u.u_kind, 0);
           gl.uniform1i(p.u.u_fit, 0);
           gl.uniform1i(p.u.u_shape, SHAPE_INDEX.get(look.shape) ?? 0);
+          gl.uniform4fv(p.u.u_sp, look.params);
           gl.uniform4fv(p.u.u_fill, look.fill ?? NONE);
           gl.uniform4fv(p.u.u_stroke, look.stroke ?? NONE);
           gl.uniform1f(p.u.u_strokeW, look.strokeWidth);

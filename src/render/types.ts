@@ -1,4 +1,5 @@
 import type { Vec2 } from '../model/geometry';
+import type { ShapeParams } from '../style/primitives';
 
 /**
  * Backend-agnostic scene description. Geometry is already relative to the
@@ -90,6 +91,7 @@ export type FillPaintBatch =
       half: readonly [number, number];
       markOffset: readonly [number, number];
       markRotation: number;
+      params: ShapeParams;
       size: readonly [number, number];
       stagger: boolean;
       angle: number;
@@ -112,10 +114,10 @@ export interface PaintFillBatch extends BatchExtent {
 }
 
 /** Shapes drawn from distance fields in the shader. */
-export type ShapeId = 'circle' | 'ring' | 'square' | 'rectangle' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'cross' | 'x' | 'line' | 'arrow' | 'arrowhead' | 'chevron' | 'semicircle' | 'quartercircle';
+export type ShapeId = 'circle' | 'ring' | 'square' | 'rectangle' | 'diamond' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'cross' | 'x' | 'line' | 'arrow' | 'arrowhead' | 'chevron' | 'semicircle' | 'quartercircle' | 'gear' | 'arc';
 
 export type MarkerLook =
-  | { kind: 'shape'; shape: ShapeId; fill: RGBA | null; stroke: RGBA | null; strokeWidth: number }
+  | { kind: 'shape'; shape: ShapeId; fill: RGBA | null; stroke: RGBA | null; strokeWidth: number; params: ShapeParams }
   /** An atlas image; `fit` says which side `size` gives (the other follows the image). */
   | { kind: 'image'; image: AtlasImage; fit: 'width' | 'height' };
 

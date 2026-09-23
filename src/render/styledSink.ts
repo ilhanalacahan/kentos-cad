@@ -59,19 +59,19 @@ interface Entry {
   h: number;
 }
 
-const SHAPE_IDS = new Set<string>(['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'chevron', 'semicircle', 'quartercircle']);
+const SHAPE_IDS = new Set<string>(['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'chevron', 'semicircle', 'quartercircle', 'gear', 'arc']);
 const shapeId = (s: string): ShapeId => (SHAPE_IDS.has(s) ? (s as ShapeId) : 'circle');
 const OPEN_SHAPES = new Set<string>(['cross', 'x', 'line', 'arrow', 'chevron']);
 
 /** Share of its box a shape covers when filled (for the far-zoom tint of patterns). */
-const FILLED_SHARE: Record<string, number> = { circle: 0.785, ring: 0.785, square: 1, rectangle: 1, diamond: 0.5, triangle: 0.43, pentagon: 0.6, hexagon: 0.65, octagon: 0.8, star: 0.35, semicircle: 0.39, quartercircle: 0.2, arrowhead: 0.4 };
+const FILLED_SHARE: Record<string, number> = { circle: 0.785, ring: 0.785, square: 1, rectangle: 1, diamond: 0.5, triangle: 0.43, pentagon: 0.6, hexagon: 0.65, octagon: 0.8, star: 0.35, semicircle: 0.39, quartercircle: 0.2, arrowhead: 0.4, gear: 0.7 };
 
 /** How much of a cell a pattern shape inks, 0–1. */
 function patternTint(m: ShapeMarkStyle, cellArea: number): number {
   const w = m.size;
   const h = m.height || m.size;
   let ink = 0;
-  if (m.fill && !OPEN_SHAPES.has(m.shape)) ink = w * h * (FILLED_SHARE[m.shape] ?? 0.6);
+  if (m.fill && !OPEN_SHAPES.has(m.shape)) ink = w * h * (FILLED_SHARE[m.shape] ?? 0.6) * (1 - m.params[0] * m.params[0]);
   else if (m.stroke || OPEN_SHAPES.has(m.shape)) ink = 3.2 * Math.max(w, h) * Math.max(m.strokeWidth, 0.05 * Math.max(w, h));
   return Math.min(1, ink / Math.max(cellArea, 1e-12));
 }
@@ -203,7 +203,7 @@ export class StyledSink implements PrimitiveSink {
     const op = style.common.opacity;
     switch (style.kind) {
       case 'shape':
-        return { kind: 'shape', shape: shapeId(style.shape), fill: style.fill ? this.rgba(style.fill, 1) : null, stroke: style.stroke ? this.rgba(style.stroke, 1) : null, strokeWidth: style.strokeWidth };
+        return { kind: 'shape', shape: shapeId(style.shape), fill: style.fill ? this.rgba(style.fill, 1) : null, stroke: style.stroke ? this.rgba(style.stroke, 1) : null, strokeWidth: style.strokeWidth, params: style.params };
       case 'text': {
         const color = resolveColor(style.color, this.opts.palette);
         const halo = style.halo ? { color: resolveColor(style.halo.color, this.opts.palette), width: style.halo.width / Math.max(style.size, 1e-9) } : null;
@@ -246,6 +246,7 @@ export class StyledSink implements PrimitiveSink {
           half: [m.size / 2, (m.height || m.size) / 2],
           markOffset: m.common.offset,
           markRotation: m.common.rotation,
+          params: m.params,
           size,
           stagger: p.stagger,
           angle: p.angle,
