@@ -154,7 +154,7 @@ Bütün boyutlar `--ui-scale` ile çarpılır. **Uygulama ayarları → Görün�
 │ └──┘                                                               0 ─── 50 m   │ Öznitelikler                       │
 ├ [alt panel: Komut geçmişi | Koordinat listesi | Uyarılar] (F2, isteğe bağlı)    │                                     │
 ├ Komut satırı (36) ─ İstem: [girdi……]                                          ⌃ │                                     │
-├ Durum çubuğu (28) ─ Y … X … │ mesaj │ n seçili │ ▪Kenet ▪Izgara ▫Orto ▫Kutupsal │ Ekran 1:2.470 │ TUREF / TM36 │ ○ Sunucu: yok │ WebGL2  ┤
+├ Durum çubuğu (28) ─ Y … X … │ mesaj │ n seçili │ ▪Kenet ▪Izgara ▫Orto ▫Kutupsal │ Ekran 1:2.470 │ TUREF / TM36 │ ● Buluta kaydedildi │ ○ Sunucu: yok │ WebGL2  ┤
 ```
 
 - En küçük kabuk boyutu 1100×600 px. Daha küçük pencerede sayfa kayar, yerleşim bozulmaz.
@@ -284,6 +284,19 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 - Hücreler: Y/X imleç koordinatı (tabular) │ son mesaj (5–9 sn görünür) │ seçim sayısı (amber) │ çizim yardımcıları │ ekran ölçeği │ koordinat sistemi │ sunucu │ çizim motoru (en sağda; çip simgesi ve "WebGL2" / "WebGPU"; WebGPU'da simge amber; tıklayınca motor seçme menüsü).
 - **Çizim yardımcısı düğmeleri** bir gösterge lambası taşır: kapalıyken boş kare, açıkken dolu amber kare. Metin kapalıyken üçüncül renktedir.
 - **Sunucu hücresi** yuvarlak bir lamba taşır (yardımcıların kare lambasından ayrılsın diye): bağlıyken dolu yeşil (`--c-ok`), sunucu yokken boş halka ve üçüncül metin (Faz A'da olağan durumdur, hata rengi kullanılmaz), sözleşme sürümü uyuşmazken dolu amber (`--c-warn`). Tıklamak yeniden denetler; ipucu sürümü ya da nedeni yazar.
+- **Kayıt hücresi** yalnızca bir bulut projesi açıkken görünür, sunucu hücresinin solunda durur ve aynı yuvarlak lambayı taşır. Yazısı ve lambası:
+  - dolu yeşil “Buluta kaydedildi”: yalnızca sunucu yanıtladıktan sonra ve bekleyen bir şey yokken;
+  - boş lamba, ikincil metin “Kaydedilecek: n” / “Kaydediliyor…”;
+  - amber “Çevrimdışı: n bekliyor”;
+  - kırmızı, dolu lamba “Çakışma: n” / “Kayıt hatası”;
+  - üçüncül metin “Salt okunur”.
+
+  Tıklamak işe yarayan sonraki adımı yapar: çakışmada çözüm penceresini açar, değilse hemen gönderir (`Ctrl+S` ile aynı). İpucu kurum › proje, son kayıt zamanı ve canlı bağlantının durumunu yazar. Sunucu hücresine tıklamak hesap menüsünü açar (giriş/çıkış, bulut projesi aç, buluta yükle, bağlantıyı denetle).
+- **Bulut pencereleri** (giriş, projeler, çakışma):
+  - `dialog--cloud` sınıfını kullanır. Alan etiketleri üstte ve ikincil renktedir.
+  - Hata satırı kırmızı ve `role="alert"`, ilerleme çubuğu amber ve 4 px'tir.
+  - Proje listesinde satır seçimi ve çift tıklamayla açma vardır; seçili satır amber vurguludur.
+  - Çakışma penceresinde birincil (amber) düğme güvenli seçenektir: “Sunucudakini al”. “Benimkini kaydet” ikincildir.
 
 ### 7.8 İpucu
 
