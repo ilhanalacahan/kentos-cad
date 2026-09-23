@@ -99,6 +99,7 @@ export const PICTOGRAM_NAMES = [
   'geri-donusum-yesil', // green recycling symbol with a thin black outline (colour)
   'biyolojik-tehlike', // biohazard: three crescents, inner ring, central hole (tehlikeli atık tesisleri)
   'kaptaj', // three wavy lines above an open trapezoid basin (su kaynakları toplama yeri)
+  'benekli-daire', // disc of free stippling: small dots at random inside a circle, no outline (turizm, günübirlik, golf discs)
   // MSP (EK-1e I): white pictograms on rounded tiles are drawn with the tile
   'msp-liman', // black rounded tile with a white anchor
   'msp-havalimani', // black rounded tile with a white airplane

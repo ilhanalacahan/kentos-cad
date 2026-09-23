@@ -11,6 +11,27 @@ import type { PictogramName } from './pictograms';
 
 const svg = (body: string): string => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">${body}</svg>`;
 
+/**
+ * Free stippling inside a circle (serbest noktalama): dots at random but
+ * never touching, from a fixed seed so the drawing never changes. One SVG
+ * mark replaces a group of shape marks (one atlas image instead of a GPU
+ * pass per dot).
+ */
+function stippledDisc(count: number, dot: number, gap: number, seed: number): string {
+  let s = seed >>> 0;
+  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const R = 48 - dot;
+  const pts: [number, number][] = [];
+  for (let tries = 0; pts.length < count && tries < count * 400; tries++) {
+    const x = (rnd() * 2 - 1) * R;
+    const y = (rnd() * 2 - 1) * R;
+    if (x * x + y * y > R * R) continue;
+    if (pts.some(([u, v]) => (u - x) ** 2 + (v - y) ** 2 < (2 * dot + gap) ** 2)) continue;
+    pts.push([x, y]);
+  }
+  return svg(`<g fill="currentColor">${pts.map(([x, y]) => `<circle cx="${(50 + x).toFixed(1)}" cy="${(50 + y).toFixed(1)}" r="${dot}"/>`).join('')}</g>`);
+}
+
 export const DRAWN: Partial<Record<PictogramName, string>> = {
   'serbest-bolge-bayragi': svg('<path fill="currentColor" fill-rule="evenodd" d="M22 6H76V43H30V94H22ZM30.5 12.5V36.5H69.5V12.5Z"/>'),
   'tufekler': svg('<g id="tf" fill="currentColor" transform="translate(35.1 6.5) rotate(-26)"><path d="M-1.9 0H.6V38L1.6 40 1.9 66 3.5 68.5V72L7.5 75 5.8 79.5 7.3 83.5 9.5 88 11 98H-.4V70.5L-2.8 66-4.3 63-3.3 53V42L-1.9 38Z"/><circle cx="4.2" cy="64.3" r="1.5" fill="none" stroke="currentColor" stroke-width="1.1"/></g><use href="#tf" transform="matrix(-1 0 0 1 99.4 0)"/>'),
@@ -87,6 +108,7 @@ export const DRAWN: Partial<Record<PictogramName, string>> = {
   'geri-donusum-bos': svg('<g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><path id="rb" d="M36 14.3L33.3 19A19.3 19.3 0 0 1 66.7 19L70.5 25.5L76.1 22.3L67.5 40L47.9 38.6L53.5 35.3L50 29.2L50.5 28.4ZM33.3 19L22.9 37L39.9 46.8L47.7 33.2Z"/><use href="#rb" transform="rotate(120 50 54.85)"/><use href="#rb" transform="rotate(240 50 54.85)"/></g>'),
   'geri-donusum-yesil': svg('<g fill="#00B050" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path id="ry" d="M35.3 13.9L32.6 18.6A20.1 20.1 0 0 1 67.4 18.6L71.2 25.1L76.8 21.9L67.5 40L47.2 39L52.8 35.7L50 30.8L51.2 28.8ZM33.5 17L22.2 36.6L40.6 47.2L49.4 31.9Z"/><use href="#ry" transform="rotate(120 50 54.85)"/><use href="#ry" transform="rotate(240 50 54.85)"/></g>'),
   'biyolojik-tehlike': svg('<mask id="bh"><rect width="100" height="100" fill="#000"/><circle cx="50" cy="35" r="26.9" fill="#fff"/><circle cx="32.9" cy="64.7" r="26.9" fill="#fff"/><circle cx="67.1" cy="64.7" r="26.9" fill="#fff"/><circle cx="50" cy="27.9" r="18.9" fill="#000"/><circle cx="26.7" cy="68.3" r="18.9" fill="#000"/><circle cx="73.3" cy="68.3" r="18.9" fill="#000"/><circle cx="50" cy="54.8" r="5.4" fill="#000"/><g stroke="#000" stroke-width="1.8"><path d="M50 54.8L50 42.2"/><path d="M50 54.8L39.1 61.1"/><path d="M50 54.8L60.9 61.1"/></g></mask><mask id="br"><rect width="100" height="100" fill="#000"/><circle cx="50" cy="27.9" r="17.1" fill="#fff"/><circle cx="26.7" cy="68.3" r="17.1" fill="#fff"/><circle cx="73.3" cy="68.3" r="17.1" fill="#fff"/></mask><g fill="currentColor"><rect width="100" height="100" mask="url(#bh)"/><circle cx="50" cy="54.8" r="22" fill="none" stroke="currentColor" stroke-width="6.3" mask="url(#br)"/></g>'),
+  'benekli-daire': stippledDisc(42, 3.2, 3, 20260923),
   'kaptaj': svg('<g fill="none" stroke="currentColor"><path stroke-width="4" stroke-linecap="round" d="M16 21C24 12 30 9 36 9C46 9 54 26 63 26C70 26 78 22 86 15M16 38C24 29 30 26 36 26C46 26 54 43 63 43C70 43 78 39 86 32M16 55C24 46 30 43 36 43C46 43 54 60 63 60C70 60 78 56 86 49"/><path stroke-width="3.6" stroke-linejoin="miter" d="M7.5 51 25.5 90H74.5L92.5 51"/></g>'),
   'msp-liman': svg('<mask id="ml"><path fill="#fff" d="M20.5 6H79.5Q94 6 94 20.5V79.5Q94 94 79.5 94H20.5Q6 94 6 79.5V20.5Q6 6 20.5 6Z"/><g fill="none" stroke="#000"><circle cx="50" cy="21.5" r="6.4" stroke-width="5"/><path stroke-width="8.2" d="M50 28V78"/><path stroke-width="7" d="M29 62C31 72 40 79 50 79S69 72 71 62"/></g><path fill="#000" d="M23 44.5 34.5 58.5 17.5 62ZM77 44.5 65.5 58.5 82.5 62Z"/></mask><path fill="currentColor" mask="url(#ml)" d="M20.5 6H79.5Q94 6 94 20.5V79.5Q94 94 79.5 94H20.5Q6 94 6 79.5V20.5Q6 6 20.5 6Z"/>'),
   'msp-havalimani': svg('<mask id="mh"><path fill="#fff" d="M20.5 6H79.5Q94 6 94 20.5V79.5Q94 94 79.5 94H20.5Q6 94 6 79.5V20.5Q6 6 20.5 6Z"/><path fill="#000" transform="translate(49 49.5) rotate(45)" d="M0-46C2.5-46 3.5-41 3.5-36V-18.5L37 15V18L3.5-1V23.5L13 33V36L3.5 33.5V36L0 38-3.5 36V33.5L-13 36V33L-3.5 23.5V-1L-37 18V15L-3.5-18.5V-36C-3.5-41-2.5-46 0-46Z"/></mask><path fill="currentColor" mask="url(#mh)" d="M20.5 6H79.5Q94 6 94 20.5V79.5Q94 94 79.5 94H20.5Q6 94 6 79.5V20.5Q6 6 20.5 6Z"/>'),
