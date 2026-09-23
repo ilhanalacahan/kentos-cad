@@ -69,6 +69,8 @@ export interface StrokeBatch extends BatchExtent {
   dash: readonly number[] | null;
   dashOffset: number;
   cap: 'butt' | 'round' | 'square';
+  /** Soft edge width in `unit` (0 = crisp). */
+  blur: number;
 }
 
 export const STROKE_STRIDE = 6;

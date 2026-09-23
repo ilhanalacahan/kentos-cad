@@ -137,6 +137,10 @@ export interface SimpleLine extends LayerBase {
   readonly rings?: 'all' | 'exterior' | 'interior';
   /** Draw the line as waves (sulak alan, enerji nakil hattı …) instead of straight. */
   readonly wave?: LineWave;
+  /** Soft edges over this width (a shadow); 0 or absent = crisp. */
+  readonly blur?: number;
+  /** Fixed shift on the page, whatever the line's direction: [right, up] (a drop shadow). */
+  readonly shift?: readonly [number, number];
 }
 
 /**

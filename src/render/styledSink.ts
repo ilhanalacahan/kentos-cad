@@ -133,11 +133,12 @@ export class StyledSink implements PrimitiveSink {
       dash: style.dash ? style.dash.slice(0, 8) : null,
       dashOffset: style.dashOffset,
       cap: style.cap,
+      blur: style.blur,
       bounds: [0, 0, 0, 0],
       reach: 0,
       reachUnit: style.unit,
     }));
-    e.w = Math.max(e.w, style.width / 2);
+    e.w = Math.max(e.w, style.width / 2 + style.blur);
     const n = path.length;
     const count = closed ? n : n - 1;
     let d = 0;

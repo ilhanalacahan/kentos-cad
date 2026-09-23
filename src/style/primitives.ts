@@ -22,6 +22,8 @@ export interface StrokeStyle {
   readonly dashOffset: number;
   readonly cap: 'butt' | 'round' | 'square';
   readonly join: 'miter' | 'round' | 'bevel';
+  /** Soft edge width in `unit` (0 = crisp). */
+  readonly blur: number;
   /** Symbol layer order: lower draws first (symbol levels). */
   readonly level: number;
 }

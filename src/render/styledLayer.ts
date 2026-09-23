@@ -68,7 +68,7 @@ export function buildStyledLayer(id: string, entities: readonly Entity[], style:
       // Dimensions keep their own hairline look (the dimension style is a later step).
       const l = layoutDimension(e);
       if (!l) return;
-      const hair = { color, opacity: 1, width: 0, unit: 'px' as const, dash: null, dashOffset: 0, cap: 'butt' as const, join: 'miter' as const, level: LEVEL_BASE.line + 500 };
+      const hair = { color, opacity: 1, width: 0, unit: 'px' as const, dash: null, dashOffset: 0, cap: 'butt' as const, join: 'miter' as const, blur: 0, level: LEVEL_BASE.line + 500 };
       for (const [p, q] of l.lines) sink.stroke(hair, [p, q], false);
       return;
     }

@@ -87,7 +87,7 @@ export class StyledRenderer {
   constructor(gl: WebGL2RenderingContext, compile: (vs: string, fs: string, attribs: string[], uniforms: string[]) => Omit<Program, 'frame'>) {
     this.gl = gl;
     const make = (vs: string, fs: string, attribs: string[], uniforms: string[]): Program => ({ ...compile(vs, fs, attribs, uniforms), frame: -1 });
-    this.stroke = make(STROKE_VS, STROKE_FS, ['a_seg', 'a_meta'], [...FRAME_UNIFORMS, ...DASH_UNIFORMS, 'u_width', 'u_unit', 'u_color', 'u_cap']);
+    this.stroke = make(STROKE_VS, STROKE_FS, ['a_seg', 'a_meta'], [...FRAME_UNIFORMS, ...DASH_UNIFORMS, 'u_width', 'u_blur', 'u_unit', 'u_color', 'u_cap']);
     const SOLID_FS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -257,6 +257,7 @@ void main() { outColor = u_color; }`;
         this.use(p, f);
         this.premultiplied(false);
         gl.uniform1f(p.u.u_width, b.width);
+        gl.uniform1f(p.u.u_blur, b.blur);
         gl.uniform1i(p.u.u_unit, b.unit === 'world' ? 0 : 1);
         gl.uniform4fv(p.u.u_color, b.color);
         gl.uniform1i(p.u.u_cap, b.cap === 'round' ? 1 : b.cap === 'square' ? 2 : 0);

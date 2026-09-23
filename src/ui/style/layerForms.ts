@@ -263,6 +263,8 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
         h('div', { class: 'sdf__hint' }, env.context === 'fill' ? 'Artı kaydırma çizgiyi alanın içine alır.' : 'Artı kaydırma çizim yönünün soluna alır.'),
         env.context === 'fill' ? row('Halkalar', select(l.rings ?? 'all', [{ value: 'all', label: 'Hepsi' }, { value: 'exterior', label: 'Yalnızca dış sınır' }, { value: 'interior', label: 'Yalnızca adalar' }], (v) => set({ rings: v }), 'Halkalar')) : null,
         waveForm(l.wave, (w) => set({ wave: w }), u),
+        pair(n('Yumuşatma', l.blur ?? 0, 'blur', { min: 0 }), pair(n('Gölge sağa', l.shift?.[0] ?? 0, 'shiftX'), n('Gölge yukarı', l.shift?.[1] ?? 0, 'shiftY'))),
+        h('div', { class: 'sdf__hint' }, 'Yumuşatma kenarı bu genişlikte soldurur; gölge kaydırması çizgiyi sayfada hep aynı yöne taşır (alt gölge için sağa ve aşağı).'),
       );
       break;
     case 'markerLine':
@@ -362,6 +364,13 @@ export function applyPatch(l: AnyLayer, patch: Patch): AnyLayer {
   const p: Record<string, unknown> = { ...patch };
   const cur = l as unknown as Record<string, unknown>;
   const offset = (cur.offset as readonly [number, number] | undefined) ?? [0, 0];
+  if ('shiftX' in p || 'shiftY' in p) {
+    const cs = (cur.shift as readonly [number, number] | undefined) ?? [0, 0];
+    const next: [number, number] = [Number(p.shiftX ?? cs[0]), Number(p.shiftY ?? cs[1])];
+    p.shift = next[0] || next[1] ? next : undefined;
+    delete p.shiftX;
+    delete p.shiftY;
+  }
   if ('offsetX' in p || 'offsetY' in p) {
     p.offset = [p.offsetX ?? offset[0], p.offsetY ?? offset[1]];
     delete p.offsetX;

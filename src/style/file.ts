@@ -112,6 +112,8 @@ export function validateSymbol(sym: unknown, where = 'sembol'): string[] {
             else if (l.dash.length && l.dash.every((d) => d === 0)) bad(lw, 'kesik deseninin toplamı sıfır olamaz');
           }
           num(lw, l.offset, 'kaydırma', { dd: true });
+          num(lw, l.blur, 'yumuşatma', { min: 0 });
+          if (l.shift !== undefined && (!Array.isArray(l.shift) || l.shift.length !== 2 || l.shift.some((v) => typeof v !== 'number' || !Number.isFinite(v)))) bad(lw, 'sayfa kaydırması iki sayı olmalı');
           if (l.wave !== undefined) {
             const w = l.wave;
             if (!isObj(w) || !['sine', 'zigzag', 'square'].includes(String(w.shape))) bad(lw, 'dalga biçimi sine, zigzag ya da square olmalı');

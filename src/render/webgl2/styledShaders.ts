@@ -52,6 +52,7 @@ layout(location = 0) in vec4 a_seg;  // ax, ay, bx, by
 layout(location = 1) in vec2 a_meta; // distance at a (m), end flags
 ${FRAME}
 uniform float u_width;
+uniform float u_blur; // soft edge width, in the unit
 uniform int u_unit; // 0 metres, 1 CSS px
 ${CORNERS}
 out vec2 v_local;
@@ -59,9 +60,11 @@ out float v_len;
 out float v_s0;
 flat out int v_ends;
 flat out float v_halfW;
+flat out float v_blur;
 void main() {
   float k = u_unit == 0 ? u_pxPerM : u_dpr;
   float halfW = max(u_width * k, 1.0) * 0.5;
+  float blur = max(u_blur * k, 1.0);
   vec2 A = toPx(a_seg.xy);
   vec2 B = toPx(a_seg.zw);
   vec2 d = B - A;
@@ -69,7 +72,7 @@ void main() {
   vec2 dir = len > 1e-4 ? d / len : vec2(1.0, 0.0);
   vec2 n = vec2(-dir.y, dir.x);
   vec2 c = CORNER[gl_VertexID];
-  float ext = halfW + 1.0;
+  float ext = halfW + 0.5 * blur + 1.0;
   float along = mix(-ext, len + ext, c.x);
   float across = mix(-ext, ext, c.y);
   gl_Position = pxToClip(A + dir * along + n * across);
@@ -78,6 +81,7 @@ void main() {
   v_s0 = a_meta.x * u_pxPerM;
   v_ends = int(a_meta.y + 0.5);
   v_halfW = halfW;
+  v_blur = blur;
 }`;
 
 export const STROKE_FS = /* glsl */ `#version 300 es
@@ -88,6 +92,7 @@ in float v_len;
 in float v_s0;
 flat in int v_ends;
 flat in float v_halfW;
+flat in float v_blur;
 uniform vec4 u_color;
 uniform int u_cap;   // 0 butt, 1 round, 2 square
 uniform int u_unit;
@@ -95,11 +100,16 @@ uniform float u_pxPerM;
 uniform float u_dpr;
 ${DASH}
 out vec4 outColor;
+/** Coverage t px inside an edge: a one-pixel ramp (antialiasing), or a smooth fade over the blur width. */
+float cover(float t) {
+  float c = clamp(t / v_blur + 0.5, 0.0, 1.0);
+  return v_blur > 1.0 ? smoothstep(0.0, 1.0, c) : c;
+}
 float capCover(float x, float y, int cap) {
-  if (cap == 1) return clamp(v_halfW + 0.5 - length(vec2(x, y)), 0.0, 1.0);
-  float body = clamp(v_halfW + 0.5 - y, 0.0, 1.0);
-  if (cap == 2) return body * clamp(v_halfW + 0.5 - x, 0.0, 1.0);
-  return body * clamp(0.5 - x, 0.0, 1.0);
+  if (cap == 1) return cover(v_halfW - length(vec2(x, y)));
+  float body = cover(v_halfW - y);
+  if (cap == 2) return body * cover(v_halfW - x);
+  return body * cover(-x);
 }
 void main() {
   float x = v_local.x;
@@ -108,7 +118,7 @@ void main() {
   // Path ends take the cap; joints between segments are round.
   if (x < 0.0) a = capCover(-x, y, (v_ends & 1) != 0 ? u_cap : 1);
   else if (x > v_len) a = capCover(x - v_len, y, (v_ends & 2) != 0 ? u_cap : 1);
-  else a = clamp(v_halfW + 0.5 - y, 0.0, 1.0);
+  else a = cover(v_halfW - y);
   float k = u_unit == 0 ? u_pxPerM : u_dpr;
   a *= dashCover(v_s0 + x, k);
   if (a < 0.004) discard;

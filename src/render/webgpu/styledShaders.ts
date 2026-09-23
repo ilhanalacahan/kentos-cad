@@ -70,6 +70,7 @@ struct StrokeOut {
 };
 @vertex fn strokeVs(@builtin(vertex_index) vi: u32, @location(0) seg: vec4f, @location(1) mt: vec2f) -> StrokeOut {
   let halfW = max(st.a.x * unitK(), 1.0) * 0.5;
+  let blur = max(st.b.x * unitK(), 1.0);
   let A = toPx(seg.xy);
   let B = toPx(seg.zw);
   let d = B - A;
@@ -78,7 +79,7 @@ struct StrokeOut {
   if (len > 1e-4) { dir = d / len; }
   let n = vec2f(-dir.y, dir.x);
   let c = corner(vi);
-  let ext = halfW + 1.0;
+  let ext = halfW + 0.5 * blur + 1.0;
   let along = mix(-ext, len + ext, c.x);
   let across = mix(-ext, ext, c.y);
   var o: StrokeOut;
@@ -90,11 +91,18 @@ struct StrokeOut {
   o.halfW = halfW;
   return o;
 }
+// Coverage t px inside an edge: a one-pixel ramp, or a smooth fade over the blur width (see the GLSL twin).
+fn cover(t: f32) -> f32 {
+  let blur = max(st.b.x * unitK(), 1.0);
+  let c = clamp(t / blur + 0.5, 0.0, 1.0);
+  if (blur > 1.0) { return smoothstep(0.0, 1.0, c); }
+  return c;
+}
 fn capCover(x: f32, y: f32, cap: u32, halfW: f32) -> f32 {
-  if (cap == 1u) { return clamp(halfW + 0.5 - length(vec2f(x, y)), 0.0, 1.0); }
-  let body = clamp(halfW + 0.5 - y, 0.0, 1.0);
-  if (cap == 2u) { return body * clamp(halfW + 0.5 - x, 0.0, 1.0); }
-  return body * clamp(0.5 - x, 0.0, 1.0);
+  if (cap == 1u) { return cover(halfW - length(vec2f(x, y))); }
+  let body = cover(halfW - y);
+  if (cap == 2u) { return body * cover(halfW - x); }
+  return body * cover(-x);
 }
 @fragment fn strokeFs(i: StrokeOut) -> @location(0) vec4f {
   let x = i.local.x;
@@ -109,7 +117,7 @@ fn capCover(x: f32, y: f32, cap: u32, halfW: f32) -> f32 {
     if ((i.ends & 2u) != 0u) { cap = st.flags.y; }
     a = capCover(x - i.len, y, cap, i.halfW);
   } else {
-    a = clamp(i.halfW + 0.5 - y, 0.0, 1.0);
+    a = cover(i.halfW - y);
   }
   a *= dashCover(i.s0 + x, unitK(), st.a.y, st.a.z, st.a.w);
   if (a < 0.004) { discard; }

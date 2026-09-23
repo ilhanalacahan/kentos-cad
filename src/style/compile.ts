@@ -225,6 +225,7 @@ function strokeStyle(layer: Extract<LineLayer, { type: 'simpleLine' }>, level: n
     dashOffset: layer.dashOffset ? (width.unit === 'px' ? layer.dashOffset : toWorld(layer.dashOffset, layer.unit, env)) : 0,
     cap: layer.cap ?? 'butt',
     join: layer.join ?? 'miter',
+    blur: layer.blur ? (width.unit === 'px' ? layer.blur : toWorld(layer.blur, layer.unit, env)) : 0,
     level,
   };
 }
@@ -234,7 +235,14 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
   if (!ddBool(layer.enabled, t, env)) return;
   const off = ddNumber(layer.offset, t, env, 0);
   const d = off ? toWorld(off, layer.unit, env) : 0;
-  const path = d ? offsetPath(pts, d, closed) : pts;
+  let path = d ? offsetPath(pts, d, closed) : pts;
+  // A page shift moves the whole line the same way (north-up view: the page's right is east).
+  const shift = layer.type === 'simpleLine' && layer.shift;
+  if (shift && (shift[0] || shift[1])) {
+    const dx = toWorld(shift[0], layer.unit, env);
+    const dy = toWorld(shift[1], layer.unit, env);
+    path = path.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }
   if (path.length < 2) return;
   if (layer.type === 'simpleLine') {
     const style = strokeStyle(layer, level, t, env);

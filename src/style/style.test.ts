@@ -121,6 +121,19 @@ describe('compiling symbols', () => {
     expect(edges('mm', '[Genişlik] / 2 * 1000 / $ölçek', 2000)).toBeCloseTo(6, 9);
     expect(edges('m', '[Yok] / 2', 1000)).toBeCloseTo(1, 9);
   });
+  it('shifts a shadow line the same way on the page and softens its edge', () => {
+    const sym: LineSymbol = { type: 'line', layers: [{ id: 's', type: 'simpleLine', color: '#808080', width: 1, blur: 0.8, shift: [0.6, -0.6] }] };
+    // Either drawing direction: the shift is on the page, not to the line's left.
+    for (const pts of [[v(0, 0), v(10, 0)], [v(10, 0), v(0, 0)]]) {
+      const out = new PrimitiveList();
+      compileSymbol(sym, styledGeometry(line(pts))!, { entity: line([]), index: 1 }, env(1000), out);
+      const p = out.strokes[0].path;
+      expect(p.map((q) => q.y)).toEqual([-0.6, -0.6].map((y) => expect.closeTo(y, 12)));
+      expect(Math.min(...p.map((q) => q.x))).toBeCloseTo(0.6, 12);
+      expect(out.strokes[0].style.blur).toBeCloseTo(0.8, 12);
+    }
+    expect(validateSymbol(sym)).toEqual([]);
+  });
   it('keeps text along a line upright, in the same box on the same side', () => {
     const sym: LineSymbol = {
       type: 'line',

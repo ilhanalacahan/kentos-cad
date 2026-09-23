@@ -244,7 +244,11 @@ function drawStroke(view: View, s: StrokeStyle, path: readonly Vec2[], closed: b
     g.setLineDash(s.dash.map((d) => len(view, d, s.unit)));
     g.lineDashOffset = len(view, s.dashOffset, s.unit);
   }
+  // A soft edge (shadow): the canvas blur spreads about twice its radius, the shaders fade over the full width.
+  const blur = s.blur ? len(view, s.blur, s.unit) / 2 : 0;
+  if (blur > 0.5) g.filter = `blur(${blur.toFixed(2)}px)`;
   g.stroke();
+  if (blur > 0.5) g.filter = 'none';
 }
 
 function clipRings(view: View, rings: readonly (readonly Vec2[])[]): { minX: number; minY: number; maxX: number; maxY: number } {

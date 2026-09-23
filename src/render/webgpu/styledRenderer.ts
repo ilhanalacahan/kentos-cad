@@ -153,6 +153,7 @@ export class WebGPUStyledRenderer {
       f.set(b.color, 0);
       const v = dash(b.dash);
       f.set([b.width, v.total, v.on, b.dashOffset], 20);
+      f.set([b.blur, 0, 0, 0], 24);
       u.set([b.unit === 'world' ? 0 : 1, b.cap === 'round' ? 1 : b.cap === 'square' ? 2 : 0, 0, 0], 32);
     } else if (b.kind === 'fill') {
       const p = b.paint;
