@@ -1,0 +1,146 @@
+{
+ "format": "kentos.numeric-fixtures",
+ "version": 1,
+ "source": "python decimal/fractions (independent of KentOS code)",
+ "cases": [
+  {
+   "input": {
+    "total": "100.00",
+    "weights": [
+     "1",
+     "1",
+     "1"
+    ],
+    "scale": 2,
+    "mode": "half_even",
+    "remainder": "largest_remainder"
+   },
+   "expected": {
+    "parts": [
+     "33.34",
+     "33.33",
+     "33.33"
+    ],
+    "remainder": "0.01"
+   }
+  },
+  {
+   "input": {
+    "total": "100.00",
+    "weights": [
+     "1",
+     "1",
+     "1"
+    ],
+    "scale": 2,
+    "mode": "half_even",
+    "remainder": "reject"
+   },
+   "expected": {
+    "error": "needs_rule",
+    "remainder": "0.01"
+   }
+  },
+  {
+   "input": {
+    "total": "1000.0",
+    "weights": [
+     "3",
+     "7"
+    ],
+    "scale": 1,
+    "mode": "half_even",
+    "remainder": "reject"
+   },
+   "expected": {
+    "parts": [
+     "300.0",
+     "700.0"
+    ],
+    "remainder": "0"
+   }
+  },
+  {
+   "input": {
+    "total": "748.5151",
+    "weights": [
+     "0.3",
+     "0.3",
+     "0.4"
+    ],
+    "scale": 4,
+    "mode": "half_away_from_zero",
+    "remainder": "largest_remainder"
+   },
+   "expected": {
+    "parts": [
+     "224.5545",
+     "224.5545",
+     "299.4061"
+    ],
+    "remainder": "0.0001"
+   }
+  },
+  {
+   "input": {
+    "total": "10",
+    "weights": [
+     "1",
+     "1",
+     "1",
+     "1",
+     "1",
+     "1"
+    ],
+    "scale": 0,
+    "mode": "toward_zero",
+    "remainder": "largest_remainder"
+   },
+   "expected": {
+    "parts": [
+     "2",
+     "2",
+     "2",
+     "2",
+     "1",
+     "1"
+    ],
+    "remainder": "4"
+   }
+  },
+  {
+   "input": {
+    "total": "-5.00",
+    "weights": [
+     "1",
+     "2"
+    ],
+    "scale": 2,
+    "mode": "half_even",
+    "remainder": "largest_remainder"
+   },
+   "expected": {
+    "parts": [
+     "-1.67",
+     "-3.33"
+    ],
+    "remainder": "0"
+   }
+  },
+  {
+   "input": {
+    "total": "1.00",
+    "weights": [
+     "0",
+     "0"
+    ],
+    "scale": 2,
+    "mode": "half_even",
+    "remainder": "largest_remainder"
+   },
+   "expected": {
+    "error": "invalid_weights"
+   }
+  }
+ ]
+}

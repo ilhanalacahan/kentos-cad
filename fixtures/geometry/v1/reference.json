@@ -1,0 +1,207 @@
+{
+  "format": "kentos.geometry-reference",
+  "version": 1,
+  "source": "python fractions + 60-digit pi (independent of KentOS code)",
+  "note": "Coordinates and bulges are decimal text; implementations parse them to f64 as a file reader would.",
+  "cases": [
+    {
+      "name": "TM parsel alanı (ondalık metinden kesin)",
+      "op": "polygonArea",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "486512.34",
+              "4420187.52"
+            ],
+            [
+              "486535.757",
+              "4420188.723"
+            ],
+            [
+              "486538.221",
+              "4420218.986"
+            ],
+            [
+              "486514.344",
+              "4420220.532"
+            ]
+          ]
+        },
+        "holes": []
+      },
+      "expected": "748.5150935",
+      "bound": "1e-6"
+    },
+    {
+      "name": "TM adalı alan (ondalık metinden kesin)",
+      "op": "polygonArea",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "486512.34",
+              "4420187.52"
+            ],
+            [
+              "486535.757",
+              "4420188.723"
+            ],
+            [
+              "486538.221",
+              "4420218.986"
+            ],
+            [
+              "486514.344",
+              "4420220.532"
+            ]
+          ]
+        },
+        "holes": [
+          {
+            "pts": [
+              [
+                "486517.34",
+                "4420192.52"
+              ],
+              [
+                "486517.34",
+                "4420197.52"
+              ],
+              [
+                "486522.34",
+                "4420197.52"
+              ],
+              [
+                "486522.34",
+                "4420192.52"
+              ]
+            ]
+          }
+        ]
+      },
+      "expected": "723.5150935",
+      "bound": "1e-6"
+    },
+    {
+      "name": "tam daire, iki yarım yay (25π)",
+      "op": "polygonArea",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "-5",
+              "0"
+            ],
+            [
+              "5",
+              "0"
+            ]
+          ],
+          "bulges": [
+            "1",
+            "1"
+          ]
+        },
+        "holes": []
+      },
+      "expected": "78.5398163397448309615660845819875721049292349843776455243736",
+      "bound": "1e-12"
+    },
+    {
+      "name": "kare + yarım daire çıkıntı (100 + 12,5π)",
+      "op": "polygonArea",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "10",
+              "0"
+            ],
+            [
+              "10",
+              "10"
+            ],
+            [
+              "0",
+              "10"
+            ]
+          ],
+          "bulges": [
+            "1",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "holes": []
+      },
+      "expected": "139.269908169872415480783042290993786052464617492188822762187",
+      "bound": "1e-12"
+    },
+    {
+      "name": "kare − yarım daire girinti (100 − 12,5π)",
+      "op": "polygonArea",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "10",
+              "0"
+            ],
+            [
+              "10",
+              "10"
+            ],
+            [
+              "0",
+              "10"
+            ]
+          ],
+          "bulges": [
+            "-1",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "holes": []
+      },
+      "expected": "60.7300918301275845192169577090062139475353825078111772378132",
+      "bound": "1e-12"
+    },
+    {
+      "name": "yarım daire çevresi (10 + 5π)",
+      "op": "polygonPerimeter",
+      "input": {
+        "outer": {
+          "pts": [
+            [
+              "0",
+              "0"
+            ],
+            [
+              "10",
+              "0"
+            ]
+          ],
+          "bulges": [
+            "1",
+            "0"
+          ]
+        },
+        "holes": []
+      },
+      "expected": "25.7079632679489661923132169163975144209858469968755291048747",
+      "bound": "1e-12"
+    }
+  ]
+}
