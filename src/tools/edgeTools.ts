@@ -2,7 +2,7 @@ import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type EntityGeometry, type NewEntity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { closestOnEdge } from '../model/geom/intersect';
+import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { entityEdges } from '../model/ops/edges';
 import { offsetEntity } from '../model/ops/offset';
 import { extendEntity, trimEntity } from '../model/ops/trim';
@@ -181,63 +181,167 @@ export class OffsetTool extends EdgePickTool {
   }
 }
 
-export class TrimTool extends EdgePickTool {
-  readonly id = 'trim';
+/**
+ * Trim and extend share their boundaries: every visible edge (default,
+ * AutoCAD's quick mode) or the objects picked with "Sınır seç" (S). The
+ * chosen boundaries stay highlighted as the selection. Shift+click does
+ * the other operation, as in AutoCAD.
+ */
+abstract class BoundaryEdgeTool extends EdgePickTool {
+  private bounds: Set<number> | null = null;
+  protected pickingBounds = false;
+  protected shiftHeld = false;
 
-  protected refresh(): void {
-    this.prompt.set('Buda: silinecek parçaya tıklayın; diğer tüm görünen kenarlar sınırdır. Çıkmak için Esc');
+  /** Boundary edges, the target itself left out. */
+  protected boundaries(exceptId: number): Edge[] {
+    if (!this.bounds) return this.ctx.view.edgesIn(this.ctx.view.camera.visibleBounds(), exceptId);
+    const out: Edge[] = [];
+    for (const id of this.bounds) {
+      const e = id === exceptId ? null : this.ctx.doc.get(id);
+      if (e) out.push(...entityEdges(e));
+    }
+    return out;
   }
 
-  private result(e: Entity, at: Vec2) {
-    return trimEntity(e, at, this.ctx.view.edgesIn(this.ctx.view.camera.visibleBounds(), e.id));
+  /** Prompt tail: how boundaries are chosen now. */
+  protected boundsHint(): string {
+    const n = this.bounds?.size ?? 0;
+    return this.bounds ? `sınır: seçilen ${n} nesne; Tüm kenarlar (T) / Sınır seç (S)` : 'sınır: görünen tüm kenarlar; Sınır seç (S)';
+  }
+
+  protected abstract actionPrompt(): string;
+
+  protected refresh(): void {
+    const n = this.ctx.selection.size;
+    this.prompt.set(
+      this.pickingBounds
+        ? `${this.label}: sınır olacak nesnelere tıklayın, bitince sağ tıklayın (${n} seçili) [Tüm kenarlar (T)]`
+        : `${this.label}: ${this.actionPrompt()} [${this.boundsHint()}; Shift+tık: ${this.otherLabel}]`,
+    );
+    this.ctx.view.requestOverlay();
+  }
+
+  protected abstract readonly label: string;
+  protected abstract readonly otherLabel: string;
+
+  input(text: string): boolean {
+    const t = text.trim().toLocaleUpperCase('tr-TR');
+    if (t === 'S') {
+      this.pickingBounds = true;
+      this.ctx.selection.set([...(this.bounds ?? [])]);
+    } else if (t === 'T') {
+      this.bounds = null;
+      this.pickingBounds = false;
+      this.ctx.selection.clear();
+    } else return false;
+    this.refresh();
+    return true;
+  }
+
+  override pointerMove(p: ToolPointer): void {
+    this.shiftHeld = p.shift;
+    if (!this.pickingBounds) return super.pointerMove(p);
+    this.ctx.selection.hover.set(this.ctx.view.pick(p.screen)?.id ?? null);
   }
 
   pointerDown(p: ToolPointer): void {
     if (p.button !== 0) return;
+    if (this.pickingBounds) {
+      const e = this.ctx.view.pick(p.screen);
+      if (e) this.ctx.selection.toggle(e.id);
+      return this.refresh();
+    }
     const e = this.ctx.view.pickEdge(p.screen, this.editable);
-    if (!e) return this.ctx.log.warn('Budanacak düzenlenebilir bir kenara tıklayın.');
+    if (!e) return this.ctx.log.warn(`${p.shift ? this.otherLabel : this.label} için düzenlenebilir bir kenara tıklayın.`);
+    this.act(e, p.raw, p.shift);
+  }
+
+  protected abstract act(e: Entity, at: Vec2, other: boolean): void;
+
+  confirm(): void {
+    if (!this.pickingBounds) return this.ctx.tools.exit();
+    const ids = [...this.ctx.selection.ids.value];
+    this.bounds = ids.length ? new Set(ids) : null;
+    this.pickingBounds = false;
+    this.refresh();
+  }
+
+  cancel(): boolean {
+    if (!this.pickingBounds) return false;
+    this.pickingBounds = false;
+    this.ctx.selection.set([...(this.bounds ?? [])]);
+    this.refresh();
+    return true;
+  }
+
+  protected trimAt(e: Entity, at: Vec2): void {
     if (this.refuseHoled(e, 'budama')) return;
-    const r = this.result(e, p.raw);
+    const r = trimEntity(e, at, this.boundaries(e.id));
     if ('error' in r) return this.ctx.log.warn(r.error);
     this.replace('Buda', e, r.pieces);
     this.ctx.log.success(`Budandı: ${r.pieces.length} parça kaldı.`);
   }
 
-  draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (!this.hover || (this.hover.entity.kind === 'polygon' && this.hover.entity.holes?.length)) return;
-    const pal = this.ctx.view.palette;
-    const r = this.result(this.hover.entity, this.hover.world);
-    if ('error' in r) return;
-    // The whole object dashed red, kept pieces solid on top: what remains red is what goes.
-    strokeGeometry(g, view, entityGeometry(this.hover.entity), { color: pal.danger, dash: [5, 3], width: 2 });
-    for (const piece of r.pieces) strokeGeometry(g, view, piece, { color: pal.accent, width: 1.5 });
-  }
-}
-
-export class ExtendTool extends EdgePickTool {
-  readonly id = 'extend';
-
-  protected refresh(): void {
-    this.prompt.set('Uzat: uzatılacak ucun yakınına tıklayın; görünen kenarlar sınırdır. Çıkmak için Esc');
-  }
-
-  private result(e: Entity, at: Vec2) {
-    return extendEntity(e, at, this.ctx.view.edgesIn(this.ctx.view.camera.visibleBounds(), e.id));
-  }
-
-  pointerDown(p: ToolPointer): void {
-    if (p.button !== 0) return;
-    const e = this.ctx.view.pickEdge(p.screen, this.editable);
-    if (!e) return this.ctx.log.warn('Uzatılacak düzenlenebilir bir çizgi ya da yaya tıklayın.');
-    const r = this.result(e, p.raw);
+  protected extendAt(e: Entity, at: Vec2): void {
+    const r = extendEntity(e, at, this.boundaries(e.id));
     if ('error' in r) return this.ctx.log.warn(r.error);
     this.ctx.doc.update(e.id, r.geometry as Partial<Entity>);
     this.ctx.log.success('Uzatıldı.');
   }
 
+  /** Preview of trim (red goes, accent stays) or extend (dashed result). */
+  protected preview(g: CanvasRenderingContext2D, view: ViewTransform, trim: boolean): void {
+    if (!this.hover || this.pickingBounds) return;
+    const e = this.hover.entity;
+    const pal = this.ctx.view.palette;
+    if (trim) {
+      if (e.kind === 'polygon' && e.holes?.length) return;
+      const r = trimEntity(e, this.hover.world, this.boundaries(e.id));
+      if ('error' in r) return;
+      // The whole object dashed red, kept pieces solid on top: what remains red is what goes.
+      strokeGeometry(g, view, entityGeometry(e), { color: pal.danger, dash: [5, 3], width: 2 });
+      for (const piece of r.pieces) strokeGeometry(g, view, piece, { color: pal.accent, width: 1.5 });
+      return;
+    }
+    const r = extendEntity(e, this.hover.world, this.boundaries(e.id));
+    if ('geometry' in r) strokeGeometry(g, view, r.geometry, { color: pal.accent, dash: [4, 3], width: 1.5 });
+  }
+}
+
+export class TrimTool extends BoundaryEdgeTool {
+  readonly id = 'trim';
+  protected readonly label = 'Buda';
+  protected readonly otherLabel = 'uzat';
+
+  protected actionPrompt(): string {
+    return 'silinecek parçaya tıklayın';
+  }
+
+  protected act(e: Entity, at: Vec2, other: boolean): void {
+    if (other) this.extendAt(e, at);
+    else this.trimAt(e, at);
+  }
+
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (!this.hover) return;
-    const r = this.result(this.hover.entity, this.hover.world);
-    if ('geometry' in r) strokeGeometry(g, view, r.geometry, { color: this.ctx.view.palette.accent, dash: [4, 3], width: 1.5 });
+    this.preview(g, view, !this.shiftHeld);
+  }
+}
+
+export class ExtendTool extends BoundaryEdgeTool {
+  readonly id = 'extend';
+  protected readonly label = 'Uzat';
+  protected readonly otherLabel = 'buda';
+
+  protected actionPrompt(): string {
+    return 'uzatılacak ucun yakınına tıklayın';
+  }
+
+  protected act(e: Entity, at: Vec2, other: boolean): void {
+    if (other) this.trimAt(e, at);
+    else this.extendAt(e, at);
+  }
+
+  draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
+    this.preview(g, view, this.shiftHeld);
   }
 }

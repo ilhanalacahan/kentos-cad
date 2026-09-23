@@ -119,6 +119,8 @@ const farEnd = (l: LineEntity, near: Vec2) => (dist(l.a, near) <= dist(l.b, near
  * not touch are picked one after the other.
  */
 abstract class CornerTool extends EdgePickTool {
+  /** AutoCAD TRIMMODE: off leaves the sides alone and only adds the arc or cut. Shared by fillet and chamfer. */
+  private static trimSides = true;
   private stage: 'find' | 'second' | 'size' = 'find';
   private corner: Corner | null = null;
   private first: { entity: LineEntity | PolylineEntity; pick: Vec2 } | null = null;
@@ -135,10 +137,15 @@ abstract class CornerTool extends EdgePickTool {
   protected abstract describe(op: CornerOp): string;
   protected abstract done(op: CornerOp): string;
   protected abstract prompts(): { find: string; second: string; size: string };
+  /** The arc or cut alone, for "Kırp: hayır": sides of the corner stay untouched. */
+  protected abstract piece(op: CornerOp, c: Corner): EntityGeometry | null;
 
   protected refresh(): void {
     const p = this.prompts();
-    this.prompt.set(`${this.title}: ${this.stage === 'find' ? p.find : this.stage === 'second' ? p.second : p.size}`);
+    const step = this.stage === 'find' ? p.find : this.stage === 'second' ? p.second : p.size;
+    const trim = `Kırp (K): ${CornerTool.trimSides ? 'evet' : 'hayır'}`;
+    // Options live in one bracket: append to the step's own, or open one.
+    this.prompt.set(`${this.title}: ${this.stage === 'second' ? step : step.endsWith(']') ? `${step.slice(0, -1)} / ${trim}]` : `${step} [${trim}]`}`);
     this.ctx.view.requestOverlay();
   }
 
@@ -248,6 +255,11 @@ abstract class CornerTool extends EdgePickTool {
   }
 
   input(text: string): boolean {
+    if (text.trim().toLocaleUpperCase('tr-TR') === 'K' && this.stage !== 'second') {
+      CornerTool.trimSides = !CornerTool.trimSides;
+      this.refresh();
+      return true;
+    }
     if (this.stage !== 'size') return false;
     const op = this.opForText(text);
     if (!op) return false;
@@ -282,6 +294,15 @@ abstract class CornerTool extends EdgePickTool {
     const plan = this.corner!.plan(op);
     if ('error' in plan) return this.ctx.log.warn(plan.error);
     const { doc } = this.ctx;
+    if (!CornerTool.trimSides) {
+      const extra = this.piece(op, this.corner!);
+      if (!extra) return this.ctx.log.warn('Kırpmadan çalışırken sıfırdan büyük bir boyut verin; yoksa eklenecek bir şey yok.');
+      const like = this.corner!.entities[0];
+      doc.transact(this.title, () => doc.add({ ...extra, layerId: like.layerId, color: like.color, attrs: {} } as NewEntity));
+      this.remember(op);
+      this.ctx.log.success(`${this.done(op)} Kenarlar kırpılmadı.`);
+      return this.reset();
+    }
     doc.transact(this.title, () => {
       // Whole geometry replaced: a shape without arcs must not keep old bulges.
       for (const u of plan.updates) doc.update(u.entity.id, { bulges: undefined, ...u.geometry } as Partial<Entity>);
@@ -316,8 +337,13 @@ abstract class CornerTool extends EdgePickTool {
     // Where the rounding/cut starts on each side.
     for (const u of [c.u1, c.u2]) strokePath(g, view, [c.at, { x: c.at.x + u.x * t, y: c.at.y + u.y * t }], { color: pal.snap, width: 2 });
     if ('error' in plan) return;
-    for (const u of plan.updates) strokeGeometry(g, view, u.geometry, { color: pal.accent, dash: [5, 3], width: 2 });
-    if (plan.add) strokeGeometry(g, view, plan.add.geometry, { color: pal.accent, width: 2.5 });
+    if (!CornerTool.trimSides) {
+      const extra = this.piece(op, c);
+      if (extra) strokeGeometry(g, view, extra, { color: pal.accent, width: 2.5 });
+    } else {
+      for (const u of plan.updates) strokeGeometry(g, view, u.geometry, { color: pal.accent, dash: [5, 3], width: 2 });
+      if (plan.add) strokeGeometry(g, view, plan.add.geometry, { color: pal.accent, width: 2.5 });
+    }
     if (this.mouse) drawTag(g, view.worldToScreen(this.mouse), [this.describe(op), 'Tıklayın: uygula'], pal.accent, pal.labelHalo);
   }
 }
@@ -356,6 +382,19 @@ export class FilletTool extends CornerTool {
   protected done(op: CornerOp): string {
     return 'radius' in op && op.radius > 0 ? `Köşe ${this.ctx.format.length(op.radius)} yarıçapla yuvarlandı.` : 'Çizgiler köşede birleştirildi.';
   }
+  protected piece(op: CornerOp, c: Corner): EntityGeometry | null {
+    if (!('radius' in op) || !(op.radius > 0)) return null;
+    // Tangent points at r / tan(φ/2) along each side; centre on the bisector at r / sin(φ/2).
+    const t = op.radius / Math.tan(c.phi / 2);
+    const bis = unit({ x: 0, y: 0 }, { x: c.u1.x + c.u2.x, y: c.u1.y + c.u2.y });
+    const k = op.radius / Math.sin(c.phi / 2);
+    const centre = { x: c.at.x + bis.x * k, y: c.at.y + bis.y * k };
+    const angle = (u: Vec2) => Math.atan2(c.at.y + u.y * t - centre.y, c.at.x + u.x * t - centre.x);
+    const [a0, a1] = [angle(c.u1), angle(c.u2)];
+    // The fillet is the short arc between the tangent points; arcs run counter-clockwise.
+    const ccw = (((a1 - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) < Math.PI;
+    return { kind: 'arc', c: centre, r: op.radius, a0: ccw ? a0 : a1, a1: ccw ? a1 : a0 };
+  }
 }
 
 export class ChamferTool extends CornerTool {
@@ -393,5 +432,9 @@ export class ChamferTool extends CornerTool {
   }
   protected done(op: CornerOp): string {
     return 'd1' in op && (op.d1 > 0 || op.d2 > 0) ? `Pah kırıldı: ${this.text(op)}.` : 'Çizgiler köşede birleştirildi.';
+  }
+  protected piece(op: CornerOp, c: Corner): EntityGeometry | null {
+    if (!('d1' in op) || !(op.d1 > 0) || !(op.d2 > 0)) return null;
+    return { kind: 'line', a: { x: c.at.x + c.u1.x * op.d1, y: c.at.y + c.u1.y * op.d1 }, b: { x: c.at.x + c.u2.x * op.d2, y: c.at.y + c.u2.y * op.d2 } };
   }
 }

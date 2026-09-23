@@ -502,6 +502,20 @@ try {
   check('uzat-kısalt: typed total length at the clicked end', Math.abs(longer.b.x - (AX + 122)) < 1e-9 && longer.a.x === AX + 110);
   await key('Escape');
 
+  // Buda with a chosen boundary (S): only that object cuts.
+  const hLine = await addGeom({ kind: 'line', a: { x: AX + 100, y: N - 50 }, b: { x: AX + 120, y: N - 50 } });
+  await addGeom({ kind: 'line', a: { x: AX + 105, y: N - 55 }, b: { x: AX + 105, y: N - 45 } });
+  await addGeom({ kind: 'line', a: { x: AX + 110, y: N - 55 }, b: { x: AX + 110, y: N - 45 } });
+  await key('t', { shift: true });
+  await key('s');
+  await b.click(...(await toScreen(AX + 110, N - 47)));
+  await key('Enter');
+  await b.click(...(await toScreen(AX + 116, N - 50)));
+  const trimmedH = await b.eval(`window.kentos.doc.get(${hLine}) ?? [...window.kentos.doc.all()].filter(e => e.kind === 'line' && e.a.y === ${N - 50} && e.b.y === ${N - 50})[0]`);
+  check('buda with a chosen boundary cuts only there', Math.abs(Math.max(trimmedH.a.x, trimmedH.b.x) - (AX + 110)) < 1e-9);
+  await key('t');
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
