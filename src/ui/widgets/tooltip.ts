@@ -15,6 +15,8 @@ const DELAY = 450;
 let tip: HTMLElement | null = null;
 let timer = 0;
 let owner: HTMLElement | null = null;
+/** Target waiting for the show delay. */
+let pending: HTMLElement | null = null;
 /** Once a tooltip was shown, neighbours appear instantly (toolbar scanning). */
 let warmUntil = 0;
 
@@ -50,7 +52,10 @@ function show(target: HTMLElement, content: TooltipContent, placement: 'right' |
   el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
 }
 
-export function hideTooltip(): void {
+/** Hides the tooltip; with `scope`, only when it belongs to an element inside it (a list about to be redrawn). */
+export function hideTooltip(scope?: HTMLElement): void {
+  if (scope && !(owner && scope.contains(owner)) && !(pending && scope.contains(pending))) return;
+  pending = null;
   clearTimeout(timer);
   if (tip && owner) {
     delete tip.dataset.open;
@@ -59,26 +64,34 @@ export function hideTooltip(): void {
   owner = null;
 }
 
-/** Attach a rich tooltip; content is resolved lazily so shortcuts stay current. */
+/**
+ * Attach a rich tooltip; content is resolved lazily so shortcuts stay
+ * current. Content can be null to show nothing this time (a name that fits).
+ */
 export function tooltip(
   target: HTMLElement,
-  content: () => TooltipContent,
+  content: () => TooltipContent | null,
   placement: 'right' | 'bottom' | 'top' = 'bottom',
 ): Disposable {
   const enter = () => {
     clearTimeout(timer);
+    pending = target;
     const delay = performance.now() < warmUntil ? 0 : DELAY;
     timer = window.setTimeout(() => {
+      pending = null;
+      if (!target.isConnected) return;
+      const c = content();
+      if (!c) return;
       owner = target;
-      show(target, content(), placement);
+      show(target, c, placement);
     }, delay);
   };
   const subs = [
     listen(target, 'pointerenter', enter),
-    listen(target, 'pointerleave', hideTooltip),
-    listen(target, 'pointerdown', hideTooltip),
+    listen(target, 'pointerleave', () => hideTooltip()),
+    listen(target, 'pointerdown', () => hideTooltip()),
     listen(target, 'focus', enter),
-    listen(target, 'blur', hideTooltip),
+    listen(target, 'blur', () => hideTooltip()),
   ];
   return () => subs.forEach((d) => d());
 }

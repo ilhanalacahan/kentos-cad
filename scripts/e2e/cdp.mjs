@@ -1,12 +1,17 @@
 // Minimal headless-Chrome driver over the DevTools protocol (no dependencies).
 // Chrome binary: $CHROME_BIN or `google-chrome`. Screenshots go to scripts/e2e/out/.
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const OUT = join(new URL('.', import.meta.url).pathname, 'out');
-const PORT = Number(process.env.CDP_PORT ?? 9333);
+/**
+ * DevTools port: 0 lets Chrome pick a free one (read back from the profile's
+ * DevToolsActivePort file), so several browsers can run side by side. A
+ * fixed port made a second browser attach to the first one's page.
+ */
+const PORT = Number(process.env.CDP_PORT ?? 0);
 
 /**
  * Flags that give headless Chrome a working WebGPU device on SwiftShader.
@@ -30,10 +35,12 @@ export async function launch(url, { width = 1600, height = 900, args = [] } = {}
     ...args,
     'about:blank',
   ], { stdio: 'ignore' });
+  let port = PORT;
   let targets;
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 100; i++) {
     try {
-      targets = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+      if (!port) port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
+      targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
       if (targets.some((t) => t.type === 'page')) break;
     } catch {}
     await sleep(100);

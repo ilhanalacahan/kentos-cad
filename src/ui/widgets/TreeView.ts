@@ -1,5 +1,6 @@
 import { h } from '../dom';
 import { icon } from '../icons';
+import { hideTooltip, tooltip, type TooltipContent } from './tooltip';
 
 export interface TreeAdapter<T> {
   id(node: T): string;
@@ -25,6 +26,8 @@ export interface TreeAdapter<T> {
    * a second click on the selected node closes it; the caret still toggles.
    */
   readonly clickToggles?: boolean;
+  /** Hover tooltip for a row (e.g. the full name when it is cut short); null shows none. */
+  tip?(node: T, row: HTMLElement): TooltipContent | null;
 }
 
 /** Generic keyboard-accessible tree (role=tree), re-rendered from the model. */
@@ -53,6 +56,8 @@ export class TreeView<T> {
   render(roots: readonly T[]): void {
     this.roots = roots;
     const a = this.adapter;
+    // Rows are replaced: a tooltip of an old row would stay open with nothing under the pointer.
+    hideTooltip(this.el);
     this.el.textContent = '';
     this.flat = [];
     const q = this.query;
@@ -85,6 +90,7 @@ export class TreeView<T> {
           content,
         );
         a.renderRow(n, content);
+        if (a.tip) tooltip(row, () => a.tip!(n, row), 'right');
         caret.addEventListener('click', (e) => {
           e.stopPropagation();
           if (hasKids) a.setExpanded(n, !a.isExpanded(n));

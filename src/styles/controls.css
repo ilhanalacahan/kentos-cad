@@ -265,6 +265,8 @@
   position: fixed;
   top: 0;
   left: 0;
+  /* Above dialogs opened after the tooltip element was made (same overlay root). */
+  z-index: 10;
   max-width: 280px;
   padding: 7px 9px 8px;
   background: var(--c-tooltip);

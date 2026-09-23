@@ -9,6 +9,7 @@ import { Dialog } from '../widgets/Dialog';
 import { PopupMenu } from '../widgets/PopupMenu';
 import { segmented } from '../widgets/controls';
 import { TreeView } from '../widgets/TreeView';
+import { hideTooltip, tooltip } from '../widgets/tooltip';
 import { renderDetails, renderImport, type DetailsHost } from './managerDetails';
 import { downloadStyles, pickStyleFile } from './styleFiles';
 import { symbolOfItem, Thumbs } from './thumbs';
@@ -148,7 +149,7 @@ class StyleManager implements DetailsHost {
         renderRow: (n, row) =>
           row.append(
             icon(n.path.length ? 'folder' : n.source === 'system' ? 'lock' : n.source === 'user' ? 'styles' : 'save', 15),
-            h('span', { class: 'tree__name', title: n.description ? `${n.label}\n${n.description}` : n.label }, n.label),
+            h('span', { class: 'tree__name' }, n.label),
             h('span', { class: 'smgr__count' }, String(n.count)),
           ),
         onSelect: (n) => {
@@ -163,6 +164,12 @@ class StyleManager implements DetailsHost {
         },
         empty: () => 'Kitaplık boş.',
         clickToggles: true,
+        // The full name when it is cut short, and the category's description.
+        tip: (n, row) => {
+          const name = row.querySelector<HTMLElement>('.tree__name');
+          const cut = !!name && name.scrollWidth > name.clientWidth + 1;
+          return cut || n.description ? { title: n.label, description: n.description } : null;
+        },
       },
       'Sembol kategorileri',
     );
@@ -254,15 +261,18 @@ class StyleManager implements DetailsHost {
     const cards = this.listed.map((item) => {
       const card = h(
         'button',
-        { class: 'scard', type: 'button', role: 'option', 'aria-selected': String(item.id === this.selected), title: `${item.name}\n${item.path.join(' › ')}`, dataset: { id: item.id } },
+        { class: 'scard', type: 'button', role: 'option', 'aria-selected': String(item.id === this.selected), 'aria-label': item.name, dataset: { id: item.id } },
         this.thumbs.canvas(symbolOfItem(item), 116, 66),
         h('span', { class: 'scard__name' }, item.name),
         this.query ? h('span', { class: `scard__src scard__src--${item.source}` }, SOURCES.find((s) => s.source === item.source)!.label) : null,
       );
+      // The full name (card names are cut to two lines) and where the item sits.
+      tooltip(card, () => ({ title: item.name, description: item.path.join(' › ') }), 'bottom');
       card.addEventListener('click', () => this.select(item.id));
       card.addEventListener('dblclick', () => (this.pick ? this.choose() : this.edit(item.id)));
       return card;
     });
+    hideTooltip(this.grid);
     replaceChildren(this.grid, cards.length ? cards : h('div', { class: 'smgr__empty' }, this.query ? 'Aramayla eşleşen sembol yok.' : 'Bu kategoride sembol yok.'));
     this.refreshDetails();
   }
