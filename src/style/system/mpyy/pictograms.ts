@@ -26,6 +26,8 @@ export const PICTOGRAM_NAMES = [
   'balik', // fish silhouette facing right, eye as a hole
   'dinamit', // tilted dynamite stick with a burning spark at the fuse
   'resmi-kurum', // circle, right half filled (resmi kurum)
+  'disli', // hollow cog wheel, 12 square teeth, hole 5/7 of the outer diameter (TGB, OSB, endüstri, serbest bölge sınırları)
+  'disli-dolu', // solid cog wheel, 12 square teeth (serbest bölge sınırı)
   // Turizm, tarım, doğa
   'cadir', // tent: two poles crossing at the apex, small filled door triangle
   'kayakci', // downhill skier under a roof-like chevron
@@ -37,9 +39,13 @@ export const PICTOGRAM_NAMES = [
   'manzara', // view cone: viewpoint tick, two diverging rays, closing arc (kentsel görüntü öğeleri)
   'uc-konifer', // three filled conifers with trunks, middle smaller (milli park)
   'iki-katli-konifer', // two double-tiered filled conifers (tabiat parkı)
+  'uc-kucuk-konifer', // three small filled two-tier conifers in a row (tabiatı koruma alanı)
   'geyik', // leaping deer silhouette (yaban hayatı)
   'kaplumbaga', // sea turtle, top view, line drawing
   'fok', // monk seal lying, head raised, line drawing
+  'diken', // filled spiky tuft: pointed leaves fanning up from a flat base (doğal karakteri korunacak alan tarama)
+  'ot', // five thin blades fanning up from one point (ekolojik öneme sahip alan tarama)
+  'dalga', // one flat sine period ∼ across the full width, stroke 6 (a line marker: sulak alan sınırları)
   'hayvan-barinagi', // dog house with a paw print above the doorway
   'dort-konifer', // four outline conifers in two rows (ÇDP ağaçlandırılacak alan)
   'kent-ormani', // one conifer: two stacked open triangles on a thick trunk
@@ -91,10 +97,12 @@ export const PICTOGRAM_NAMES = [
   'geri-donusum', // filled recycling symbol, three chasing arrows
   'geri-donusum-bos', // outline recycling symbol
   'geri-donusum-yesil', // green recycling symbol with a thin black outline (colour)
+  'biyolojik-tehlike', // biohazard: three crescents, inner ring, central hole (tehlikeli atık tesisleri)
+  'kaptaj', // three wavy lines above an open trapezoid basin (su kaynakları toplama yeri)
   // MSP (EK-1e I): white pictograms on rounded tiles are drawn with the tile
   'msp-liman', // black rounded tile with a white anchor
   'msp-havalimani', // black rounded tile with a white airplane
-  'msp-lojistik', // red rounded tile with a white logistics pictogram (truck and crate)
+  'msp-lojistik', // red rounded tile with a white bold letter L (EK-1e s.5 lojistik merkezler)
 ] as const;
 
 export type PictogramName = (typeof PICTOGRAM_NAMES)[number];
