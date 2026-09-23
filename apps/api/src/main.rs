@@ -65,6 +65,7 @@ async fn serve(config: Config) -> Result<(), String> {
         database,
         oidc,
         hub: hub::Hub::default(),
+        logins: Default::default(),
     };
     let listener = tokio::net::TcpListener::bind(addr)
         .await

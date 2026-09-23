@@ -21,6 +21,8 @@ pub enum AppError {
         message: String,
         conflicts: Vec<FeatureConflict>,
     },
+    /// Too many attempts; try again after this many seconds (429).
+    Limited { message: String, retry_after: u64 },
     /// The database failed; the detail is logged, the client sees a generic message (500/503).
     Database(sqlx::Error),
 }
@@ -44,6 +46,7 @@ impl AppError {
             Self::NotFound(_) => "not_found",
             Self::Invalid(_) => "invalid",
             Self::Conflict { .. } => "conflict",
+            Self::Limited { .. } => "rate_limited",
             Self::Database(e) if is_unavailable(e) => "unavailable",
             Self::Database(_) => "internal",
         }
@@ -65,7 +68,7 @@ impl fmt::Display for AppError {
             | Self::Forbidden(m)
             | Self::NotFound(m)
             | Self::Invalid(m) => f.write_str(m),
-            Self::Conflict { message, .. } => f.write_str(message),
+            Self::Conflict { message, .. } | Self::Limited { message, .. } => f.write_str(message),
             Self::Database(e) if is_unavailable(e) => {
                 f.write_str("Veritabanına şu an ulaşılamıyor. Birazdan yeniden deneyin.")
             }

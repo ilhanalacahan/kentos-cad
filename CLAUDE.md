@@ -766,7 +766,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Bulut (Faz B) sınırları:
   - Tipli öznitelik şeması yok: öznitelikler sunucuda da metin (`properties jsonb`).
   - MVT/tile yayını yok; proje açılışı bütün nesneleri indirir (bbox'a göre kısmi açılış yok).
-  - Başarısız girişlerde hız sınırı yok; kurum/üye/koltuk yönetimi yalnız komut satırından; projeyi silme ve yeniden adlandırma arayüzü yok.
+  - Başarısız giriş sınırı süreç belleğinde ve giriş adına göre (ADR 0007); kurum/üye/koltuk yönetimi yalnız komut satırından; projeyi silme ve yeniden adlandırma arayüzü yok.
   - Katman görünürlüğü ve açık/kapalı durumu proje verisi (herkes için); etkin katman kişiye özel, eşitlenmez.
   - Çakışma çözümü bütün çakışmalar için tek seçim; nesne bazlı karşılaştırma yok.
   - Canlı olay sinyali tek sunucu sürecinde (çok süreçte 5 sn'lik denetim yakalar; PostgreSQL LISTEN/NOTIFY yok); outbox hiç budanmıyor.

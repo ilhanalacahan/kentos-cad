@@ -150,6 +150,15 @@ pub async fn login(
     }
     check_client_header(&axum::http::Method::POST, &headers).map_err(fail)?;
     let db = state.db().map_err(fail)?;
+    if let Some(retry_after) = state.logins.blocked(&req.login) {
+        return Err(fail(AppError::Limited {
+            message: format!(
+                "Bu hesapla çok sayıda yanlış giriş denendi; {} dakika sonra yeniden deneyin.",
+                retry_after.div_ceil(60)
+            ),
+            retry_after,
+        }));
+    }
     let Some(user) = identity::check_local_login(db, req.login.trim(), &req.password)
         .await
         .map_err(fail)?
@@ -158,10 +167,12 @@ pub async fn login(
             request_id = request_id(&headers).as_deref().unwrap_or("-"),
             "yerel giriş reddedildi"
         );
+        state.logins.failed(&req.login);
         return Err(fail(AppError::Unauthenticated(
             "Giriş adı ya da parola yanlış.".into(),
         )));
     };
+    state.logins.succeeded(&req.login);
     let token = identity::open_session(db, user, SignInMethod::Local)
         .await
         .map_err(fail)?;

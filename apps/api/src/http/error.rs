@@ -47,6 +47,7 @@ pub fn status_of(error: &AppError) -> StatusCode {
         AppError::NotFound(_) => StatusCode::NOT_FOUND,
         AppError::Invalid(_) => StatusCode::UNPROCESSABLE_ENTITY,
         AppError::Conflict { .. } => StatusCode::CONFLICT,
+        AppError::Limited { .. } => StatusCode::TOO_MANY_REQUESTS,
         AppError::Database(_) if error.code() == "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
         AppError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
@@ -62,13 +63,23 @@ impl IntoResponse for Failure {
             AppError::Conflict { conflicts, .. } => Some(conflicts.clone()),
             _ => None,
         };
+        let retry_after = match &self.error {
+            AppError::Limited { retry_after, .. } => Some(*retry_after),
+            _ => None,
+        };
         let body = ApiError {
             error: self.error.code().into(),
             message: self.error.to_string(),
             request_id: self.request_id,
             conflicts,
         };
-        (status, Json(body)).into_response()
+        let mut response = (status, Json(body)).into_response();
+        if let Some(secs) = retry_after {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, secs.into());
+        }
+        response
     }
 }
 

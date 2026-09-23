@@ -202,6 +202,14 @@ try {
     await sleep(200);
     await b.shot(`cloud-status-${theme}`);
   }
+  // The "Büyük" type size with a cloud dialog open.
+  await b.eval(`document.documentElement.style.setProperty('--ui-scale', '1.08')`);
+  await b.eval(`window.kentos.commands.execute('cloud.open')`);
+  await b.waitFor(`document.querySelector('.cloud-row')`, 5000);
+  await sleep(200);
+  await b.shot('cloud-projects-large');
+  await b.key('Escape');
+  await b.eval(`document.documentElement.style.setProperty('--ui-scale', '1')`);
   const errors = b.consoleLog.filter((l) => /^(error|EXCEPTION)/.test(l));
   check('no console errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

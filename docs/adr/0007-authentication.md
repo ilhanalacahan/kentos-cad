@@ -78,7 +78,9 @@ Parola ve oturum anahtarı için Rust kripto crate'i eklenmedi.
 
 ## Sonuçlar
 
+- **Başarısız giriş sınırı:** aynı giriş adıyla 15 dakikada 5 yanlış parola, o giriş adını pencerenin kalanında parolaya bakmadan reddeder (429, `Retry-After`); doğru giriş sayacı sıfırlar (`apps/api/src/http/limit.rs`).
+  - Sayaç sunucu sürecinin belleğindedir: yeniden başlatma unutur, birden çok süreç ayrı sayar.
+  - Giriş adına göre sayılır, IP'ye göre değil (geliştirmede istekler aynı vekil sunucudan gelir). Bu yüzden biri başkasının hesabını geçici olarak kilitleyebilir. Ağ geçidi gelince IP ile birleştirilmeli.
 - **Açık kalan işler:**
-  - Başarısız girişlerde hız sınırı yok. Şimdilik bcrypt'in maliyeti yavaşlatıyor; hesap ya da IP başına sınır Faz B sonunda eklenmeli.
   - Arayüzden davet ve koltuk yönetimi yok.
   - OpenID ile oturum kapatma (end_session) yok; yalnızca yerel oturum kapanır.

@@ -33,6 +33,7 @@ fn app(database: Option<Db>) -> Router {
         database,
         oidc: None,
         hub: crate::hub::Hub::default(),
+        logins: Default::default(),
     })
 }
 
@@ -398,5 +399,28 @@ async fn projects_commands_and_events_over_http() {
     no_header.headers_mut().remove("x-kentos-client");
     let (status, _, _) = send(&app, no_header).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn repeated_wrong_passwords_lock_the_login_for_a_while() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    admin::create_local_user(&db.owner, "ayse", "Ayşe", None, "dogru-parola-1").await.unwrap();
+    admin::create_local_user(&db.owner, "bora", "Bora", None, "dogru-parola-1").await.unwrap();
+    let app = app(Some(db.app.clone()));
+    for _ in 0..super::limit::MAX_FAILURES {
+        let (status, _, _) = send(&app, login_request("ayse", "yanlis-parola", true)).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    // Now even the right password waits, and the answer says for how long.
+    let (status, headers, body) = send(&app, login_request("AYSE", "dogru-parola-1", true)).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(headers.get(header::RETRY_AFTER).is_some());
+    assert_eq!(serde_json::from_slice::<ApiError>(&body).unwrap().error, "rate_limited");
+    // Another login is not affected.
+    let (status, _, _) = send(&app, login_request("bora", "dogru-parola-1", true)).await;
+    assert_eq!(status, StatusCode::OK);
     db.close().await;
 }

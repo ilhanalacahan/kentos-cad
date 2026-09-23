@@ -3,6 +3,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod limit;
 pub mod projects;
 #[cfg(test)]
 mod tests;
@@ -38,6 +39,7 @@ pub struct AppState {
     pub database: Option<Db>,
     pub oidc: Option<Arc<Oidc>>,
     pub hub: Hub,
+    pub logins: Arc<limit::LoginLimiter>,
 }
 
 impl AppState {
