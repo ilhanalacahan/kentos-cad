@@ -15,6 +15,7 @@ import { ViewportController } from '../viewport/ViewportController';
 import { Clipboard } from './clipboard';
 import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
+import { DocumentFiles } from './fileIO';
 import { registerDefaultKeybindings } from './keybindings';
 import { createProcessing, registerProcessingCommands } from './processing';
 import { createStyles, registerStyleCommands } from './styles';
@@ -57,9 +58,12 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     // The visible area is read lazily: the viewport exists only after the context.
     processing: createProcessing(doc, selection, () => ctx.view.camera.visibleBounds()),
     styles: createStyles(doc),
-  } as AppContext & { tools: ToolManager; view: ViewportController };
+  } as AppContext & { tools: ToolManager; view: ViewportController; files: DocumentFiles };
   ctx.tools = new ToolManager(ctx);
   ctx.view = new ViewportController(ctx);
+  ctx.files = new DocumentFiles(ctx);
+  // Closing the tab with unsaved changes asks first. Not in development, where Vite reloads the page on every edit.
+  if (import.meta.env.PROD) window.addEventListener('beforeunload', (e) => doc.dirty.value && e.preventDefault());
   TOOL_CATALOG.forEach((d) => ctx.tools.register(d));
 
   let shell: AppShell | null = null;

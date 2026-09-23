@@ -188,6 +188,7 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 | `clipboard`  | `Clipboard`          | Kopyalanan nesneler (oturumluk; `app/clipboard.ts`)                                                                                       |
 | `processing` | `ProcessingService`  | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`)                                               |
 | `styles`     | `StyleService`       | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
+| `files`      | `DocumentFiles`      | Yerel çizim dosyası (.kcad): kaydet, farklı kaydet, aç; kaydedilen dosyanın tutamacı (`app/fileIO.ts`)                                     |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -319,6 +320,9 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 ### 4.8 Belge modeli (`model/`)
 
 - **`CadDocument`:** varlıklar `Map<id, Entity>` içinde durur. Bütün düzenlemeler `add`, `update`, `remove` ve bunları gruplayan `transact(label, fn)` üzerinden yapılır. Her işlem tersine çevrilebilir bir `Op` olarak kaydedilir; geri alma yığını 200 adımla sınırlıdır. `transact` ya hep ya hiç çalışır: `fn` hata fırlatırsa yaptıkları geri alınır, hiçbir şey kaydedilmez ve `dirty` değişmez. İç içe çağrı bir kayıt noktasıdır; gerekçe [docs/adr/0003-transaction-semantics.md](docs/adr/0003-transaction-semantics.md)'de.
+- **Kaydedilmemiş işareti (`dirty`) belgenin sürümünden gelir:** her kayıt, geri alma, yineleme, proje ayarı, ad, stil kitaplığı ve katman ağacı ya da katman durumu değişikliği `doc.revision`'ı artırır. `markSaved(revision)` yalnızca yazılan sürüm hâlâ güncelse işareti temizler; yazım sürerken yapılan değişiklik kaydedilmemiş kalır.
+- **Çizim dosyası (.kcad)** sürümlü `DocumentSnapshotV1`'dir (`model/snapshot.ts`, sözleşme `crates/contracts`): nesneler, katman ağacı, proje ayarları, yerel orijin, başlangıç görünümü ve projenin stil kitaplığı. Koordinatlar JSON'da float64 olarak bit bit korunur. Okuyucu biçimi, sürümü ve her alanı doğrular; bilinmeyen sürüm, tür ya da SRID “yer: sorun” biçiminde Türkçe hatayla reddedilir, tahmin edilmez. `doc.replaceWith(içerik)` açık belgeyi yerinde değiştirir (`ctx.doc` aynı nesne kalır), geçmişi siler ve belgeyi temiz başlatır; açık bir işlem ya da grup varken reddedilir.
+- **Kaydet/Aç** (`app/fileIO.ts`, `ctx.files`): Kaydet (`Ctrl+S`) açılan ya da son kaydedilen dosyaya sormadan yazar, ilk seferde Farklı kaydet (`Ctrl+Shift+S`) gibi yer sorar; proje dosyanın adını (uzantısız) alır. Tarayıcının dosya penceresi (File System Access API) kullanılır; işaret yalnızca yazıcı hatasız kapanınca temizlenir. Dosyaya yazamayan tarayıcıda çizim indirme olarak verilir ve kaydedilmemiş sayılır, çünkü saklandığı doğrulanamaz. Aç (`Ctrl+O`) kaydedilmemiş değişiklik varsa önce sorar (Kaydet ve devam et / Kaydetmeden devam et / Vazgeç); dosyadaki proje stilleri paylaşılan .kstil gibi doğrulanır. Üretim derlemesinde kaydedilmemiş değişiklikle sekme kapatılırken tarayıcı sorar. Duman testi tarayıcı penceresi yerine bellek içi bir seçici (`kentos.files.picker`) kullanır.
 - **Olaylar:**
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
   - `attrs { ids }`: yalnızca öznitelik değişti; tampon kurulmaz, etiket ve panel yenilenir.
@@ -609,6 +613,9 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `style/svg/trace.test.ts` | Bitmap izleme: parlaklık ve alfa, tek piksel halkası, keskin köşeli kare, delikli halka ve içindeki ada, çapraz şeridin merdiveni, benek temizliği (gürültü), yumuşak düğümlü disk ve alanı, kapalı halkada Douglas–Peucker |
 | `model/geom/golden.test.ts` | Rust çekirdeğiyle paylaşılan golden geometri durumları (`fixtures/geometry/v1/cases.json`): bulge yayı, uzunluk, halka ve işaretli alan, nokta-çokgen, delikli alan ve çevre; TM koordinatları; tolerans dosyada |
 | `model/geom/reference.test.ts` | Bağımsız kesin referansa (Python kesirleri, 60 basamak π; `fixtures/geometry/v1/reference.json`) göre doğruluk: ondalık metinden TM parsel ve adalı alan, yaylı alanlar ve çevre; her durumun hata sınırı içinde (§23.4) |
+| `model/snapshot.test.ts` | .kcad dosyası: 13 nesne türünün TM koordinatında bit bit gidiş-dönüşü (bulge, delik, elips, ölçü, proje sembolü), kilitli örnek dosyaya (`fixtures/document/v1/sample.json`) eşitlik, bozuk dosyaların Türkçe “yer: sorun” iletisiyle reddi, `dirty` akışı (geri alma, katman durumu, yazım sürerken yapılan değişiklik) |
+| `app/fileIO.test.ts` | Kaydet/Aç (bellek içi dosyayla): işaret yalnızca yazımdan sonra temizlenir, yazım hatası ve vazgeçme kaydedilmemiş bırakır, yazım sürerken yapılan değişiklik kaydedilmemiş kalır, bozuk dosya açık çizime dokunmaz, yazılamayan dosya kayıt hedefi olmaz, aynı anda tek dosya komutu |
+| `contracts/contracts.test.ts` | Uygulama tiplerinin (`Entity`, `LayerNode`, `ProjectSettings`, `StyleFile`, `RunJob` …) Rust'tan üretilen sözleşmelere derleme anında uyması (`tsc` denetler) |
 | `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
 | `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
 | `style/svg/arrange.test.ts` | Birimler (grup tek birim, seçim sırası), seçime/ilk/son/en büyük/tuvale hizalama, blok olarak hizalama, eşit aralık ve eşit boşluk; taşı (göreli, mutlak, ayrı ayrı adımla), ölçek, döndürme yönü ve merkezi, eğme, kutuya göre matris; satır-sütun, dairesel (tam tur ve yay, dönmeden) ve aynalı dizi, kopyaların grupları; sıra (öne, arkaya, en öne, en arkaya) |
@@ -690,7 +697,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 
 ## 11. Teknik borç ve bilinen kısayollar
 
-- Örnek proje kodla üretiliyor (`model/sampleProject.ts`). Dosya açma ve kaydetme yok; bilinçli olarak ertelendi, çünkü kayıt bulut üzerinde olacak ve sunucu tarafı henüz yok. "Kaydet" yalnızca kaydedilmemiş işaretini temizliyor.
+- Örnek proje kodla üretiliyor (`model/sampleProject.ts`); “Yeni proje” komutu yok. Kaydet/Aç yalnızca yerel .kcad dosyasıyla çalışıyor; bulut kaydı, otomatik kayıt ve son açılan dosyalar listesi sunucuyla gelecek (§21). Dosya ikili parçasız, tek JSON'dur.
 - Pano yalnızca bu sekmede (bellekte) çalışıyor; sekmeler ya da uygulamalar arası kopyalama yok.
 - Öznitelikler serbest metin; şema yok.
 - Çizgi kalınlıkları ekranda 1 px. `lineWeight` şimdilik yalnızca veri.
@@ -726,6 +733,7 @@ src/
     menus.ts                 Ana menü modeli, komuttan menü öğesi çözümü
     state.ts                 DraftingSettings, MessageLog, UiState, Preferences (localStorage)
     clipboard.ts             Clipboard: kopyalanan nesneler ve taban noktası (oturumluk)
+    fileIO.ts                DocumentFiles: yerel .kcad kaydet/farklı kaydet/aç, dosya seçici (tarayıcı ya da test için bellek içi)
     format.ts                Formatter: sayıdan metne tek geçit
     processing.ts            ProcessingService: işlem kaydı, çalıştırıcı, son değerler; işlem komutları
     styles.ts                StyleService: stil kitaplığı (sistem + kullanıcı localStorage + proje); stil komutları, nesneye sembol verme

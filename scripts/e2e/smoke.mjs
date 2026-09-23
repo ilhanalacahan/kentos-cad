@@ -894,6 +894,45 @@ try {
     await b.eval(`window.kentos.ui.dockTab.set('layers'); window.kentos.ui.processingTab.set('tools'); window.kentos.selection.clear()`);
   }
 
+  // Local .kcad files: Ctrl+S writes (dirty clears only after the write), Ctrl+O asks about unsaved changes and reopens it.
+  // Headless Chrome has no native file dialogs, so an in-memory picker stands in for them.
+  {
+    await b.eval(`(() => {
+      const k = window.kentos;
+      const disk = (window.__disk = {});
+      const file = (name, fail) => ({
+        name,
+        getFile: async () => new Blob([disk[name] ?? '']),
+        createWritable: async () => { let s = ''; return { write: async (d) => { s += d; }, close: async () => { if (fail) throw new Error('disk dolu'); disk[name] = s; } }; },
+      });
+      window.__files = { original: k.files.picker, file };
+      k.files.picker = { save: async (n) => file(n), open: async () => file(Object.keys(disk)[0]) };
+      k.files.handle = null;
+      k.selection.clear();
+    })()`);
+    const saved = await b.eval(`JSON.stringify([...window.kentos.doc.all()])`);
+    await b.key('s', { ctrl: true });
+    await b.waitFor(`!window.kentos.files.busy.value && Object.keys(window.__disk).length === 1`, 5000).catch(() => {});
+    const written = await b.eval(`(() => { const [name, text] = Object.entries(window.__disk)[0] ?? []; const f = text ? JSON.parse(text) : {}; return { name, format: f.format, n: f.entities?.length, dirty: window.kentos.doc.dirty.value }; })()`);
+    const size = await b.eval('window.kentos.doc.size');
+    check('Ctrl+S writes a .kcad file and the drawing turns clean', /\.kcad$/.test(written.name ?? '') && written.format === 'kentos.document' && written.n === size && !written.dirty, JSON.stringify(written));
+    await b.eval(`(() => { const k = window.kentos; k.doc.remove([[...k.doc.all()].at(-1).id]); })()`);
+    check('an edit after saving marks the drawing unsaved', await b.eval('window.kentos.doc.dirty.value'));
+    await b.key('o', { ctrl: true });
+    await b.waitFor(`[...document.querySelectorAll('.dialog__foot .btn')].some((x) => x.textContent === 'Kaydetmeden devam et')`, 3000).catch(() => {});
+    const drop = await b.eval(`(() => { const e = [...document.querySelectorAll('.dialog__foot .btn')].find((x) => x.textContent === 'Kaydetmeden devam et'); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    check('Ctrl+O asks before dropping unsaved changes', !!drop);
+    if (drop) await b.click(...drop);
+    await b.waitFor(`!window.kentos.files.busy.value && !window.kentos.doc.dirty.value`, 5000).catch(() => {});
+    const reopened = await b.eval(`JSON.stringify([...window.kentos.doc.all()])`);
+    check('the reopened file holds the saved drawing, with no undo history', reopened === saved && !(await b.eval('window.kentos.doc.canUndo.value')), `${await b.eval('window.kentos.doc.size')} nesne`);
+    await b.eval(`(() => { const k = window.kentos; k.doc.remove([[...k.doc.all()].at(-1).id]); k.files.picker = { save: async (n) => window.__files.file(n, true), open: async () => null }; k.commands.execute('file.saveAs'); })()`);
+    await b.waitFor(`!window.kentos.files.busy.value`, 3000).catch(() => {});
+    const failed = await b.eval(`window.kentos.log.entries.value.at(-1)?.text ?? ''`);
+    check('a failed write keeps the drawing unsaved', await b.eval('window.kentos.doc.dirty.value'), failed);
+    await b.eval(`(() => { const k = window.kentos; k.commands.execute('edit.undo'); k.files.picker = window.__files.original; k.files.handle = null; k.selection.clear(); })()`);
+  }
+
   // Undo / redo round trip
   const before = await b.eval('window.kentos.doc.size');
   await b.eval(`window.kentos.commands.execute('edit.undo'); window.kentos.commands.execute('edit.redo')`);

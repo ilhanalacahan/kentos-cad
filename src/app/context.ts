@@ -5,6 +5,7 @@ import type { Selection } from '../model/selection';
 import type { ToolManager } from '../tools/ToolManager';
 import type { ViewportController } from '../viewport/ViewportController';
 import type { Clipboard } from './clipboard';
+import type { DocumentFiles } from './fileIO';
 import type { Formatter } from './format';
 import type { ProcessingService } from './processing';
 import type { DraftingSettings, MessageLog, Preferences, UiState } from './state';
@@ -34,4 +35,6 @@ export interface AppContext {
   readonly processing: ProcessingService;
   /** Style library: system, user and project symbols (see docs/STYLE.md). */
   readonly styles: StyleService;
+  /** Local drawing files (.kcad): save, save as, open (app/fileIO.ts). */
+  readonly files: DocumentFiles;
 }
