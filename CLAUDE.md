@@ -55,7 +55,7 @@ npx tsc --noEmit -p .     # yalnızca tip denetimi
 - Her değişiklikten sonra `tsc` temiz olmalı ve `pnpm test` geçmeli (bkz. §9.4).
 - Geliştirme modunda uygulama bağlamı `window.kentos` olarak açıktır (üretim derlemesinde yoktur). Tarayıcıda doğrulama yaparken durumu buradan okuyun, ör. `kentos.doc.size`, `kentos.tools.activeId.value`.
 - Arayüzü etkileyen her değişiklik **gerçek tarayıcıda** denenmelidir: tıklama, klavye, açık ve koyu tema, "Büyük" yazı boyutu.
-- Tercihler `localStorage`'da `kentos.ui.v1` (yerleşim) ve `kentos.prefs.v1` (uygulama ayarları) anahtarlarında durur. Temiz başlangıç için bu anahtarları silin.
+- Tercihler `localStorage`'da `kentos.ui.v1` (yerleşim), `kentos.prefs.v1` (uygulama ayarları) ve `kentos.processing.v1` (işlem araçlarının son değerleri) anahtarlarında durur. Temiz başlangıç için bu anahtarları silin.
 
 ---
 
@@ -84,7 +84,7 @@ npx tsc --noEmit -p .     # yalnızca tip denetimi
 ### 4.1 Katmanlar ve bağımlılık yönü
 
 ```
-core ─► geo ─► model ─► render ─► viewport ─► tools ─► ui ─► app (kompozisyon kökü)
+core ─► geo ─► model ─► processing ─► render ─► viewport ─► tools ─► ui ─► app (kompozisyon kökü)
 ```
 
 Oklar "şunu kullanabilir" yönündedir: bir katman yalnızca **solundakileri**
@@ -97,6 +97,7 @@ içinde kurulur.
 | `core/` | Signal, Emitter, Disposable, CommandRegistry, Keymap | Yalnızca DOM tipleri | model, ui |
 | `geo/` | EPSG/CRS kaydı; ileride dönüşümler, geodezik hesaplar | core | DOM, model |
 | `model/` | Belge, varlıklar, katman ağacı, geometri, seçim, proje ayarları, geri alma | core, geo | DOM, render, ui |
+| `processing/` | İşlem araçları: bildirimsel tanım, parametreler, kayıt, çalıştırıcı, modeller (bkz. [docs/PROCESSING.md](docs/PROCESSING.md)) | core, geo, model | DOM, render, viewport, tools, ui, app |
 | `render/` | `RenderBackend` sözleşmesi, sahne verisi, WebGL2 ve WebGPU arka uçları | core, model (tip + stil) | ui, tools, viewport |
 | `viewport/` | Kamera, seçme ve kenetleme dizini, 2B üst katman, çizim döngüsü | core, model, render, tools (tip), app (tip) | ui |
 | `tools/` | Etkileşimli araçlar ve araç kataloğu | core, model, viewport (tip), app (tip) | ui |
@@ -138,6 +139,7 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 | `tools` | `ToolManager` | Etkin araç, istem metni |
 | `view` | `ViewportController` | Kamera, seçme, çizim isteği |
 | `clipboard` | `Clipboard` | Kopyalanan nesneler (oturumluk; `app/clipboard.ts`) |
+| `processing` | `ProcessingService` | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`) |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -151,9 +153,9 @@ Yeni bir ayar ya da durum eklemeden önce **hangi kapsama ait olduğuna** karar 
 |---|---|---|---|---|
 | **Proje ayarları** | `model/projectSettings.ts` → `doc.settings` | Proje dosyası (.kcad) | Projeyi açan herkes | SRID, uzunluk ve alan hassasiyeti, alan birimi, açı birimi, çizim ölçeği, proje adı |
 | **Belge verisi** | `CadDocument`, `LayerStore` | Proje dosyası | Projeyi açan herkes | Varlıklar, katman ağacı ve stilleri, öznitelikler |
-| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)** |
-| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme |
-| **Oturum durumu** | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz | Bu oturum | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano |
+| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)**; işlem araçlarının son değerleri (`kentos.processing.v1`) |
+| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme, sağ dok sekmesi (Katmanlar/İşlemler), İşlemler görünümü ve katlanan kategoriler |
+| **Oturum durumu** | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz | Bu oturum | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano, işlem geçmişi |
 
 Kurallar:
 
@@ -378,6 +380,18 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
 - **Paneller** (`LayersPanel`, `PropertiesPanel`, `BottomPanel`) modelden okur, değişikliği komut ya da belge API'si ile yapar. Panel içi yeniden çizimler mikro görevde birleştirilir (`PropertiesPanel.schedule`).
 - **`AppShell`** yerleşimi kurar ve bölgeleri doldurur. Bileşenler birbirini tanımaz.
 - **Ayar pencereleri** `ui/settings/`: `SettingsShell` (iskelet, taslak ve Kaydet/Vazgeç), `crsPicker` (ortak EPSG seçici), `ProjectSettingsDialog`, `AppSettingsDialog`.
+- **Sağ dok** üst yuvada "Katmanlar | İşlemler" sekmelerini (`ui.dockTab`), altta öznitelikleri taşır. Aynı yuvayı paylaşan paneller başlıkta sekme şeridi gösterir (`Panel.setTabs`).
+
+### 4.11 İşlem araçları (`processing/`)
+
+Toplu işlemler (QGIS Processing gibi) için ayrı bir çatıdır; ayrıntılar [docs/PROCESSING.md](docs/PROCESSING.md)'dedir. Kısaca:
+
+- **Araç bildirimseldir** (`defineTool`): kimlik, etiket, kategori, açıklama, yardım, takma adlar, parametreler (tür, zorunluluk, varsayılan, sınır, görünürlük koşulu, gelişmiş), çıktılar ve çalışabileceği yerler (`client | worker | server | postgis`). Pencere, araç kutusu satırı, menü, komut (`processing.run.<id>`) ve geçmiş bu tanımdan üretilir.
+- **Araç belgeyi değiştirmez:** `run` çözülmüş girdiler ve salt okunur belge alır, `ChangeSet` döndürür. `ProcessingRunner` doğrular, girdileri çözer, uygun `Executor`'ı seçer ve sonucu **tek geri alma adımı** olarak uygular; kilitli katmanları atlar, yeni hedef katmanı yalnızca yazılırsa kurar.
+- **Parametre değer tipleri tanımdan çıkar.** Tanım içindeki ok fonksiyonlarının argümanı tiplenir (`(v: Shown)`, `(c: DefaultsContext)`), yoksa çıkarım bozulur.
+- **Nesne kapsamları:** seçili, görünen, tümü (görünür katmanlar), katman (grup dahil) ve modellerde önceki adımın çıktısı (`ids`). Zorunlu girdi boş kalırsa araç çalışmaz, alanda yönlendirme yazar.
+- **Modeller** (akış diyagramları) için veri yapısı `processing/model.ts`'tedir: adım değerleri sabit, model girdisi ya da önceki adımın çıktısı olabilir.
+- **Arayüz:** İşlemler menüsü (kategoriler kayıttan üretilir), sağ dokta İşlemler sekmesi (arama, kategori ağacı, geçmiş), `ui/processing/ToolDialog.ts` penceresi.
 
 ---
 
@@ -527,12 +541,13 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `render/triangulate.test.ts` | Delikli halkaların üçgenlenmesi (köprü, iç bükey köşe), toplam alan |
 | `model/ops/edit.test.ts` | Uzat-kısalt (çizgi, yay, köşeleri aşan kısaltma, yayla biten çoklu çizgi, imleçten boy); yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
 | `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
+| `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), model sıralama ve denetim |
 
 Kurallar:
 
 - `model/geom` ve `model/ops` altındaki her yeni fonksiyon test ile gelir. Sınır durumları (paralel, çakışık, sıfır uzunluk, açı 0/2π geçişi) mutlaka sınanır.
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
-- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
+- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme) ve `geo` (CRS arama).
 
@@ -550,7 +565,11 @@ WGSL gölgelendiricileri (`render/webgpu/shaders.ts`) GLSL'deki kesik desen ve n
 
 Başsız Chrome'da `--enable-unsafe-webgpu` tek başına yetmez (aygıt ilk gönderimde düşer). `scripts/e2e/cdp.mjs` içindeki `WEBGPU_ARGS` Vulkan/SwiftShader bayraklarını ekler; duman testi iki motorun çizdiği piksel sayısını karşılaştırır.
 
-### 9.6 Yeni dosya biçimi (planlı arayüz)
+### 9.6 Yeni işlem aracı
+
+`processing/builtin/<ad>.ts` içinde `defineTool({...})` ile tanımı yazın, `BUILTIN_TOOLS` listesine ekleyin; hesabın saf kısmını test edin ve çalıştırıcıyla belge üzerinde bir test ekleyin. Arayüz kodu yazılmaz. Tarif ve kurallar: [docs/PROCESSING.md](docs/PROCESSING.md) §8.
+
+### 9.7 Yeni dosya biçimi (planlı arayüz)
 
 `io/` altında her biçim bir bağdaştırıcıdır:
 
@@ -583,6 +602,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - öznitelik tablosu (alt panelde, seçimle eşlenik), sorgu ve filtre, tematik stil
    - raster, WMS ve XYZ altlık (yeni `SceneLayer` türü)
    - CRS dönüşümleri: TUREF ↔ ED50 7 parametre ve grid; TM ve UTM dilimleri
+   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş yapıldı (köşe numaralandırma, kenar uzunlukları). Sıradaki: öznitelik alanı ve ifade parametreleri, worker çalıştırıcısı, model çalıştırıcısı ve akış diyagramı düzenleyicisi; sunucu ve PostGIS çalıştırıcıları sunucu tarafıyla birlikte
 4. **Harita işleri:**
    - ifraz, tevhid, aplikasyon (istasyondan semt ve mesafe)
    - kot noktası ve TIN, eşyükselti, boy kesit, hacim
@@ -635,9 +655,12 @@ src/
     state.ts                 DraftingSettings, MessageLog, UiState, Preferences (localStorage)
     clipboard.ts             Clipboard: kopyalanan nesneler ve taban noktası (oturumluk)
     format.ts                Formatter: sayıdan metne tek geçit
+    processing.ts            ProcessingService: işlem kaydı, çalıştırıcı, son değerler; işlem komutları
   core/                      Bağımsız temel yapılar (signal, emitter, disposable, commands, keymap)
   geo/crs.ts                 EPSG kaydı (TUREF/ED50 TM, UTM, WGS84), arama, dilim önerisi
   model/                     Belge, varlıklar, geometri, katmanlar, seçim, proje ayarları, örnek proje
+  processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, model (+ testler)
+    builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları
     geom/                    Saf geometri çekirdeği: afin, yay, bulge, kesişim, öteleme, teğet daire, düzlem bindirme ve alan cebiri (+ testler)
     ops/                     Nesne işlemleri: kenarlar, yol parametresi, dönüşüm, budama/uzatma, kır, birleştir, patlat, esnet, köşe, öteleme, köşe yuvarlama/pah, tutamaçlar (+ testler)
   render/                    RenderBackend sözleşmesi, sahne kurucu, delikli üçgenleme, ızgara, renk; webgl2/ ve webgpu/
@@ -665,6 +688,7 @@ src/
     editTools.ts             Birleştir, patlat, esnet, yapıştır
     areaTools.ts             Alan işlemleri: içine tıklayarak alan, alana çevir, alan birleştir/kesiştir/çıkar/böl, çizgiye çevir
     targetLayer.ts           Yeni nesnelerin yazılacağı katman (kilitli/gizli uyarıları)
+    pickPointTool.ts         Başkası için tek nokta ister (işlem aracı nokta parametresi)
     SelectTool.ts            Seçim (tutamaçla düzenleme dahil), kaydırma, pencere yakınlaştırma
   ui/
     shell/AppShell.ts        Yerleşim ve bölgeler
@@ -675,13 +699,15 @@ src/
     shell/viewportMenus.ts   Çizim alanındaki sağ tuş menüleri: boşta, komut, kenet, tutamaç
     promptOptions.ts         İstem ayrıştırma ve seçenek düğmeleri (komut şeridi ve komut satırı ortak)
     menu/ toolbar/ toolbox/  Menü çubuğu, araç çubuğu, kayan araç kutusu
-    dock/ layers/ properties/  Sağ dok, katman ağacı, öznitelik paneli
+    dock/ layers/ properties/  Sağ dok (Katmanlar/İşlemler sekmeleri), katman ağacı, öznitelik paneli
+    processing/              İşlem aracı penceresi (ToolDialog), parametre kontrolleri, araç kutusu ve geçmiş paneli
     bottom/                  Komut satırı ve alt panel (geçmiş, koordinat listesi, uyarılar)
     statusbar/               Durum çubuğu
     settings/                SettingsShell, crsPicker, Proje ve Uygulama ayarları pencereleri
     widgets/                 Genel parçalar (menü, açılır liste, ağaç, özellik ızgarası, pencere, kontroller)
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
-  styles/                    tokens, base, shell, controls, panels, settings
+  styles/                    tokens, base, shell, controls, panels, settings, processing
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo)
+docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 ```

@@ -9,15 +9,16 @@ export class Panel extends Component {
   readonly body: HTMLElement;
   readonly collapsed = new Signal(false);
   private readonly meta: HTMLElement;
+  private readonly toggle: HTMLElement;
 
   constructor(opts: { title: string; icon?: string; actions?: Child[]; className?: string }) {
     super();
-    const toggle = h(
+    const toggle = (this.toggle = h(
       'button',
       { class: 'panel__toggle', type: 'button', 'aria-expanded': 'true' },
       h('span', { class: 'panel__chev' }, icon('chevronDown', 14)),
       h('span', { class: 'panel__title' }, opts.title),
-    );
+    ));
     this.meta = h('span', { class: 'panel__meta' });
     this.body = h('div', { class: 'panel__body' });
     this.el = h(
@@ -37,5 +38,11 @@ export class Panel extends Component {
 
   setMeta(text: string): void {
     this.meta.textContent = text;
+  }
+
+  /** Panels sharing a dock slot show a tab strip in place of their title (the chevron still folds). */
+  setTabs(tabs: HTMLElement): void {
+    this.toggle.after(tabs);
+    this.el.querySelector('.panel__head')!.toggleAttribute('data-tabbed', true);
   }
 }

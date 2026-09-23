@@ -61,6 +61,16 @@ export function describeCount(entities: readonly Entity[]): string {
 export function resolveFeatures(value: FeaturesValue, def: Pick<FeaturesParam, 'kinds'>, host: FeatureHost): FeatureSet {
   const kinds = def.kinds ? new Set<EntityKind>(def.kinds) : null;
   const entities = inScope(value, host).filter((e) => !kinds || kinds.has(e.kind));
+  if (!entities.length) return { entities, description: `${WHERE_IN[value.scope](host, value)} uygun nesne yok` };
   const where = value.scope === 'layer' ? `“${host.doc.layers.get(value.layerId)?.name ?? '?'}” katmanında` : SCOPE_LABEL[value.scope].toLocaleLowerCase('tr-TR');
   return { entities, description: `${describeCount(entities)}; ${where}` };
 }
+
+/** "Seçili nesneler arasında uygun nesne yok" — where the tool looked, as a sentence start. */
+const WHERE_IN: Record<FeaturesValue['scope'], (host: FeatureHost, v: FeaturesValue) => string> = {
+  selection: () => 'Seçili nesneler arasında',
+  visible: () => 'Görünen alanda',
+  all: () => 'Görünen katmanlarda',
+  layer: (host, v) => `“${v.scope === 'layer' ? (host.doc.layers.get(v.layerId)?.name ?? '?') : '?'}” katmanında`,
+  ids: () => 'Önceki adımın çıktısında',
+};

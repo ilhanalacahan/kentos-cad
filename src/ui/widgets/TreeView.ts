@@ -16,6 +16,8 @@ export interface TreeAdapter<T> {
   onContextMenu?(node: T, e: MouseEvent): void;
   /** Keep a node while filtering (ancestors of matches are kept automatically). */
   matches?(node: T, query: string): boolean;
+  /** Text when nothing is listed (default speaks of layers). */
+  empty?(filtered: boolean): string;
 }
 
 /** Generic keyboard-accessible tree (role=tree), re-rendered from the model. */
@@ -97,7 +99,7 @@ export class TreeView<T> {
       }
     };
     walk(roots, 0);
-    if (!this.flat.length) this.el.append(h('div', { class: 'tree__empty' }, q ? 'Aramayla eşleşen katman yok.' : 'Katman yok.'));
+    if (!this.flat.length) this.el.append(h('div', { class: 'tree__empty' }, a.empty?.(!!q) ?? (q ? 'Aramayla eşleşen katman yok.' : 'Katman yok.')));
   }
 
   focus(id: string, moveDom = true): void {

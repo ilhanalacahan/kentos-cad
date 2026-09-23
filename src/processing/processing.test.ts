@@ -166,13 +166,20 @@ describe('runner on a document', () => {
     const texts = [...doc.all()].filter((e) => e.kind === 'text').map((e) => (e.kind === 'text' ? e.text : ''));
     expect(texts.every((t) => t === '10.000')).toBe(true);
   });
-  it('invalid values do not run; an empty selection runs and says so', async () => {
+  it('invalid values do not run; an empty selection is stopped with a hint', async () => {
     const { runner, setSelection } = setup();
     const bad = { ...defaultValues(vertexNumbering, runner.defaults()), length: 0 };
     expect((await runner.run(vertexNumbering, bad)).status).toBe('invalid');
     setSelection([]);
-    const out = await runner.run(vertexNumbering, defaultValues(vertexNumbering, runner.defaults()));
-    expect(out.status === 'ok' && out.record.summary).toBe('Numaralanacak alan yok.');
+    const values = defaultValues(vertexNumbering, runner.defaults());
+    expect(runner.describeInputs(vertexNumbering, values).input.count).toBe(0);
+    const out = await runner.run(vertexNumbering, values);
+    expect(out.status).toBe('invalid');
+    expect(out.status === 'invalid' && out.issues[0]).toMatchObject({ param: 'input' });
+    expect(runner.history.value).toHaveLength(0);
+    // An empty result handed along a model still runs.
+    const chained = await runner.run(vertexNumbering, { ...values, input: { scope: 'ids', ids: [] } });
+    expect(chained.status === 'ok' && chained.record.summary).toBe('Numaralanacak alan yok.');
   });
 });
 

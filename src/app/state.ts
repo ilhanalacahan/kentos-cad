@@ -46,6 +46,8 @@ export class MessageLog {
 
 export type Theme = 'dark' | 'light';
 export type BottomTab = 'history' | 'coords' | 'messages';
+export type DockTab = 'layers' | 'processing';
+export type ProcessingTab = 'tools' | 'history';
 
 export interface UiLayoutData {
   theme: Theme;
@@ -63,6 +65,11 @@ export interface UiLayoutData {
   toolboxColumns: 2 | 3;
   /** Toolbox groups folded by the user (ToolGroup ids). */
   toolboxFolded: string[];
+  /** Right dock content: layer tree and attributes, or the processing toolbox. */
+  dockTab: DockTab;
+  processingTab: ProcessingTab;
+  /** Processing categories folded in the toolbox. */
+  processingFolded: string[];
 }
 
 const DEFAULTS: UiLayoutData = {
@@ -79,6 +86,9 @@ const DEFAULTS: UiLayoutData = {
   toolboxY: 12,
   toolboxColumns: 3,
   toolboxFolded: [],
+  dockTab: 'layers',
+  processingTab: 'tools',
+  processingFolded: [],
 };
 
 export type Signals<T> = { readonly [K in keyof T]: Signal<T[K]> };

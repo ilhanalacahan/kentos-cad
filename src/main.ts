@@ -4,6 +4,7 @@ import './styles/shell.css';
 import './styles/controls.css';
 import './styles/panels.css';
 import './styles/settings.css';
+import './styles/processing.css';
 import { createApp } from './app/createApp';
 
 createApp(document.getElementById('app')!)

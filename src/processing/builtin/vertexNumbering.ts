@@ -13,7 +13,7 @@ export const vertexNumbering = defineTool({
   id: 'points.numberVertices',
   label: 'Köşe noktalarını numarala',
   category: 'points',
-  icon: 'point',
+  icon: 'numberVertices',
   description: 'Alanların köşelerine belirlediğiniz biçimde numaralı nokta koyar (P00001, P00002 …); yön ve başlangıç köşesi seçilir.',
   help: [
     'Her alanın köşeleri seçilen yönde, seçilen başlangıç köşesinden itibaren numaralanır; delikli alanlarda önce dış halka, sonra delikler.',
@@ -21,6 +21,7 @@ export const vertexNumbering = defineTool({
     'Komşu parsellerin ortak köşesi tek numara alır. Hedef katmanda aynı biçimde numaralanmış noktalar varsa onların adı korunur ve numara kaldığı yerden devam eder.',
   ].join('\n\n'),
   keywords: ['numara', 'köşe', 'nokta', 'isim', 'vertex', 'number', 'label', 'parsel'],
+  aliases: ['KOSENUMARA', 'KNUM', 'NUMARALA'],
   targets: ['client', 'worker'],
   parameters: [
     { name: 'input', label: 'Alanlar', type: 'features', kinds: ['polygon', 'polyline'], description: 'Köşeleri numaralanacak kapalı alanlar ve çoklu çizgiler.', default: { scope: 'selection' } },
@@ -123,12 +124,16 @@ export const vertexNumbering = defineTool({
     }
     const first = created[0]?.name;
     const last = created[created.length - 1]?.name;
-    const reused = corners.length - created.length;
+    // Reused numbers: from points already on the layer, or from a neighbour numbered in this run.
+    const before = new Set(existing.map((e) => e.name));
+    const kept = new Set(corners.filter((c) => !c.created && before.has(c.name)).map((c) => c.name)).size;
+    const shared = new Set(corners.filter((c) => !c.created && !before.has(c.name)).map((c) => c.name)).size;
+    const notes = [shared ? `${shared} ortak köşe komşularıyla tek numara aldı` : '', kept ? `${kept} köşe mevcut numarasını korudu` : ''].filter(Boolean);
     return {
       changes: { add },
       outputs: { count: created.length },
       summary: created.length
-        ? `${inputs.length} nesnede ${created.length} köşe numaralandı: ${first} – ${last}${reused ? `; ${reused} köşe mevcut numarasını korudu` : ''}.`
+        ? `${inputs.length} nesnede ${created.length} köşe numaralandı: ${first} – ${last}${notes.length ? `; ${notes.join('; ')}` : ''}.`
         : 'Yeni numara gerekmedi: bütün köşelerin numarası zaten var.',
     };
   },

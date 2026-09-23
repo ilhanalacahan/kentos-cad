@@ -3,7 +3,6 @@ import type { BackendKind } from '../render/types';
 import { WebGPUBackend } from '../render/webgpu/WebGPUBackend';
 import type { Entity } from '../model/entities';
 import { pasteEntities, PasteTool } from '../tools/editTools';
-import { edgeLabels } from '../model/ops/edgeLabels';
 import type { Signal } from '../core/signal';
 import { TOOL_GROUP_LABEL } from '../tools/Tool';
 import type { AppContext } from './context';
@@ -269,34 +268,6 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
     pending(ctx, 'map.profile', 'Boy kesit al…', M),
     pending(ctx, 'map.sheet', 'Pafta bölümlemesi…', M),
     pending(ctx, 'map.parcelReport', 'Parsel alan çizelgesi', M),
-    {
-      id: 'map.edgeLengths',
-      title: 'Kenar ölçülerini yaz',
-      category: M,
-      icon: 'dimension',
-      aliases: ['KENAR', 'KENAROLCU'],
-      description: 'Seçili parsel ve çoklu çizgilerin kenar uzunluklarını kenarların dışına yazar.',
-      run: () => {
-        const targets = [...selection.ids.value].map((id) => doc.get(id)).filter((e) => e && (e.kind === 'polygon' || e.kind === 'polyline'));
-        if (!targets.length) return log.warn('Önce kenar ölçüsü yazılacak parselleri ya da çoklu çizgileri seçin.');
-        const layerId = doc.layers.active.value;
-        if (doc.layers.isLocked(layerId)) return log.warn(`“${doc.layers.get(layerId)?.name}” katmanı kilitli; kenar ölçüleri etkin katmana yazılır.`);
-        const height = 0.002 * doc.settings.plotScale.value; // 2 mm on paper
-        let count = 0;
-        doc.transact('Kenar ölçüleri', () => {
-          for (const e of targets) {
-            if (!e || (e.kind !== 'polygon' && e.kind !== 'polyline')) continue;
-            for (const l of edgeLabels(e.pts, e.kind === 'polygon', height, height * 3, e.bulges)) {
-              doc.add({ kind: 'text', layerId, p: l.p, text: ctx.format.length(l.length, false), height, rotation: l.rotation, attrs: { Tür: 'Kenar ölçüsü' } });
-              count++;
-            }
-          }
-        });
-        log.success(`${targets.length} nesneye ${count} kenar ölçüsü yazıldı.`);
-      },
-      isEnabled: () => selection.size > 0,
-      watch: [selection.ids],
-    },
     { id: 'crs.set', title: 'Koordinat sistemi…', category: K, icon: 'crs', aliases: ['SRID', 'EPSG'], run: () => hooks.openProjectSettings('crs') },
     pending(ctx, 'crs.transform', 'Datum dönüşümü (ED50 ↔ TUREF)…', K),
     pending(ctx, 'crs.query', 'Koordinat sorgula', K),

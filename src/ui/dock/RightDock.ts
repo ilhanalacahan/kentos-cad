@@ -1,13 +1,20 @@
 import type { AppContext } from '../../app/context';
+import { watchAll } from '../../core/signal';
 import { Component } from '../Component';
 import { h } from '../dom';
 import { LayersPanel } from '../layers/LayersPanel';
+import { ProcessingPanel } from '../processing/ProcessingPanel';
 import { PropertiesPanel } from '../properties/PropertiesPanel';
 import { splitter } from '../widgets/Splitter';
+import { dockTabs } from './dockTabs';
 
-/** Right dock: layer tree over attributes, split by a draggable divider. */
+/**
+ * Right dock: the upper slot holds the layer tree or the processing
+ * toolbox (tabs), attributes sit below, split by a draggable divider.
+ */
 export class RightDock extends Component {
   readonly el: HTMLElement;
+  readonly processing: ProcessingPanel;
   private readonly layers: LayersPanel;
   private readonly props: PropertiesPanel;
 
@@ -15,13 +22,18 @@ export class RightDock extends Component {
     super();
     const { ui } = ctx;
     this.layers = new LayersPanel(ctx);
+    this.processing = new ProcessingPanel(ctx);
     this.props = new PropertiesPanel(ctx);
+    this.layers.setTabs(dockTabs(ctx, 'layers'));
+    this.processing.setTabs(dockTabs(ctx, 'processing'));
+    this.layers.el.classList.add('dock__top');
+    this.processing.el.classList.add('dock__top');
 
     let startFrac = 0;
     let height = 1;
     const split = splitter({
       orientation: 'horizontal',
-      label: 'Katmanlar ve öznitelikler arası',
+      label: 'Üst panel ile öznitelikler arası',
       onStart: () => {
         startFrac = ui.layersFraction.value;
         height = this.el.clientHeight || 1;
@@ -31,18 +43,22 @@ export class RightDock extends Component {
     });
     this.d.add(split.dispose);
 
-    this.el = h('aside', { class: 'dock', 'aria-label': 'Katmanlar ve öznitelikler' }, this.layers.el, split.el, this.props.el);
+    this.el = h('aside', { class: 'dock', 'aria-label': 'Katmanlar, işlemler ve öznitelikler' }, this.layers.el, this.processing.el, split.el, this.props.el);
     this.d.add(ui.layersFraction.subscribe((f) => this.el.style.setProperty('--layers-frac', String(f)), true));
-    const syncCollapsed = () => {
-      this.el.dataset.layout = this.layers.collapsed.value ? 'props' : this.props.collapsed.value ? 'layers' : 'split';
+    const sync = () => {
+      const tab = ui.dockTab.value;
+      this.layers.el.hidden = tab !== 'layers';
+      this.processing.el.hidden = tab !== 'processing';
+      const top = tab === 'layers' ? this.layers : this.processing;
+      this.el.dataset.layout = top.collapsed.value ? 'props' : this.props.collapsed.value ? 'top' : 'split';
     };
-    this.d.add(this.layers.collapsed.subscribe(syncCollapsed));
-    this.d.add(this.props.collapsed.subscribe(syncCollapsed));
-    syncCollapsed();
+    this.d.add(watchAll([ui.dockTab, this.layers.collapsed, this.processing.collapsed, this.props.collapsed], sync));
+    sync();
   }
 
   override dispose(): void {
     this.layers.dispose();
+    this.processing.dispose();
     this.props.dispose();
     super.dispose();
   }

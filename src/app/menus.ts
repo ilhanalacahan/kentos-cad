@@ -1,8 +1,13 @@
 import type { MenuItem } from '../ui/widgets/PopupMenu';
+import type { CategoryNode } from '../processing/registry';
 import type { AppContext } from './context';
+import { processingCommandId } from './processing';
 
-/** Declarative main menu. Strings are command ids; "-" is a separator. */
-export type MenuSpec = string | '-' | { label: string; icon?: string; items: MenuSpec[] };
+/**
+ * Declarative main menu. Strings are command ids; "-" is a separator;
+ * "@processing" expands to the processing categories with their tools.
+ */
+export type MenuSpec = string | '-' | '@processing' | { label: string; icon?: string; items: MenuSpec[] };
 
 export interface TopMenu {
   id: string;
@@ -107,6 +112,11 @@ export const MAIN_MENU: TopMenu[] = [
     items: ['tool.measure', 'tool.area', '-', 'analysis.volume', 'analysis.slope'],
   },
   {
+    id: 'processing',
+    label: 'İşlemler',
+    items: ['processing.toolbox', 'processing.history', '-', '@processing'],
+  },
+  {
     id: 'tools',
     label: 'Araçlar',
     items: ['commandline.focus', { label: 'Çizim yardımcıları', items: ['draft.snap', 'draft.grid', 'draft.ortho', 'draft.polar', 'draft.tracking'] }, '-', 'help.shortcuts', 'tools.options'],
@@ -120,11 +130,21 @@ export const MAIN_MENU: TopMenu[] = [
 
 /** Resolves specs against the live command registry (enabled/checked/shortcut). */
 export function resolveMenu(ctx: AppContext, specs: MenuSpec[]): MenuItem[] {
-  return specs.map((s): MenuItem => {
+  return specs.flatMap((s): MenuItem | MenuItem[] => {
     if (s === '-') return { kind: 'separator' };
+    if (s === '@processing') return processingMenu(ctx, ctx.processing.registry.tree());
     if (typeof s === 'object') return { label: s.label, icon: s.icon, items: () => resolveMenu(ctx, s.items) };
     return commandItem(ctx, s);
   });
+}
+
+/** One submenu per processing category, its tools as commands (the registry decides what exists). */
+function processingMenu(ctx: AppContext, nodes: CategoryNode[]): MenuItem[] {
+  return nodes.map((n) => ({
+    label: n.category.label,
+    icon: n.category.icon,
+    items: () => [...processingMenu(ctx, n.children), ...n.tools.map((t) => commandItem(ctx, processingCommandId(t.id)))],
+  }));
 }
 
 export function commandItem(ctx: AppContext, id: string, overrides: Partial<MenuItem> = {}): MenuItem {

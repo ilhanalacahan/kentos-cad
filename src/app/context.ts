@@ -6,6 +6,7 @@ import type { ToolManager } from '../tools/ToolManager';
 import type { ViewportController } from '../viewport/ViewportController';
 import type { Clipboard } from './clipboard';
 import type { Formatter } from './format';
+import type { ProcessingService } from './processing';
 import type { DraftingSettings, MessageLog, Preferences, UiState } from './state';
 
 /**
@@ -28,4 +29,6 @@ export interface AppContext {
   readonly view: ViewportController;
   /** Copied entities (session only). */
   readonly clipboard: Clipboard;
+  /** İşlem araçları: registry, runner, last values (see docs/PROCESSING.md). */
+  readonly processing: ProcessingService;
 }

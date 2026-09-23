@@ -1,4 +1,5 @@
 import type { AppContext } from '../../app/context';
+import type { ProcessingTab } from '../../app/state';
 import { watchAll } from '../../core/signal';
 import { BottomPanel } from '../bottom/BottomPanel';
 import { Component } from '../Component';
@@ -29,14 +30,17 @@ export class AppShell extends Component {
   readonly el: HTMLElement;
   readonly viewportHost: HTMLElement;
   readonly bottom: BottomPanel;
+  private readonly ctx: AppContext;
+  private readonly dock: RightDock;
   private readonly parts: Component[] = [];
 
   constructor(ctx: AppContext) {
     super();
+    this.ctx = ctx;
     const { ui } = ctx;
     const menubar = this.own(new MenuBar(ctx));
     const toolbar = this.own(new Toolbar(ctx));
-    const dock = this.own(new RightDock(ctx));
+    const dock = (this.dock = this.own(new RightDock(ctx)));
     this.bottom = this.own(new BottomPanel(ctx));
     const status = this.own(new StatusBar(ctx));
 
@@ -75,6 +79,15 @@ export class AppShell extends Component {
 
     // Right-button menus over the drawing (idle, command, snap, grips).
     this.d.add(bindViewportMenus(ctx));
+  }
+
+  /** Brings the processing toolbox (or its history) forward in the right dock. */
+  showProcessing(tab: ProcessingTab): void {
+    const { ui } = this.ctx;
+    ui.rightVisible.set(true);
+    ui.dockTab.set('processing');
+    ui.processingTab.set(tab);
+    if (tab === 'tools') queueMicrotask(() => this.dock.processing.focusSearch());
   }
 
   private own<T extends Component>(c: T): T {

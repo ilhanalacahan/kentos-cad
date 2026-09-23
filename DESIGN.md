@@ -146,10 +146,10 @@ Bütün boyutlar `--ui-scale` ile çarpılır. **Uygulama ayarları → Görün�
 ### 5.1 Kabuk
 
 ```
-┌ Menü çubuğu (32) ─ K KentOS  Dosya Düzen Görünüm Çizim Değiştir Harita Koordinat Analiz Araçlar Yardım ─ proje adı ─ TUREF / TM36 ┐
+┌ Menü çubuğu (32) ─ K KentOS  Dosya Düzen Görünüm Çizim Değiştir Harita Koordinat Analiz İşlemler Araçlar Yardım ─ proje adı ─ TUREF / TM36 ┐
 ├ Araç çubuğu (44) ─ dosya │ geçmiş │ görünüm │ [■ Katman ▾] [Renk ▾] [Tip ▾] [Kalınlık ▾] ······ [Ölçek 1:1000 ▾] │ paneller ┤
 │ ┌──┐                                                                           K │ Katmanlar (ağaç)                   │
-│ │  │ kayan araç kutusu                                                        ↑  │                                     │
+│ │  │ kayan araç kutusu                                                        ↑  │ [Katmanlar | İşlemler] sekmeleri    │
 │ │  │                    Çizim alanı (WebGL2 + 2B üst katman)                     ├──────────── ayırıcı ────────────────┤
 │ └──┘                                                               0 ─── 50 m   │ Öznitelikler                       │
 ├ [alt panel: Komut geçmişi | Koordinat listesi | Uyarılar] (F2, isteğe bağlı)    │                                     │
@@ -258,6 +258,7 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 
 ### 7.5 Dok panelleri
 
+- **Üst yuva sekmeleri:** sağ dokun üst yuvası "Katmanlar | İşlemler" sekmelerini taşır. Sekme şeridi panel başlığının yerini alır (katlama oku solda kalır); etkin sekmede 2 px amber alt çizgi, amber simge ve 600 ağırlık vardır. Meta ("13 katman", "2 araç") sekmelerin sağında, dar dokta üç noktayla kısalır.
 - **Başlık:** katlama oku, başlık (600), üçüncül meta ("13 katman", "#284") ve sağda simge düğmeleri.
 - **Katman ağacı:**
   - Satır sırası: girinti, katlama oku, renk örneği ya da klasör, ad, nesne sayısı, göz ve kilit.
@@ -318,7 +319,19 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 - **Kontroller:** bölümlü seçici (segmented; seçili dilim kabarık), switch (açıkken amber), adımlayıcı (− değer + birim), tema kartları (etkin temadan bağımsız renkli mini çalışma alanı), motor kartları (radyo, rozet: Varsayılan / Deneysel / Desteklenmiyor).
 - **Birimler bölümünde "Önizleme" kartı** vardır: kesikli kenarlıkla koordinat, kenar, alan ve semt örneklerini canlı gösterir.
 
-### 7.11 Kontroller (genel)
+### 7.11 İşlem araçları (pencere ve araç kutusu)
+
+- **Araç kutusu (İşlemler sekmesi):** üstte "Araçlar | Geçmiş (n)" bölümlü seçicisi, altında arama ("İşlem ara: numara, kenar, parsel…"; Türkçe harfler katlanır). Kategoriler ağaç satırıdır (simge, ad, araç sayısı); araç satırında simge ve ad vardır, **tek tıkla** pencere açılır, üzerine gelince simge amber olur. İpucu açıklamayı ve komut satırı takma adlarını gösterir.
+- **Geçmiş satırı:** durum simgesi (başarılı yeşil, hata kırmızı, iptal ⚠), araç adı ve saat (tabular), özet (ikincil renk), altta süre ve "n nesneyi seç" (hayalet) ile "Yeniden aç" (küçük) düğmeleri.
+- **Pencere:** 940 px, sabit yükseklik; ayar pencereleriyle aynı aile.
+  - Sol form grupları: **Girdi**, **Ayarlar**, **Çıktı** ve katlanır **Gelişmiş ayarlar** (sayı rozetli). Grup başlığı ayar grubu gibidir (12 px, 600, alt çizgi).
+  - Satır: solda etiket (14 px, 500), isteğe bağlıysa yanında üçüncül "isteğe bağlı", altında açıklama (üçüncül, 12 px); sağda 300 px kontrol sütunu. Nesne girdisi tam genişlikte yığılır: kapsam seçicisi (Seçili, Görünen, Tümü, Katman), canlı sayı ("✓ 68 kapalı alan; seçili nesneler"; boşsa ⚠ ve "Seçili nesneler arasında uygun nesne yok") ve uygun türler.
+  - Hata alanın altında kırmızı simge ve metinle, alan kenarlığı kırmızı. Dokunulmamış alan hata göstermez; Çalıştır'dan sonra hepsi gösterilir ve ilk hatalı alana odaklanılır.
+  - Sağ panel (`--c-panel-head`): kategori yolu, simge kutusu ve tek cümlelik açıklama (500), yardım paragrafları, kesikli kenarlıklı **Önizleme** kartı, dipte "Nerede çalışır" listesi (bu çalıştırmadaki yer yeşil dolu nokta, diğerleri "yakında") ve komut satırı takma adları (mono).
+  - Alt çubuk: solda "Varsayılanlar" (hayalet), ortada durum (ilerleme çubuğu, ✓ özet + "Sonuçları seç" + "Geri al", ya da ⚠ düzeltilecek alan sayısı; en çok iki satır), sağda "Kapat" (çalışırken "Durdur") ve tek birincil düğme "▷ Çalıştır".
+- **Nokta parametresi:** değer tabular koordinat olarak yazılır, yanında "Haritadan göster" düğmesi; pencere kapanır, komut satırı "…: haritada bir nokta gösterin ya da Y,X yazın" der, nokta alınınca pencere aynı değerlerle döner.
+
+### 7.12 Kontroller (genel)
 
 | Kontrol | Kural |
 |---|---|

@@ -244,6 +244,8 @@ export interface ProcessingTool<Ds extends readonly ParamDef[] = readonly ParamD
   readonly help?: string;
   /** Extra search words (Turkish and English). */
   readonly keywords?: readonly string[];
+  /** Short names for the command line ("KOSENUMARA"); Turkish letters are folded. */
+  readonly aliases?: readonly string[];
   readonly icon?: string;
   readonly parameters: Ds;
   readonly outputs?: readonly OutputDef[];

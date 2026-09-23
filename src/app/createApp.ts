@@ -8,11 +8,13 @@ import { openAboutDialog, openShortcutsDialog } from '../ui/dialogs';
 import { openAppSettings, type AppSettingsSection } from '../ui/settings/AppSettingsDialog';
 import { openProjectSettings, type ProjectSettingsSection } from '../ui/settings/ProjectSettingsDialog';
 import { AppShell } from '../ui/shell/AppShell';
+import { openToolDialog } from '../ui/processing/ToolDialog';
 import { ViewportController } from '../viewport/ViewportController';
 import { Clipboard } from './clipboard';
 import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
 import { registerDefaultKeybindings } from './keybindings';
+import { createProcessing, registerProcessingCommands } from './processing';
 import { Formatter } from './format';
 import { applyUiScale } from './commands';
 import { createPreferences, createUiState, DraftingSettings, MessageLog } from './state';
@@ -31,18 +33,21 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   document.documentElement.dataset.theme = ui.theme.value;
   applyUiScale(prefs.uiScale.value);
 
+  const selection = new Selection();
   // Services that need the context are attached right after it exists.
   const ctx = {
     commands,
     keymap,
     doc,
-    selection: new Selection(),
+    selection,
     settings: new DraftingSettings(),
     log: new MessageLog(),
     ui,
     prefs,
     format: new Formatter(doc.settings),
     clipboard: new Clipboard(),
+    // The visible area is read lazily: the viewport exists only after the context.
+    processing: createProcessing(doc, selection, () => ctx.view.camera.visibleBounds()),
   } as AppContext & { tools: ToolManager; view: ViewportController };
   ctx.tools = new ToolManager(ctx);
   ctx.view = new ViewportController(ctx);
@@ -55,6 +60,10 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     openAppSettings: (section) => openAppSettings(ctx, section as AppSettingsSection | undefined),
     openProjectSettings: (section) => openProjectSettings(ctx, section as ProjectSettingsSection | undefined),
     focusCommandLine: () => shell?.bottom.commandLine.focus(),
+  });
+  registerProcessingCommands(ctx, {
+    open: (id, values) => openToolDialog(ctx, id, values),
+    show: (tab) => shell?.showProcessing(tab),
   });
   registerDefaultKeybindings(ctx);
   commands.events.on('missing', ({ id }) => ctx.log.error(`Komut bulunamadı: ${id}`));

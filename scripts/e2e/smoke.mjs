@@ -592,6 +592,42 @@ try {
   }
   await b.eval(`window.kentos.settings.grid.set(${gridWasOn})`);
 
+  // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step
+  {
+    const center = (sel, text = '') =>
+      b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.trim().startsWith(${JSON.stringify(text)})); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const press = async (sel, text) => {
+      const p = await center(sel, text);
+      if (!p) throw new Error(`bulunamadı: ${sel} ${text ?? ''}`);
+      await b.click(...p);
+      await sleep(150);
+    };
+    await b.eval(`(() => { const k = window.kentos; k.selection.set(k.doc.byLayer('parsel').filter((e) => e.kind === 'polygon').slice(0, 4).map((e) => e.id)); })()`);
+    await press('.menubar__item', 'İşlemler');
+    await press('.menu__item', 'Nokta işlemleri');
+    await press('.menu__item', 'Köşe noktalarını numarala');
+    check('processing: dialog opens from the İşlemler menu', !!(await center('.dialog--ptool')));
+    const count = await b.eval(`document.querySelector('.pfield__count')?.textContent ?? ''`);
+    check('processing: input shows what it will read', /^4 kapalı alan; seçili nesneler/.test(count), count);
+    await b.eval(`(() => { const i = document.querySelector('[data-param="prefix"] input'); i.focus(); i.select(); })()`);
+    await b.type('K');
+    const preview = await b.eval(`document.querySelector('.ptool__preview-value')?.textContent ?? ''`);
+    check('processing: preview follows the typed prefix', preview.startsWith('K00001, K00002'), preview);
+    const size0 = await b.eval('window.kentos.doc.size');
+    await press('.ptool__run');
+    await b.waitFor(`document.querySelector('.ptool__status')?.dataset.kind === 'ok'`, 5000).catch(() => {});
+    const made = await b.eval(`(() => { const k = window.kentos; const l = k.doc.layers.leaves().find((x) => x.name === 'Köşe noktaları'); return l ? k.doc.byLayer(l.id).map((e) => e.label) : []; })()`);
+    check('processing: corners numbered into a new layer', made.length > 4 && made[0] === 'K00001' && (await b.eval('window.kentos.doc.size')) === size0 + made.length, `${made.length} nokta, ${made[0]}`);
+    await b.shot('smoke-processing');
+    await press('.dialog__foot .btn', 'Kapat');
+    await b.eval(`window.kentos.commands.execute('processing.history')`);
+    await sleep(120);
+    check('processing: history lists the run', (await b.eval(`document.querySelectorAll('.phist__row').length`)) === 1 && (await b.eval('window.kentos.ui.dockTab.value')) === 'processing');
+    await b.eval(`window.kentos.commands.execute('edit.undo')`);
+    check('processing: the run is one undo step', (await b.eval('window.kentos.doc.size')) === size0);
+    await b.eval(`window.kentos.ui.dockTab.set('layers'); window.kentos.ui.processingTab.set('tools'); window.kentos.selection.clear()`);
+  }
+
   // Undo / redo round trip
   const before = await b.eval('window.kentos.doc.size');
   await b.eval(`window.kentos.commands.execute('edit.undo'); window.kentos.commands.execute('edit.redo')`);

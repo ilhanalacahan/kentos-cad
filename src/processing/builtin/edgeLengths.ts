@@ -13,13 +13,14 @@ export const edgeLengths = defineTool({
   id: 'annotation.edgeLengths',
   label: 'Kenar uzunluklarını yaz',
   category: 'annotation',
-  icon: 'dimension',
+  icon: 'edgeLengths',
   description: 'Alan, çoklu çizgi ve çizgilerin her kenarına uzunluğunu yazar; ortak kenarlar bir kez yazılır.',
   help: [
     'Yazı kenarın ortasına, kenar boyunca okunur biçimde konur: kapalı alanlarda dışa (ya da içe), açık çizgilerde sola (ya da sağa).',
     'Yay kenarlarında yay boyu yazılır. Komşu parsellerin ortak kenarı bir kez yazılır; bunu kapatırsanız her alan kendi kenarını yazar.',
   ].join('\n\n'),
   keywords: ['kenar', 'uzunluk', 'ölçü', 'yazı', 'edge', 'length', 'label', 'parsel'],
+  aliases: ['KENARYAZ', 'KENARUZUNLUK'],
   targets: ['client', 'worker'],
   parameters: [
     { name: 'input', label: 'Nesneler', type: 'features', kinds: ['polygon', 'polyline', 'line'], description: 'Kenar uzunlukları yazılacak alanlar, çoklu çizgiler ve çizgiler.', default: { scope: 'selection' } },

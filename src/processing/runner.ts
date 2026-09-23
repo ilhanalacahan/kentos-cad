@@ -44,6 +44,12 @@ export type RunOutcome =
   | { status: 'invalid'; issues: ValidationIssue[] }
   | { status: 'canceled' | 'error'; message: string; record: RunRecord };
 
+/** A features parameter as the dialog shows it before running. */
+export interface InputSummary {
+  count: number;
+  description: string;
+}
+
 export interface RunProgress {
   toolId: string;
   fraction: number;
@@ -51,6 +57,19 @@ export interface RunProgress {
 }
 
 const HISTORY_LIMIT = 100;
+
+function emptyInputMessage(label: string, v: FeaturesValue): string {
+  switch (v.scope) {
+    case 'selection':
+      return `“${label}”: seçili nesneler arasında uygun nesne yok. Önce nesneleri seçin ya da kapsamı değiştirin.`;
+    case 'visible':
+      return `“${label}”: görünen alanda uygun nesne yok. Görünümü kaydırın ya da kapsamı değiştirin.`;
+    case 'layer':
+      return `“${label}”: bu katmanda uygun nesne yok. Başka bir katman seçin.`;
+    default:
+      return `“${label}”: uygun nesne yok.`;
+  }
+}
 
 export class ProcessingRunner {
   readonly running = new Signal<RunProgress | null>(null);
@@ -82,9 +101,13 @@ export class ProcessingRunner {
   }
 
   /** What each features parameter currently resolves to ("12 kapalı alan; seçili nesneler"). */
-  describeInputs(tool: ProcessingTool, values: Record<string, unknown>): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const p of tool.parameters) if (p.type === 'features' && values[p.name]) out[p.name] = resolveFeatures(values[p.name] as FeaturesValue, p, this.host).description;
+  describeInputs(tool: ProcessingTool, values: Record<string, unknown>): Record<string, InputSummary> {
+    const out: Record<string, InputSummary> = {};
+    for (const p of tool.parameters) {
+      if (p.type !== 'features' || !values[p.name]) continue;
+      const set = resolveFeatures(values[p.name] as FeaturesValue, p, this.host);
+      out[p.name] = { count: set.entities.length, description: set.description };
+    }
     return out;
   }
 
@@ -123,7 +146,13 @@ export class ProcessingRunner {
     for (const p of tool.parameters) {
       const v = values[p.name];
       if (!isVisible(p, values) || v === null || v === undefined) continue;
-      if (p.type === 'features') resolved[p.name] = resolveFeatures(v as FeaturesValue, p, this.host);
+      if (p.type === 'features') {
+        const set = resolveFeatures(v as FeaturesValue, p, this.host);
+        // Running on nothing is a mistake worth stopping (usually: nothing selected);
+        // an empty output passed along a model is not.
+        if (!set.entities.length && !p.optional && (v as FeaturesValue).scope !== 'ids') return { status: 'invalid', issues: [{ param: p.name, message: emptyInputMessage(p.label, v as FeaturesValue) }] };
+        resolved[p.name] = set;
+      }
       if (p.type === 'layer') {
         const target = this.resolveLayer(v as LayerValue);
         if (target.isNew) newLayers.set(target.id, { name: target.name, def: p });
