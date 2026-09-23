@@ -26,3 +26,8 @@ dist-ssr
 # e2e screenshots
 scripts/e2e/out
 scripts/showcase/out/
+
+# Rust
+/target
+# WASM build output (pnpm rust:wasm)
+src/wasm/pkg/

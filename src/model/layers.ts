@@ -97,6 +97,9 @@ export class LayerStore {
   }
 
   private build(n: LayerInit, parent: LayerNode | null): LayerNode {
+    // Ids read from a file ("layer-12") keep the counter ahead of them, so new layers never collide.
+    const m = n.id ? /^layer-(\d+)$/.exec(n.id) : null;
+    if (m) uid = Math.max(uid, Number(m[1]));
     const node: LayerNode = {
       id: n.id ?? `layer-${++uid}`,
       name: n.name,
@@ -115,6 +118,21 @@ export class LayerStore {
 
   get tree(): readonly LayerNode[] {
     return this.roots;
+  }
+
+  /**
+   * Replaces the whole tree (a drawing opened from a file). The active
+   * layer is kept when it exists as a layer, else the first layer.
+   */
+  reset(init: readonly LayerInit[], activeId: string): void {
+    this.index.clear();
+    this.parents.clear();
+    this.roots = init.map((n) => this.build(n, null));
+    const active = this.get(activeId)?.type === 'layer' ? activeId : (this.leaves()[0]?.id ?? activeId);
+    this.active.set(active);
+    this.events.emit('structure', undefined);
+    this.events.emit('state', { ids: this.leaves().map((l) => l.id) });
+    this.version.update((v) => v + 1);
   }
 
   get(id: string): LayerNode | undefined {

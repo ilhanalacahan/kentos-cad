@@ -1,0 +1,13 @@
+[package]
+name = "kentos-api"
+description = "KentOS HTTP API (Faz A: health only)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kentos-contracts = { path = "../../crates/contracts" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }

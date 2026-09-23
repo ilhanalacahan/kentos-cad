@@ -4,7 +4,7 @@ import { entityBounds, type Entity, type NewEntity } from './entities';
 import type { CrsDef } from '../geo/crs';
 import { ProjectSettings, type ProjectSettingsData } from './projectSettings';
 import { emptyBounds, isEmptyBounds, type Bounds, type Vec2 } from './geometry';
-import type { LayerStyle } from './layers';
+import type { LayerInit, LayerStyle } from './layers';
 import { LayerStore } from './layers';
 import type { ProjectStyles } from './style';
 
@@ -27,6 +27,18 @@ interface DocumentEvents {
   attrs: { ids: number[] };
 }
 
+/** Everything a drawing file holds (see model/snapshot.ts for its versioned form). */
+export interface DocumentContent {
+  name: string;
+  settings: ProjectSettingsData;
+  origin: Vec2;
+  homeView: Bounds | null;
+  layers: readonly LayerInit[];
+  activeLayer: string;
+  entities: readonly Entity[];
+  styles: ProjectStyles;
+}
+
 /**
  * The drawing. Coordinates are stored in float64 world units; `origin` is a
  * local anchor near the data so the GPU can work in float32 without jitter
@@ -41,13 +53,19 @@ export class CadDocument {
   /** Project-scoped settings (CRS, units, plot scale) — saved with the file. */
   readonly settings: ProjectSettings;
   readonly layers: LayerStore;
-  readonly origin: Vec2;
   /** Symbols and assets that belong to this project (docs/STYLE.md §5), saved with the file. */
   readonly styles = new Signal<ProjectStyles>({ items: [], categories: [] });
   /** Where the view opens (the project's start extent); all objects when unset. */
   homeView: Bounds | null = null;
 
   private entities = new Map<number, Entity>();
+  private anchor: Vec2;
+  /**
+   * Counts every change to what a saved file holds. A save records the
+   * revision it wrote and clears `dirty` only if nothing changed meanwhile
+   * (an edit made during a slow save stays unsaved; CLAUDE.md §21.3).
+   */
+  private edits = 0;
   private nextId = 1;
   private undoStack: Transaction[] = [];
   private redoStack: Transaction[] = [];
@@ -58,12 +76,35 @@ export class CadDocument {
   constructor(opts: { name: string; layers: LayerStore; origin: Vec2; settings?: Partial<ProjectSettingsData> }) {
     this.name = new Signal(opts.name);
     this.layers = opts.layers;
-    this.origin = opts.origin;
+    this.anchor = opts.origin;
     this.settings = new ProjectSettings(opts.settings);
-    // Project settings are part of the file: changing them is an edit.
-    this.settings.changed.subscribe(() => this.dirty.set(true));
-    this.name.subscribe(() => this.dirty.set(true));
-    this.styles.subscribe(() => this.dirty.set(true));
+    // Project settings, the name, the project's styles and the layer tree
+    // (visibility, locks, names) are part of the file: changing them is an edit.
+    this.settings.changed.subscribe(() => this.markEdited());
+    this.name.subscribe(() => this.markEdited());
+    this.styles.subscribe(() => this.markEdited());
+    this.layers.events.on('structure', () => this.markEdited());
+    this.layers.events.on('state', () => this.markEdited());
+  }
+
+  /** Local anchor near the data: the GPU works in float32 relative to it. */
+  get origin(): Vec2 {
+    return this.anchor;
+  }
+
+  /** The current revision of the file's content (see `markSaved`). */
+  get revision(): number {
+    return this.edits;
+  }
+
+  private markEdited(): void {
+    this.edits++;
+    this.dirty.set(true);
+  }
+
+  /** A save of `revision` succeeded: the drawing is clean unless it changed since. */
+  markSaved(revision: number): void {
+    if (revision === this.edits) this.dirty.set(false);
   }
 
   /**
@@ -218,12 +259,39 @@ export class CadDocument {
     this.events.emit('changed', { layerIds: new Set(list.map((e) => e.layerId)) });
   }
 
+  /**
+   * Replaces the whole drawing with one read from a file: objects, layer
+   * tree, settings, styles, anchor and start view. No history is kept and
+   * the result is clean. Refused while an edit or a group is open.
+   */
+  replaceWith(data: DocumentContent): void {
+    if (this.pending || this.group) throw new Error('Açık bir düzenleme varken çizim değiştirilemez.');
+    const touched = new Set([...this.entities.values()].map((e) => e.layerId));
+    this.entities = new Map(data.entities.map((e) => [e.id, e]));
+    this.nextId = data.entities.reduce((m, e) => Math.max(m, e.id), 0) + 1;
+    this.anchor = { ...data.origin };
+    this.homeView = data.homeView;
+    this.layers.reset(data.layers, data.activeLayer);
+    this.settings.assign(data.settings);
+    this.name.set(data.name);
+    this.styles.set(data.styles);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.syncHistory();
+    for (const e of data.entities) touched.add(e.layerId);
+    for (const l of this.layers.leaves()) touched.add(l.id);
+    this.events.emit('changed', { layerIds: touched });
+    this.edits++;
+    this.dirty.set(false);
+  }
+
   undo(): string | null {
     const tx = this.undoStack.pop();
     if (!tx) return null;
     this.applyAll([...tx.ops].reverse().map(invert));
     this.redoStack.push(tx);
     this.syncHistory();
+    this.markEdited();
     return tx.label;
   }
 
@@ -233,6 +301,7 @@ export class CadDocument {
     this.applyAll(tx.ops);
     this.undoStack.push(tx);
     this.syncHistory();
+    this.markEdited();
     return tx.label;
   }
 
@@ -254,7 +323,7 @@ export class CadDocument {
     this.undoStack.push(tx);
     if (this.undoStack.length > 200) this.undoStack.shift();
     this.redoStack = [];
-    this.dirty.set(true);
+    this.markEdited();
     this.syncHistory();
   }
 

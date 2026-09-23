@@ -1,0 +1,8 @@
+# The developer machine is shared with the browser, Vite and headless Chrome:
+# builds use at most four jobs so they never starve the desktop.
+[build]
+jobs = 4
+
+[env]
+# ts-rs writes the TypeScript contract types here (crates/contracts, `cargo test`).
+TS_RS_EXPORT_DIR = { value = "src/contracts/generated", relative = true }

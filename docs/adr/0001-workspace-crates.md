@@ -1,0 +1,49 @@
+# ADR 0001: Rust çalışma alanı ve crate sınırları (Faz A)
+
+- **Durum:** kabul edildi
+- **Tarih:** 2026-09-23
+- **Bağlam belgesi:** CLAUDE.md §14, §20 Faz A
+
+## Bağlam
+
+Tarayıcı uygulaması (`src/`) TypeScript'tir ve olduğu gibi kalır. CLAUDE.md §13–14 ortak bir Rust çekirdeği istiyor. Bu çekirdek tarayıcıda WASM, sunucuda yerel kod olarak çalışacak. Yanında sürümlü sözleşmeler ve bir Rust API'si olacak.
+
+Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. Faz A yalnızca en küçük çalışan dilimi kurar; crate sayısı gereksiz yere artırılmaz.
+
+## Karar
+
+- Depo kökünde tek bir Cargo çalışma alanı var (`Cargo.toml`, resolver 3, edition 2024). Faz A üyeleri:
+
+  | Crate | Görev | Bağımlılık |
+  |---|---|---|
+  | `crates/geometry-core` | Saf analitik geometri (f64), `src/model/geom` ve `src/model/geometry.ts`'in birebir karşılığı; §23 sayısal politikası (`numeric`) | Yalnızca saf crate'ler (rust_decimal). Dosya sistemi, ağ, Tokio, SQLx, HTTP ya da WebGPU'ya bağlanamaz; wasm32 için de derlenir |
+  | `crates/contracts` | Sürümlü veri sözleşmeleri; TS tipleri buradan üretilir (ADR 0002) | serde, serde_json, ts-rs |
+  | `crates/wasm` | Çekirdeğin tarayıcı sınırı: düz `Float64Array` giriş ve çıkış | geometry-core, wasm-bindgen |
+  | `apps/api` | HTTP API; Faz A'da yalnızca `GET /v1/health` | contracts, axum, tokio |
+
+- Bağımlılıklar kullanıcı onayıyla eklendi ve tam sürüme kilitlendi (`=`). `Cargo.lock` depoya girer.
+
+  | Crate | Sürüm |
+  |---|---|
+  | serde | 1.0.229 |
+  | serde_json | 1.0.151 |
+  | rust_decimal | 1.43.0 (yalnızca `std`) |
+  | ts-rs | 12.0.1 |
+  | wasm-bindgen | 0.2.128 |
+  | axum | 0.8.9 |
+  | tokio | 1.53.1 |
+
+- Araç zinciri `rust-toolchain.toml` ile 1.96.0'a sabitlenir; `wasm32-unknown-unknown` hedefi zincirle birlikte kurulur.
+- **Derleme sınırı:** `.cargo/config.toml` derlemeyi 4 işle sınırlar. Geliştirici makinesi tarayıcı, Vite ve başsız Chrome ile paylaşılıyor. Paralel ağır süreçler makineyi bir kez kilitledi. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz.
+- Ana `pnpm test` Rust araç zincirine bağımlı değildir. Rust ve WASM denetimleri `pnpm test:rust` ile ayrıca çalışır.
+
+## Sonuçlar
+
+- `src/` ağacı taşınmadı. Rust çekirdeği TypeScript'e parça parça girecek. Aynı anlam iki dilde uzun süre paralel geliştirilmez (§14).
+- CLAUDE.md §14'teki diğer bileşenler ilgili fazda eklenir:
+  - `apps/worker`;
+  - `crates/application` (ortak kullanım durumları, yetki, iş sözleşmesi);
+  - `crates/postgres` (SQLx, PostGIS SQL, migration);
+  - `crates/tiles` (Martin arkasında TileJSON/MVT, önbellek geçersizleştirme);
+  - `crates/style-core`.
+- SQLx ve Tower Faz B'de PostgreSQL ile birlikte girer. Faz A'da veritabanı yoktur.
