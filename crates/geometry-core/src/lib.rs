@@ -7,9 +7,11 @@
 #![forbid(unsafe_code)]
 
 pub mod bulge;
+pub mod ewkb;
 pub mod measure;
 pub mod numeric;
 pub mod polygon;
+pub mod tessellate;
 pub mod vec2;
 
 pub use vec2::Vec2;

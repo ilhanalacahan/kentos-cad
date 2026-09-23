@@ -1,89 +1,100 @@
-//! KentOS API server. Faz A (CLAUDE.md §20) serves only `/v1/health`, so the
-//! browser can show whether a server is reachable; the app keeps working
-//! without it. Listens on 127.0.0.1 (`KENTOS_API_PORT`, default 8787).
+//! `kentosd`: the KentOS server (CLAUDE.md §14, §18). `serve` runs the API
+//! on 127.0.0.1 (`KENTOS_API_PORT`, default 8787); the other subcommands set
+//! up the database and administer tenants and accounts (see `cli::USAGE`).
+//! Without a database configured, `serve` answers `/v1/health` only, so the
+//! drawing app keeps working as before.
+
+mod cli;
+mod config;
+mod http;
+mod oidc;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
-use axum::{Json, Router, routing::get};
-use kentos_contracts::{CONTRACTS_VERSION, Health};
+use kentos_postgres::Db;
 
-fn app() -> Router {
-    Router::new().route("/v1/health", get(health))
-}
-
-async fn health() -> Json<Health> {
-    Json(Health {
-        status: "ok".into(),
-        service: "kentos-api".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
-        commit: option_env!("KENTOS_COMMIT").map(str::to_string),
-        contracts: CONTRACTS_VERSION,
-    })
-}
+use crate::config::Config;
+use crate::http::AppState;
 
 async fn shutdown() {
     let _ = tokio::signal::ctrl_c().await;
 }
 
-#[tokio::main]
-async fn main() {
-    let port = std::env::var("KENTOS_API_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(8787);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("KentOS API {addr} adresini açamadı: {e}");
-            std::process::exit(1);
+async fn serve(config: Config) -> Result<(), String> {
+    let database = match &config.database_url {
+        Some(url) => {
+            let db = Db::connect(url, 16, Duration::from_secs(5))
+                .await
+                .map_err(|e| format!("Veritabanına bağlanılamadı: {e}"))?;
+            if !db
+                .schema_ready()
+                .await
+                .map_err(|e| format!("Şema denetlenemedi: {e}"))?
+            {
+                return Err(
+                    "Veritabanı şeması bu sürüme göre eski; önce `kentosd migrate` çalıştırın."
+                        .into(),
+                );
+            }
+            Some(db)
+        }
+        None => {
+            tracing::warn!(
+                "KENTOS_DATABASE_URL yok: yalnızca /v1/health yanıt verir (`kentosd db-setup` ile kurun)"
+            );
+            None
         }
     };
+    let ip: std::net::IpAddr = config
+        .bind
+        .parse()
+        .map_err(|_| format!("KENTOS_API_BIND geçersiz: {}", config.bind))?;
+    let addr = SocketAddr::from((ip, config.port));
+    let oidc = match &config.oidc {
+        Some(settings) => Some(Arc::new(oidc::Oidc::new(
+            settings.clone(),
+            &config.public_url,
+        )?)),
+        None => None,
+    };
+    let state = AppState {
+        config: Arc::new(config),
+        database,
+        oidc,
+    };
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("KentOS API {addr} adresini açamadı: {e}"))?;
     println!("KentOS API: http://{addr}/v1/health");
-    if let Err(e) = axum::serve(listener, app())
+    axum::serve(listener, http::router(state))
         .with_graceful_shutdown(shutdown())
         .await
-    {
-        eprintln!("KentOS API durdu: {e}");
-        std::process::exit(1);
-    }
+        .map_err(|e| format!("KentOS API durdu: {e}"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    /// A real HTTP request through the router on an ephemeral port.
-    async fn get(path: &str) -> (u16, String) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, app()).await.unwrap() });
-        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-        let request = format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
-        stream.write_all(request.as_bytes()).await.unwrap();
-        let mut response = String::new();
-        stream.read_to_string(&mut response).await.unwrap();
-        let status = response[9..12].parse().unwrap();
-        let body = response
-            .split_once("\r\n\r\n")
-            .map(|(_, b)| b.to_string())
-            .unwrap_or_default();
-        (status, body)
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_env("KENTOS_LOG")
+                .unwrap_or_else(|_| "info,sqlx=warn,tower_http=info".into()),
+        )
+        .with_target(false)
+        .init();
+    let result = async {
+        let args = cli::Args::parse(std::env::args().skip(1))?;
+        let config = Config::load()?;
+        if args.words.is_empty() || args.words == ["serve"] {
+            serve(config).await
+        } else {
+            cli::run(&config, &args).await
+        }
     }
-
-    #[tokio::test]
-    async fn health_answers_on_its_path_with_the_contract() {
-        let (status, body) = get("/v1/health").await;
-        assert_eq!(status, 200);
-        let h: Health = serde_json::from_str(&body).unwrap();
-        assert_eq!(h.status, "ok");
-        assert_eq!(h.service, "kentos-api");
-        assert_eq!(h.contracts, CONTRACTS_VERSION);
-    }
-
-    #[tokio::test]
-    async fn other_paths_are_not_found() {
-        assert_eq!(get("/v1/nothing").await.0, 404);
+    .await;
+    if let Err(message) = result {
+        eprintln!("{message}");
+        std::process::exit(1);
     }
 }

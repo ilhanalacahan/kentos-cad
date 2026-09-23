@@ -1,0 +1,15 @@
+[package]
+name = "kentos-postgres"
+description = "KentOS PostgreSQL/PostGIS access: pools, migrations, tenant-scoped transactions, setup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+sqlx = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

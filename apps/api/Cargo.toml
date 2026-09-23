@@ -1,16 +1,32 @@
 [package]
 name = "kentos-api"
-description = "KentOS HTTP API (Faz A: health only)"
+description = "KentOS server (kentosd): HTTP API, database setup and administration"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "kentosd"
+path = "src/main.rs"
+
 [dependencies]
 kentos-contracts = { path = "../../crates/contracts" }
+kentos-application = { path = "../../crates/application" }
+kentos-postgres = { path = "../../crates/postgres" }
 axum = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["io-util"] }

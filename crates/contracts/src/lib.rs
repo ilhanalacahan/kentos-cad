@@ -13,6 +13,7 @@
 //!   in v1 and become typed when the style core moves to Rust.
 
 pub mod api;
+pub mod cloud;
 pub mod command;
 pub mod document;
 pub mod entity;
@@ -22,6 +23,7 @@ pub mod numeric;
 pub mod style;
 
 pub use api::*;
+pub use cloud::*;
 pub use command::*;
 pub use document::*;
 pub use entity::*;

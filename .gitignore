@@ -31,3 +31,6 @@ scripts/showcase/out/
 /target
 # WASM build output (pnpm rust:wasm)
 src/wasm/pkg/
+
+# Local server credentials (kentosd db-setup writes them; never committed)
+.env.local
