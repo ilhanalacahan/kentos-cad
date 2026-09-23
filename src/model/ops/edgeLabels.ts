@@ -8,19 +8,22 @@ export interface EdgeLabel {
   rotation: number;
   /** Edge length in metres. */
   length: number;
+  /** Segment index: the edge from pts[index] to pts[index + 1]. */
+  index: number;
 }
 
 /**
  * Placement of edge-length labels ("kenar ölçüleri") for a parcel or
  * polyline: centred on each edge, lifted to the outside of a closed ring
- * (to the left of an open path) by a gap proportional to text height.
+ * (to the left of an open path) by a gap proportional to text height;
+ * `side: 'inside'` puts them inside the ring (right of an open path).
  * Arc segments are labelled with their arc length at the arc's midpoint.
  */
-export function edgeLabels(pts: readonly Vec2[], closed: boolean, height: number, minLength = 0, bulges?: readonly number[]): EdgeLabel[] {
+export function edgeLabels(pts: readonly Vec2[], closed: boolean, height: number, minLength = 0, bulges?: readonly number[], side: 'outside' | 'inside' = 'outside'): EdgeLabel[] {
   const n = pts.length;
   const count = closed ? n : n - 1;
-  // For a CCW ring the outside is to the right of travel.
-  const outside = closed ? (bulgeRingArea(pts, bulges) > 0 ? -1 : 1) : 1;
+  // For a CCW ring the outside is to the right of travel; "inside" (or right of an open path) flips it.
+  const outside = (closed ? (bulgeRingArea(pts, bulges) > 0 ? -1 : 1) : 1) * (side === 'inside' ? -1 : 1);
   const out: EdgeLabel[] = [];
   for (let i = 0; i < count; i++) {
     const a = pts[i];
@@ -44,7 +47,7 @@ export function edgeLabels(pts: readonly Vec2[], closed: boolean, height: number
     const r = (rotation * Math.PI) / 180;
     const growsOutward = nx * -Math.sin(r) + ny * Math.cos(r) > 0;
     const lift = growsOutward ? height * 0.4 : height * 1.4;
-    out.push({ p: { x: mid.x + nx * lift, y: mid.y + ny * lift }, rotation, length });
+    out.push({ p: { x: mid.x + nx * lift, y: mid.y + ny * lift }, rotation, length, index: i });
   }
   return out;
 }

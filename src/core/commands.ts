@@ -1,6 +1,7 @@
 import type { Disposable } from './disposable';
 import { Emitter } from './emitter';
 import type { ReadonlySignal } from './signal';
+import { foldTurkish } from './text';
 
 /**
  * Everything the user can trigger — from a menu, toolbar, shortcut or the
@@ -27,16 +28,7 @@ interface CommandEvents {
   missing: { id: string };
 }
 
-const foldAlias = (s: string) =>
-  s
-    .trim()
-    .toLocaleUpperCase('tr-TR')
-    .replace(/Ç/g, 'C')
-    .replace(/Ğ/g, 'G')
-    .replace(/İ/g, 'I')
-    .replace(/Ö/g, 'O')
-    .replace(/Ş/g, 'S')
-    .replace(/Ü/g, 'U');
+const foldAlias = foldTurkish;
 
 export class CommandRegistry {
   readonly events = new Emitter<CommandEvents>();
