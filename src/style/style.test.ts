@@ -140,6 +140,26 @@ describe('compiling symbols', () => {
     // Straight down reads upwards instead.
     expect(Math.sin(along([v(0, 10), v(0, 0)]).angle)).toBeCloseTo(1, 9);
   });
+  it('leaves out boundary codes that would bend round a sharp corner', () => {
+    const code = (text: string): FillSymbol => ({
+      type: 'fill',
+      layers: [{ id: 't', type: 'markerLine', placement: 'interval', interval: 5, marker: { type: 'marker', layers: [{ id: 'x', type: 'text', text, size: 2 }] } }],
+    });
+    const count = (sym: FillSymbol, ring: Vec2[]) => {
+      const e = polygon(ring);
+      const out = new PrimitiveList();
+      compileSymbol(sym, styledGeometry(e)!, { entity: e, index: 1 }, env(1000), out);
+      return out.markers.length;
+    };
+    // 16 places round a 20 m square, 4 of them on its corners.
+    expect(count(code('SEG'), square(20))).toBe(12);
+    // A long code also clears the places 5 m either side of each corner.
+    expect(count(code('YAPI YASAKLI'), square(20))).toBe(4);
+    // Gentle turns (15° at each vertex of a 24-sided ring) are not corners: nothing is left out.
+    const ring = Array.from({ length: 24 }, (_, i) => v(20 * Math.cos((i * Math.PI) / 12), 20 * Math.sin((i * Math.PI) / 12)));
+    const plain = placeAlong([...ring], true, 'interval', 5).length;
+    expect(count(code('SEG'), ring)).toBe(plain);
+  });
   it('gives each mark of a nested marker symbol its own level, in order', () => {
     const sym: FillSymbol = {
       type: 'fill',

@@ -175,6 +175,12 @@ function readsBackwards(angle: number): boolean {
   return c < -1e-9 || (Math.abs(c) <= 1e-9 && Math.sin(angle) < 0);
 }
 
+/** About half a text mark's length along its line, in world units (px-sized text is left alone). */
+function textHalfLength(st: MarkerStyle): number {
+  if (st.kind !== 'text' || st.common.unit !== 'world') return 0;
+  return (st.text.length * 0.3 + 0.3) * st.size + Math.abs(st.common.offset[0]);
+}
+
 const MIRRORED_ANCHOR: Record<Anchor, Anchor> = {
   center: 'center',
   top: 'bottom',
@@ -243,7 +249,9 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
   if (!styles.length) return;
   const follow = layer.rotate !== false;
   const turned = styles.map((st) => (follow && st.kind === 'text' ? turnedText(st) : null));
-  for (const p of placeAlong(path, closed, layer.placement, interval, along, group))
+  // Text that follows the line keeps half its length clear of sharp corners instead of bending round them.
+  const clear = follow ? Math.max(0, ...styles.map(textHalfLength)) : 0;
+  for (const p of placeAlong(path, closed, layer.placement, interval, along, group, clear))
     styles.forEach((st, i) => {
       if (!follow) return sink.marker(st, p.at, 0);
       const alt = turned[i];

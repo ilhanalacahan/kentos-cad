@@ -105,6 +105,20 @@ export const MAX_MARKERS_PER_PATH = 50_000;
 
 const dirOf = (a: Vec2, b: Vec2) => Math.atan2(b.y - a.y, b.x - a.x);
 
+const SHARP_TURN = Math.PI / 6;
+
+/** Distances along the path of the corners that turn more than 30° (a closed path's start included). */
+function sharpCorners(segs: readonly { start: number; angle: number }[], closed: boolean): number[] {
+  const out: number[] = [];
+  for (let i = closed ? 0 : 1; i < segs.length; i++) {
+    const prev = segs[(i - 1 + segs.length) % segs.length];
+    let turn = Math.abs(segs[i].angle - prev.angle) % (2 * Math.PI);
+    if (turn > Math.PI) turn = 2 * Math.PI - turn;
+    if (turn > SHARP_TURN) out.push(segs[i].start);
+  }
+  return out;
+}
+
 /** The bisector direction at a corner: the mean of the directions in and out. */
 function meanAngle(a: number, b: number): number {
   return Math.atan2(Math.sin(a) + Math.sin(b), Math.cos(a) + Math.cos(b));
@@ -122,9 +136,11 @@ export interface PlaceGroup {
  * vertices face the bisector of their corner. A `group` puts `count`
  * markers at each place instead of one, centred on it (dots in a dash
  * gap); on a closed path they wrap around, on an open one those past an
- * end are left out.
+ * end are left out. `clear` keeps interval places that far from sharp
+ * corners (turns over 30°): a code written along a boundary is left out
+ * rather than bent around a corner.
  */
-export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: MarkerPlacement, interval = 0, offsetAlong = 0, group?: PlaceGroup): Placed[] {
+export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: MarkerPlacement, interval = 0, offsetAlong = 0, group?: PlaceGroup, clear = 0): Placed[] {
   const n = pts.length;
   if (n < 2) return n === 1 ? [{ at: pts[0], angle: 0 }] : [];
   const segCount = closed ? n : n - 1;
@@ -160,6 +176,15 @@ export function placeAlong(pts: readonly Vec2[], closed: boolean, placement: Mar
       const first = ((offsetAlong % interval) + interval) % interval;
       const end = closed ? total - 1e-9 : total + 1e-9;
       for (let s = closed ? first : offsetAlong; s <= end && places.length < MAX_MARKERS_PER_PATH; s += interval) if (s >= -1e-9) places.push({ s: Math.max(0, s) });
+      if (clear > 0) {
+        const corners = sharpCorners(segs, closed);
+        if (corners.length) {
+          const gap = (s: number, c: number) => (closed ? Math.min(Math.abs(s - c), total - Math.abs(s - c)) : Math.abs(s - c));
+          const kept = places.filter((p) => corners.every((c) => gap(p.s, c) >= clear));
+          places.length = 0;
+          places.push(...kept);
+        }
+      }
       break;
     }
     case 'center':
