@@ -6,12 +6,50 @@ kuralları ve mimariyi anlatır. Görsel dil, renkler ve bileşen kuralları iç
 doğrulayın, sonra belgeyi güncelleyin; belge güncel tutulmak zorundadır.
 
 **Yeni hedef (23 Eylül 2026):** §13 ve sonrası Rust/WASM ortak çekirdek, Rust
-backend, yerel mekânsal veri motoru, tenant, worker ve bulut dağıtımının
+backend, PostgreSQL/PostGIS veri modeli, tenant, worker ve bulut dağıtımının
 bağlayıcı mimarisidir. §1–12 mevcut tarayıcı uygulamasını ve eski yol haritasını
 anlatır. Gelecek veri katmanında çelişki varsa §13 ve sonrası geçerlidir.
-Rust backend, Rust/WASM çekirdek, sunucu worker ve kalıcı veri motoru **henüz
-bu depoda uygulanmış değildir**. Bu dosyadaki hedefleri çalışan özellik diye
+Rust backend, Rust/WASM çekirdek, sunucu worker ve kalıcı PostgreSQL katmanı
+**henüz bu depoda uygulanmış değildir**. Bu dosyadaki hedefleri çalışan özellik diye
 raporlamayın.
+
+## 0. Güncel karar özeti ve kapsam kontrolü
+
+**Belge revizyonu: 2026-09-23 / konsolide-v2.** Bu dosya mevcut depo
+kılavuzunun güncellenmiş halidir; önceki bağımsız mimari taslakları
+uygulama talimatı olarak kullanmayın. Mevcut kod envanteri §1–12 ve
+§13.1'de, uygulanacak hedef sözleşmeler §13–24'tedir. Eski envanterde
+"yapıldı" denmesi backend'de de uygulandığı anlamına gelmez.
+
+| Konuşulan karar               | Bağlayıcı karşılığı                                                                              | Ayrıntı      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ------------ |
+| Veritabanı                    | PostgreSQL + PostGIS; özel embedded/KV veri motoru ve özel WAL/MVCC tasarımı kapsamdan çıkarıldı | §13, §15     |
+| Backend stack                 | Rust + Axum + Tokio + SQLx; HTTP middleware için Tower                                           | §14          |
+| Ağır işlemler                 | Ayrı sunucu worker modu, PostgreSQL kalıcı job kuyruğu, lease/fencing ve idempotent sonuç        | §18          |
+| Çoklu tenant                  | Tenant üyeliği, tenant başına kullanıcı/koltuk tahsisi, rol ve kaynak yetkisi, RLS ve kota       | §16          |
+| Bulut kalıcılığı              | PostgreSQL proje/veri; S3/MinIO dosyalar ve büyük çıktılar; yedek/PITR/restore                   | §16          |
+| Ortak hesaplama               | Tek Rust algoritması, backend native ve frontend WASM; bağımsız doğruluk testleri                | §14, §23     |
+| Katman yayını                 | Wizard, MVT/TileJSON, stil/sprite/glyph, izin ve revision/cache tutarlılığı                      | §17, §24     |
+| İlk yayın motoru              | Martin, KentOS gateway arkasında kullanılır                                                      | §17          |
+| Gelecekte Martin bağımsızlığı | Şimdi uygulanmaz; ölçüm, eşdeğerlik, kademeli geçiş ve geri dönüş kapısına bağlıdır              | §17.1, Faz E |
+| Harita istemcisi              | Mevcut kendi WebGL2/WebGPU renderer'ları; MapLibre GL JS zorunlu runtime değildir                | §17          |
+| Stil doğruluğu                | Kaynak `.kstil`/MPYY korunur; dış MapLibre çıktısında destek matrisi ve kayıp raporu gerekir     | §17          |
+| Frontend                      | Mevcut TypeScript DOM/Signal korunur; modülerlik için React'e geçiş yok                          | §20          |
+| Lazy load                     | Stil/workflow/layout/ileri analiz/3D ayrı JS, CSS, WASM ve asset yükleme sınırları               | §20          |
+| Sürekli bağlantı              | WebSocket izlenir, heartbeat/reconnect/replay/resync; job socket'tan bağımsız                    | §21          |
+| Proje açılışı                 | Yerel ve bulut projeleri asenkron/aşamalı; iptal, generation ve sınırlı bellek                   | §21.2        |
+| Otomatik kayıt                | Bulutta açık; dayanıklı yerel komut kuyruğu, commit ACK, idempotency ve conflict                 | §21.3        |
+| Gelecek 3D urban design       | İmar/parsel/senaryo tabanlı; ortak Rust, ağır worker, LOD ve streaming                           | §22, Faz F   |
+| Kadastro ve mülkiyet          | Kaynak hassasiyeti, açık yuvarlama politikası, kesin hisse/decimal, robust geometri              | §23          |
+| Kalite hedefi                 | Çalışan kabul senaryoları ve ölçüm zorunlu; belgeyi tamamlamak 10/10 ürün kanıtı değildir        | §19.0        |
+| Önceki CBS kapsamı            | Katalog/provider, tipli şema/domain/ilişki/form, agentic komutlar ve operasyon korunur           | §24          |
+
+Önceki genel taslaklardaki React zorunluluğu, SSE'yi birincil bağlantı
+yapma, ilk sürümde Martin yerine özel tile motoru yazma ve WebGPU'yu
+henüz hiç yok sayma talimatları bu depo için geçerli değildir. Yeni
+özelliklerin hepsini tek sprintte kurmayın; §19'un çalışan dikey dilim
+sırasını izleyin. Bu revizyon uygulama değişikliği veya GitHub'a push
+yapıldığı iddiası değildir.
 
 ---
 
@@ -421,8 +459,8 @@ Toplu işlemler (QGIS Processing gibi) için ayrı bir çatıdır; ayrıntılar 
    - Geometri içinde radyan ya da doğudan saat yönünün tersine derece kullanılır.
    - Ölçmecilik semti **kuzeyden saat yönünde grad** olarak `bearingGrad()` ile hesaplanır.
    - Gösterim `ctx.format.bearing()` ile yapılır; birim proje ayarından gelir.
-6. **Toleranslar ekran pikselinden türetilir:** `px / camera.scale`. Seçme ve kenet için metre sabitlenmez. Geometrik bozulma eşiği `1e-9` m'dir.
-7. **Alan ve uzunluk** CPU'da float64 koordinatlardan hesaplanır (shoelace). GPU verisinden ya da ekrandan ölçülmez.
+6. **Etkileşim toleransları** `px / camera.scale` ile seçme/kenet adaylarını bulur; kaynak geometri doğruluğunu belirlemez. Mevcut kodda kullanılan sabit eşikler kadastral doğruluk kanıtı değildir. Hesap/topoloji/koordinat dönüşümü toleransları §23'e göre ayrı ve sürümlü tanımlanır.
+7. **Alan ve uzunluk** kaynak geometri üzerinden CPU'da hesaplanır; GPU verisinden ya da ekrandan ölçülmez. Mevcut float64 yaklaşımı tek başına kadastral yeterlilik sağlamaz. Düz kenarlı halkalarda alan hesabı, eğrilerde analitik yöntem ve tüm nihai sonuçlar §23 doğrulamasına tabidir.
 8. **Birimler:** metre, m², dönüm = 1 000 m², hektar = 10 000 m².
 9. **Sayıdan metne tek geçit `ctx.format`'tır** (`coord`, `length`, `area`, `bearing`, `point`). `toFixed`'i arayüz metninde doğrudan kullanmayın.
 10. **Ondalık ayırıcı her yerde noktadır** (`486512.340`). Komut satırı `Y,X` biçiminde virgülü koordinat ayırıcı olarak kullanır; görülen değer kopyalanıp aynen yazılabilmelidir.
@@ -565,10 +603,16 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `style/classify.test.ts`              | Katman stili sınıflama: ifade değerleri, benzersiz değerler ve doğal sıra, eşit aralık ve eşit sayı, renk rampası, geometriye göre basit semboller                                                                                                                                                                                                                                                                                                                                         |
 | `style/system/system.test.ts`         | Sistem kitaplığı: benzersiz kimlikler, her sembolün doğrulanması, kullanılan çizimlerin varlığı, her öğenin kategorisi                                                                                                                                                                                                                                                                                                                                                                     |
 | `style/style.test.ts`                 | Stil motoru: birimler, alan halkalarının yönü, çizgi boyunca işaret yerleşimi, alanın iç noktası, derleme (kesik ve kaydırma, dönüşümlü işaretler, içe kaydırılmış kenar, tarama, öznitelikten yazı, veriye bağlı boyut/açı/renk/görünürlük, desen döşemesi), işleyiciler (kategorili, aralıklı, iç içe kurallar ve ölçek aralığı), kitaplık (sistem salt okunur, kopya, ağaç ve arama, projeye varlıklarıyla kopya), .kstil (dışa/içe aktarma, çakışma kipleri, doğrulama, SVG temizliği) |
-| `style/svg/importSvg.test.ts`         | SVG içe alma: renk sözdizimleri ve alfa, bütün dönüşümler, viewBox ve preserveAspectRatio, CSS sınıf/kimlik/torun seçicileri ve devralma, `<use>`/`<symbol>`/`<defs>`, birimler (mm → çizim birimi, sembol boyu), iç içe `<svg>`, bütün ilkeller, saydamlık, kesik, uç, köşe, dolgu kuralı, degrade ve desenin düz renge inmesi, kırpma/maske/görüntü sayımı, `<tspan>` satırları, renk eşleme (siyah, baskın, ikinci renk), düzenleyicinin kendi kaynağı (kimlik, ad, grup, gizli, altlık) |
-| `style/svg/exportSvg.test.ts`         | SVG dışa aktarma: sembol SVG (parametreler, mm boyu, zemin) ve geri okuma, düz SVG (önizleme renkleri, alfa → opacity, mm), seçime kırpma, `<defs>` içinde altlık, kaynak görünümü (kimlik, ad, gizli, öğe aralıkları, kararlı gidiş-dönüş), PNG boyu (piksel, DPI) ve pHYs parçası (CRC) |
-| `style/svg/trace.test.ts`             | Bitmap izleme: parlaklık ve alfa, tek piksel halkası, keskin köşeli kare, delikli halka ve içindeki ada, çapraz şeridin merdiveni, benek temizliği (gürültü), yumuşak düğümlü disk ve alanı, kapalı halkada Douglas–Peucker |
 | `model/expression/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme                                                                                                                                                                                                                                                                                                                               |
+| `style/svg/importSvg.test.ts` | SVG içe alma: renk sözdizimleri ve alfa, bütün dönüşümler, viewBox ve preserveAspectRatio, CSS sınıf/kimlik/torun seçicileri ve devralma, `<use>`/`<symbol>`/`<defs>`, birimler (mm → çizim birimi, sembol boyu), iç içe `<svg>`, bütün ilkeller, saydamlık, kesik, uç, köşe, dolgu kuralı, degrade ve desenin düz renge inmesi, kırpma/maske/görüntü sayımı, `<tspan>` satırları, renk eşleme (siyah, baskın, ikinci renk), düzenleyicinin kendi kaynağı (kimlik, ad, grup, gizli, altlık) |
+| `style/svg/exportSvg.test.ts` | SVG dışa aktarma: sembol SVG (parametreler, mm boyu, zemin) ve geri okuma, düz SVG (önizleme renkleri, alfa → opacity, mm), seçime kırpma, `<defs>` içinde altlık, kaynak görünümü (kimlik, ad, gizli, öğe aralıkları, kararlı gidiş-dönüş), PNG boyu (piksel, DPI) ve pHYs parçası (CRC) |
+| `style/svg/trace.test.ts` | Bitmap izleme: parlaklık ve alfa, tek piksel halkası, keskin köşeli kare, delikli halka ve içindeki ada, çapraz şeridin merdiveni, benek temizliği (gürültü), yumuşak düğümlü disk ve alanı, kapalı halkada Douglas–Peucker |
+| `model/geom/golden.test.ts` | Rust çekirdeğiyle paylaşılan golden geometri durumları (`fixtures/geometry/v1/cases.json`): bulge yayı, uzunluk, halka ve işaretli alan, nokta-çokgen, delikli alan ve çevre; TM koordinatları; tolerans dosyada |
+| `model/geom/reference.test.ts` | Bağımsız kesin referansa (Python kesirleri, 60 basamak π; `fixtures/geometry/v1/reference.json`) göre doğruluk: ondalık metinden TM parsel ve adalı alan, yaylı alanlar ve çevre; her durumun hata sınırı içinde (§23.4) |
+| `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
+| `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
+| `style/svg/arrange.test.ts` | Birimler (grup tek birim, seçim sırası), seçime/ilk/son/en büyük/tuvale hizalama, blok olarak hizalama, eşit aralık ve eşit boşluk; taşı (göreli, mutlak, ayrı ayrı adımla), ölçek, döndürme yönü ve merkezi, eğme, kutuya göre matris; satır-sütun, dairesel (tam tur ve yay, dönmeden) ve aynalı dizi, kopyaların grupları; sıra (öne, arkaya, en öne, en arkaya) |
+| `style/svg/snapping.test.ts` | SVG düzenleyicisinin kenetlemesi: köşe/yumuşak düğüm, parça ortası, ağırlık merkezi, kutu noktaları, tuval köşesi ve kenarı, kesişim (eğriyle dahil), dik ayak ve teğet noktası (başlangıç noktasından), kılavuz, kılavuz kesişimi ve kılavuzla kesişim, noktaların çizgilerden önce gelmesi, taşınan şekil ve düğümlerin dışarıda kalması |
 
 Kurallar:
 
@@ -630,7 +674,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - öznitelik tablosu (alt panelde, seçimle eşlenik), sorgu ve filtre, tematik stil
    - raster, WMS ve XYZ altlık (yeni `SceneLayer` türü)
    - CRS dönüşümleri: TUREF ↔ ED50 7 parametre ve grid; TM ve UTM dilimleri
-   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı, modeller (çalıştırıcı, kitaplık, akış diyagramı tasarımcısı) yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç; Parsel ölçü yazıları modeli). Sıradaki: daha çok araç (sadeleştir, çift nesneleri temizle, parsel numaralandır, alan çizelgesi), modellerin proje dosyasında saklanması ve dışa aktarımı; Rust sunucu çalıştırıcısı §13–20 kapsamında. PostGIS yalnızca isteğe bağlı içe/dışa aktarma ve karşılaştırma adaptörü olabilir.
+   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı, modeller (çalıştırıcı, kitaplık, akış diyagramı tasarımcısı) yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç; Parsel ölçü yazıları modeli). Sıradaki: daha çok araç (sadeleştir, çift nesneleri temizle, parsel numaralandır, alan çizelgesi), modellerin proje dosyasında saklanması ve dışa aktarımı; Rust sunucu çalıştırıcısı ve PostGIS kalıcılığı §13–19 kapsamında.
 4. **Harita işleri:**
    - ifraz, tevhid, aplikasyon (istasyondan semt ve mesafe)
    - kot noktası ve TIN, eşyükselti, boy kesit, hacim
@@ -638,7 +682,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 5. **Kalıcılık:**
    - `.kcad` biçimi: JSON manifest (proje ayarları, katmanlar, şemalar) ve ikili geometri parçaları
    - IndexedDB otomatik kayıt
-   - ileride §13–20'deki bulut projesine eşitleme; PostGIS ana depolama değildir
+   - ileride §13–19'daki PostgreSQL/PostGIS bulut projesine eşitleme
 6. GPU metin (SDF) ve kalın çizgiler (örneklenmiş dörtgen); iki arka uçta birlikte. WebGPU arka ucu yapıldı.
 7. **Eklenti API'si:** komut, araç, panel ve IO bağdaştırıcısı katkıları; mevcut kayıtlar bu API'nin ilk kullanıcılarıdır.
 
@@ -658,7 +702,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Yol ötelemesinde, dar iç köşelerde oluşan kendi kendini kesen parçalar temizlenmiyor.
 - Dizi dikdörtgen ve kutupsal; yol boyunca dizi yok. Diziler ilişkisel değil (tek tek kopyalar).
 - Tarama ilişkisel değil: sınır değişince tarama güncellenmez. Yayları ve daireleri parçalı (72 parça/tur) saklar.
-- Alan işlemlerinde parça sınıflandırma O(n²)'dir (her parça için kaynakların sarım sayısı); parsel ölçeğinde anlık, binlerce köşeli alanlarda yavaşlar. İçine tıklayarak alan görünümdeki bütün kenarları bindirir; büyük veride R-tree ile tıklanan yerin çevresine bakılmalı.
+- Alan işlemlerinde parça sınıflandırma artık ikinci dereceden değil: sarım sayıları bantlara bölünmüş kenarlarla sabit, genel bir ışın üzerinden sayılır (`WindingIndex`; ışın bir yay ucundan geçerse tam açı toplamına düşülür), en yakın parça bir hücre ızgarasıyla bulunur. 900 örtüşen karenin birleşimi yaklaşık 0,5 s sürer. İçine tıklayarak alan görünümdeki bütün kenarları bindirir; büyük veride R-tree ile tıklanan yerin çevresine bakılmalı.
 - Adalı alanda buda, kır ve dış halka dışında köşe ekle/sil yok (önce Patlat); ötele yalnızca dış halkayı öteler.
 - Eğri doğrudan budanamaz, kırılamaz, uzatılamaz, ötelenemez; önce Patlat ile çoklu çizgiye dönüştürülür (kenarları sınır olarak her zaman kullanılır).
 - Ölçüler ilişkisel değil (ölçülen nesne değişince güncellenmez); koordinat (ordinat) ve yay uzunluğu ölçüsü yok. Ölçü yazısı ve yazıların seçim kutusu yaklaşık genişlikle hesaplanıyor (gerçek glif ölçüsü yok).
@@ -696,7 +740,7 @@ src/
     legend.ts                Lejant satırları (katman, sınıf, nesne sembolleri)
     showcase.ts              Gösterim kataloğu: her sistem sembolü örnek geometride (demo projede paftanın altı)
     system/                  Sistem kitaplığı (salt okunur, kopyalanabilir): temel çizgi tipleri, işaretler, alanlar; mpyy/ (MPYY gösterimleri: dsl.ts yardımcılar, pictograms.ts + pictogramDrawings.ts piktogramlar, uip/ nip/ cdp/ msp/ ortak/ kademe bölümleri)
-    svg/                     SVG çizim modeli (yol verisi, şekiller, dönüşümler, SVG çıktısı); svgValues (renk, dönüşüm, uzunluk, CSS), importSvg (içe alma: stil, <use>, birimler, renk eşleme, özet), exportSvg (sembol/düz SVG, kaynak görünümü, PNG boyu ve DPI), trace (bitmap izleme) (+ testler)
+    svg/                     SVG düzenleyicisinin saf modeli (+ testler). Temel: svgModel, pathData. Dosya: svgValues (renk, dönüşüm, uzunluk, CSS), importSvg (içe alma: stil, <use>, birimler, renk eşleme, özet), exportSvg (sembol/düz SVG, kaynak görünümü, PNG boyu ve DPI), trace (bitmap izleme). Düzenleme: bezier (parça, bölme, düzleştirme, uzunluk), fitCurve (Schneider uydurma), pathBool (kirişi izlenen düzleştirme, dolgu kuralları, bindirme, eğrilerin geri kurulması, yolu kes), pathStroke (çizgi dış hattı, öteleme), pathOps (şekil düzeyinde yol işlemleri), nodeOps (düğüm işlemleri, köşe yuvarla/pah), arrange (hizala, dağıt, dönüştür, diziler, sıra), snapping (kenet dizini)
   processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit (+ testler)
     worker/                  Web Worker çalıştırıcısı: protokol, iş yürütme, executor, worker girişi (+ testler)
     builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç; yerleşik modeller
@@ -750,11 +794,11 @@ src/
     statusbar/               Durum çubuğu
     settings/                SettingsShell, crsPicker, Proje ve Uygulama ayarları pencereleri
     style/                   Stil yöneticisi, sembol tasarımcısı (katman formları, alanlar), katman stili (kurallar, sembol yuvası), resimler, .kstil dosyaları
-    svgedit/                 SVG çizim düzenleyicisi: pencere, çizim yüzeyi, özellikler; svgFile (Dosya menüsü, aç/ekle, pano ve sürükle-bırak, kitaplıktan aç, farklı kaydet), svgImport, svgExport, svgDocProps, svgReference (izleme altlığı), svgTrace (bitmap izle), svgSource (XML kaynağı), readSvg
+    svgedit/                 SVG çizim düzenleyicisi: SvgEditor (pencere). Dosya: svgFile (Dosya menüsü, aç/ekle, pano ve sürükle-bırak, kitaplıktan aç, farklı kaydet), svgImport, svgExport, svgDocProps, svgReference (izleme altlığı), svgTrace (bitmap izle), svgSource (XML kaynağı), readSvg. Düzenleme: svgView (ortak türler), svgCanvas (görünüm, seçim, çizim araçları), svgNodeTool, svgSnap, svgRulers (cetvel, kılavuz), svgMeasure, svgActions (menü/panel/tuş işlemleri, panel ayarları), svgMenus (Yol, Nesne, Seç, Kenet, Cetvel), svgProps (sekmeler, Özellikler), svgStyleProps (çizgi biçimi, kutu), svgNodeProps, svgAlign, svgTransform, svgArray, svgObjects (şekil listesi), svgIcons
     widgets/                 Genel parçalar (menü, açılır liste, ağaç, özellik ızgarası, pencere, kontroller)
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
-  styles/                    tokens, base, shell, controls, panels, settings, processing, model, style
+  styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları)
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanları, birimler, işleyiciler, kitaplık, çizim hattı, aşamalar
@@ -762,382 +806,1046 @@ docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanlar�
 
 ---
 
-## 13. Rust backend hedefi ve uygulama emri
+## 13. Rust backend hedefi: PostgreSQL + PostGIS
 
-Bu bölüm **mevcut koda bakılarak** yazıldı; temel alınan commit:
-`c7450a748c3b0d673ba2676490fedfc339b7cf2a` (23 Eylül 2026).
-Bu commit'te uygulama Vite/TypeScript tarayıcı uygulamasıdır. Rust crate'i,
-Cargo workspace, HTTP sunucusu, tenant kataloğu ve kalıcı veri dosyası yoktur.
-`processing/worker` bir **tarayıcı Web Worker**'ıdır; sunucu job worker'ı değildir.
-WebGL2/WebGPU arka uçları ve `SceneLayer` sözleşmesi çalışır. Bu gerçekliği
-koruyarak **çalışan dikey dilimler** halinde geliştirin.
+Bu bölüm, `c7450a748c3b0d673ba2676490fedfc339b7cf2a` commit'indeki gerçek
+koda bakılarak 23 Eylül 2026'da güncellendi. Bu commit bir Vite/TypeScript
+tarayıcı uygulamasıdır; Rust crate'i, Cargo workspace, HTTP sunucusu,
+kalıcı proje kaydı ve çoklu tenant henüz yoktur. `src/processing/worker/`
+bir tarayıcı Web Worker'ıdır; sunucu job worker'ı değildir. WebGL2/WebGPU
+arka uçları, stil motoru ve `SceneLayer` sözleşmesi mevcuttur.
 
-Amaç: TypeScript arayüzü + native/WASM'da ortak Rust CAD/GIS çekirdeği +
-Rust API/tile sunucusu + Rust yoğun iş worker'ı + PostgreSQL zorunluluğu
-olmayan, özel mekânsal veri motoru. Kurumsal çoklu tenant, tenant'a üye
-kullanıcılar, bulutta kalıcı veri, izinli MCP/komut akışı, Martin sınıfında
-MVT sunumu, mevcut stil sistemi ve WebGPU ile çalışmalıdır. Bu bir
-performans/ürün hedefidir; ölçülmüş eşdeğerlik iddiası değildir.
+**Kesin karar:** Ana kalıcı veri deposu PostgreSQL + PostGIS. Bu proje için
+ayrı bir disk motoru, WAL, MVCC, uzamsal indeks veya dağıtık veritabanı
+protokolü yazmayın. Rust; CAD/geometri hesapları, sunucu iş kuralları,
+PostGIS sorgu planları, tile yayınlama, stil sözleşmeleri ve ağır işler
+üzerinde çalışır. PostgreSQL'ü yalnızca veri satırı değil; transaction,
+yetki sınırı, veri bütünlüğü, kalıcı job/outbox ve yedekleme temeli olarak
+kullanın. Bir CAD ihtiyacı PostGIS'te ölçülmüş ve tekrarlanabilir biçimde
+karşılanamıyorsa **dar kapsamlı PostgreSQL uzantısını** sonradan değerlendirin;
+baştan özel veri tipi veya uzantı yazmak bir hedef değildir.
 
-### 13.1 Kod tabanına bağlanan kararlar
+Bu karar mevcut 2D CAD davranışını, analitik eğrileri, MPYY stillerini,
+WebGPU'yu veya native/WASM ortak Rust çekirdeği hedefini kaldırmaz.
+PostGIS `CircularString`, `CompoundCurve` ve `CurvePolygon` saklayabilir;
+her CAD kavramının bu tiplere kayıpsız eşleneceğini varsaymayın.
 
-| Mevcut kod                                                                                 | Korunacak değer                                           | Gerekli dönüşüm                                                                                                   |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `src/model/document.ts`: `Map<number, Entity>`, `transact`, 200 undo                       | Hızlı yerel çizim ve komut geçmişi                        | Sunucu kimliği, sürüm, optimistic edit, uzak commit/undo; yerel geçici ID'leri kalıcı ID sanma                    |
-| `src/model/entities.ts`: f64 koordinatlar, `attrs: Record<string,string>`, yay/bulge/delik | Analitik CAD şekli ve hassasiyet                          | Sürümlü serileştirme, tipli öznitelikler, CRS/Z/M politikası; eğrileri kayıpsız sakla                             |
-| `src/core/commands.ts`: `run(args?: unknown): void`                                        | Menü/kısayol/komut satırı tek giriş                       | Kalıcı değişikliklerde sürümlü schema, async sonuç, yetki, iptal, preview ve idempotency olan application command |
-| `src/processing/runner.ts`, `worker/workerExecutor.ts`                                     | Deklaratif araç, `RunJob`, `ChangeSet`, tarayıcı worker'ı | Sunucu executor; snapshot/reference + maliyet kotası; tenant job'ı; tam belge kopyasını sunucuya gönderme         |
-| `src/style/*`, `docs/STYLE.md`                                                             | MPYY sembolizmi, `.kstil`, sembol derleyici               | Stil formatını sürümle; Rust ortak expression altkümesi, sunucu/istemci uyumluluk testi; stil revizyonları        |
-| `src/render/types.ts`, `src/render/webgpu/*`                                               | `SceneLayer` ve çalışan WebGPU                            | Tile akışı ve feature ID/picking; değişen tile için seçili nesne overlay'i; düşük donanımda WebGL2 fallback       |
-| `src/geo/crs.ts`                                                                           | SRID kataloğu ve dönüştürme uyarısı                       | Gerçek dönüşüm için sürümlü CRS/grid kaynağı; tarayıcı ile sunucuda aynı sonuç/tolerans                           |
+### 13.1 Mevcut kodla entegrasyon
 
-İlk iş, `CadDocument.transact` hata verdiğinde `finally` üzerinden kısmi
-işlemleri commit etme davranışını ele almak ve testle sabitlemektir; şu an
-`transact` bir sunucu ACID transaction'ı sayılmaz. `beginGroup.cancel()`
-geri alma ve `dirty` durumunu da regresyonla sınayın. Uzak kaydetme
-gelince eski `dirty=false` kısayolunu gerçek başarılı commit sonucuna bağlayın.
+| Mevcut kod                                             | Korunacak davranış                                          | Sunucuya geçiş                                                                                     |
+| ------------------------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `src/model/document.ts`                                | Yerel hızlı edit ve 200 adımlı undo                         | Sunucu kimliği, satır sürümü, beklenen sürümle commit, uzak undo sözleşmesi                        |
+| `src/model/entities.ts`                                | f64 koordinatlar; bulge, delik, elips, spline, ölçü, tarama | Kaynak CAD tanımını sürümle; PostGIS geometri projeksiyonu ile tipli GIS alanları bağla            |
+| `src/core/commands.ts`                                 | Menü/kısayol/komut satırı ortak giriş                       | Kalıcı komut için sürümlü schema, async sonuç, yetki, idempotency                                  |
+| `src/processing/runner.ts` ve `src/processing/worker/` | Bildirimsel araç ve tarayıcı worker'ı                       | Ayrı Rust server executor; işi tüm tarayıcı belgesi yerine dataset/snapshot referansı ile çalıştır |
+| `src/style/*`, `docs/STYLE.md`                         | `.kstil`, MPYY sembolleri, stil derleme                     | Stil belgesini DB'de sürümle; server ve WASM ortak ifade semantiğini fixture ile doğrula           |
+| `src/render/types.ts`, `src/render/webgpu/*`           | Çalışan WebGPU ve WebGL2                                    | Tile streaming, feature ID ve seçili nesne overlay'i; fallback'i koru                              |
+| `src/geo/crs.ts`                                       | SRID kataloğu; atamak/dönüştürmek ayrımı                    | PROJ/PostGIS dönüşümlerini pinlenmiş CRS/grid verisiyle doğrula                                    |
 
-### 13.2 Öncelikler ve sınırlar
+İlk güvenilirlik düzeltmesi: `CadDocument.transact` içindeki `finally`,
+`fn()` hata attığında önceden uygulanmış değişiklikleri de commit edebilir.
+Bunu rollback semantiği ve regresyon testiyle düzeltin. Sunucu transaction'ı
+istemcideki `transact` yerine geçmez. `src/app/commands.ts` içindeki `file.save`
+şimdilik yalnızca `dirty=false` yapar; başarılı sunucu commit'i olmadan
+kaydedildi diye göstermeyin.
 
-1. **Önce doğruluk:** f64 kaynak geometri, deterministik komut, tenant sınırı,
-   çökme sonrası tutarlılık, geri yüklenebilir veri.
-2. İlk sürüm **2D**; mevcut analitik CAD nesnelerini koruyun. Render için
-   örnekleme/LOD kaynak geometrinin yerini almaz. Z/M ve 3D destek kararını
-   sürümlü veri formatında ileride kırmadan genişletin.
-3. Yeni sistemin ana veri katmanı Postgres/PostGIS'e bağlı olmayacak. Bunlar
-   daha sonra import/export, karşılaştırma veya harici provider olabilir.
-   Mevcut çalışan çizim ve stil özelliklerini yeniden yazıp kaybetmeyin.
-4. WebGPU mevcut kodda **zaten var**; performans ve sahne sözleşmesi sınırlarını
-   koruyarak tile'lı, büyük veri iş yüküne uyarlayın. WebGL2 desteği sürer.
-5. `DESIGN.md` ve `docs/STYLE.md` görsel dilin kaynağıdır. Yeni sunucu
-   sözleşmesi, bu dosyaların tasarım kararlarını sessizce geçersiz kılamaz.
+## 14. Workspace, bileşenler ve sınırlar
 
-## 14. Hedef çalışma alanı ve bağımlılık sınırları
+**Kesin backend stack:** HTTP/API ve WebSocket için Axum, asenkron I/O
+için Tokio, PostgreSQL/PostGIS erişimi için SQLx ve açık parametreli SQL,
+HTTP middleware için Tower. Kimlik/tenant context, request ID, timeout,
+istek boyutu ve concurrency sınırları composition root'ta kurulur.
+İş kuralları middleware/route içine taşınmaz. Migration kontrollü tek
+süreçte çalışır; bağlantı havuzu ve sorgu süreleri bütçelenir. Ağır CPU
+hesabı Tokio I/O görevini bloke etmez; sınırlandırılmış CPU havuzu veya
+ayrı worker kullanılır. Stack değişikliği sessizce yapılmaz; ADR gerekir.
 
-Mevcut `src/` ağacını toplu taşımayın. İlk dikey dilimde şu hedef yapıyı
-gerektikçe oluşturun; crate sayısını yapay biçimde şişirmeyin:
-
-```text
-src/                       mevcut TypeScript uygulaması
-apps/api/                   Axum HTTP, SSE/WS, oturum ve tile gateway
-apps/worker/                aynı iş tanımlarını kullanan sunucu job modu
-apps/kentosd/               API + worker tek süreçli geliştirici modu
-crates/contracts/           ID, sürüm, API/command şeması ve TS üretimi
-crates/geometry-core/       saf Rust analitik CAD geometri ve test fixture'ları
-crates/spatial-core/        CRS, bbox, indeks anahtarları, topoloji ve LOD
-crates/style-core/          sürümlü ifade/semantik stil IR
-crates/spatial-store/       tenant veri dosyası, transaction, index, revision
-crates/catalog/             tenant, üyelik, proje, layer, stil ve publication
-crates/application/         use case, politika, command, job tanımları
-crates/tiles/               MVT ve sonra özel sahne tile üretimi
-crates/cloud/               obje depolama, snapshot/manifest, geri yükleme
-crates/wasm/                saf çekirdeğin dar wasm-bindgen sınırı
-docs/adr/                   ölçümlü tasarım kararları
-benchmarks/                 Martin/PostGIS karşılaştırma ve uzun ömürlü veri setleri
-```
-
-Rust `geometry-core` ve `style-core` platform bağımsızdır: dosya sistemi,
-Tokio, ağ, Auth, HTTP veya WebGPU'ya bağımlı olamaz. WASM için desteklenmeyen
-kodları özellik kapılarıyla değil net crate sınırlarıyla ayırın.
-`application` veri motoru trait'lerine bağımlıdır; HTTP/MCP/worker aynı use
-case'leri çağırır. Tek tanımlı şemadan Rust ve TypeScript istemci tipleri
-üretin; `unknown` girişini sınırda parse edip sürümü doğrulayın.
-
-WebGPU/TypeScript tarafına Rust çekirdeği parça parça alınır: önce
-geometri fixture'ları ve köşe/delik/bulge golden testleri, sonra seçili
-geometri işlemleri. Aynı semantiği iki dilde uzun süre paralel geliştirmeyin.
-WASM hesaplaması arayüz deneyimi içindir; sunucuda commit öncesi yetkili
-geometri, kural ve izin kontrolleri tekrar çalışır.
-
-## 15. Mekânsal veri motoru: dosya, transaction, indeks
-
-### 15.1 İlk sürüm: Rust uygulama motoru + doğrulanmış disk motoru
-
-`spatial-store` altında dar `StorageEngine` arayüzü kullanın. İlk uygulama
-adayı `redb`: gömülü transaction/MVCC, eşzamanlı okuyucular ve **bir
-write transaction**. Sürümü pinleyin, lisans/sürüm ve crash semantiğini PoC'de
-ölçün; benchmark olmadan kesin seçim ilan etmeyin. WAL, page manager, fsync,
-MVCC ve crash recovery'yi ilk sürümde sıfırdan yazmayın. GIS/CAD'ye özgü
-nesne, indeks, sorgu, yayın, stil ve revision modeli bize aittir.
-
-Önerilen tenant başına mantıksal ağaçlar:
+Mevcut `src/` ağacını toplu taşımayın. Çalışan dikey dilim ilerledikçe
+modüler Cargo workspace ekleyin. İlk kapsam için ayrı Rust **api** ve
+**worker** süreç modları ile ortak uygulama çekirdeği yeterlidir:
 
 ```text
-meta/{tenant,project,layer,schema,style,publication}
-object/{project,layer,feature_id} -> envelope + canonical geometry + attrs + version
-spatial/{project,layer,partition,cell,feature_id} -> bbox + revision
-attribute/{project,layer,index_id,typed_value,feature_id}
-revision/{project,sequence} -> actor, command, before/after refs, changed bbox
-event/{project,sequence} -> durable committed notification
-job/{tenant,job_id} -> state, lease token, checkpoint, output refs
+src/                     mevcut TypeScript arayüzü ve WebGPU/WebGL2
+apps/api/                 Axum: OIDC, feature/command API, TileJSON/MVT, events
+apps/worker/              ağır analiz, import/export, indeks, tile warmup
+crates/contracts/         sürümlü request/response/command; TS tip üretimi
+crates/geometry-core/     saf Rust CAD geometri; native + WASM
+crates/style-core/        sürümlü CAD stil/ifade IR; native + WASM
+crates/application/       ortak use case, yetki, işlem ve job sözleşmesi
+crates/postgres/          SQLx, PostGIS SQL, migration ve veri repository'si
+crates/tiles/             MVT/TileJSON yayınlama, cache invalidation
+crates/wasm/              tarayıcıya dar geometri/stil API'si
+docs/adr/                 ölçülen mimari kararlar
+benchmarks/               PostGIS/Martin ile karşılaştırılabilir yükler
 ```
 
-Fiziksel key encoding sıralanabilir, sürümlü ve sınanabilirdir. Bir projede
-nesne kimliği UUIDv7 benzeri kararlı küresel ID olabilir; yalnızca numarayı
-JS `Number` veya MVT ID'sine sığdırmak için asıl kimliği daraltmayın. MVT
-feature ID için tile başına kararlı 64 bit eşleme ve identify API'sinde tam
-kimlik kullanın. `Entity.attrs` şu an string; yeni şema null/boolean/
-integer/decimal/date/text/enum'u tipli saklar. Eski veri için migration açık
-bir versiyon ve hata raporu taşır. Katman tanımı izin verilen geometri
-türünü, CRS'yi ve koordinat toleransını tutar.
+Saf Rust çekirdek Tokio, SQLx, HTTP, DOM ve WebGPU'ya bağımlı değildir.
+UI, CLI, chat ve MCP aynı `application` kullanım durumlarına gider; HTTP,
+MCP ve worker iş kurallarını yeniden yazmaz. Sunucu aktörü oturumdan
+çıkarır; TypeScript'in kendi role/tenant bilgisini yetkili veri saymayın.
+Rust ile TypeScript arasındaki protokol sürümlüdür; bilinmeyen komut/alan
+sürümü kontrollü hata verir. WASM yerel önizleme yapar, nihai doğrulama
+sunucuda yapılır. Geometriyi TS'den Rust'a bir anda taşımayın: mevcut
+`model/geom/` fixture'ları üzerinden tolerans ve sonuç eşitliği kurun.
 
-Her yazma **tek mantıksal commit** içinde nesneyi, eski indeks anahtarlarının
-silinmesini, yeni indeks anahtarlarını, revision kaydını ve outbox olayını
-değiştirir. Olayı commit'ten önce yayınlamayın. Analitik şekil kaynak kayıt,
-basitleştirilmiş geometri ve MVT/scene tile türev kayıttır; türevler
-yeniden üretilebilir. İndeks onarımında tam tarama ve veri doğrulama yolu
-sağlayın. Segment/hilbert packed R-tree gibi hibrit indeksleri ancak güncelleme
-ve sorgu benchmark'ı haklı çıkarınca ekleyin; önce kalıcı bbox/cell aday
-indeksi + kesin geometrik filtre kurun. Uzun çizgiler ve dateline/CRS sınırları
-için tek centroid cell yeterli değildir; kapsadığı hücreleri veya overflow
-postings'i ele alın.
+**Tek hesaplama kaynağı kapısı:** Yeni CAD hesapları `geometry-core` içinde
+bir kez yazılır; aynı crate native ve `wasm32` olarak derlenir. Sunucu ve
+istemci aynı sürümlü işlem adı, input/output şeması, birim, CRS, null/hata
+ve tolerans kurallarını kullanır. Her taşınan işlem için aynı fixtures
+(düz çizgi, bulge, delik, dejenerasyon, büyük koordinat, sınır durumları)
+iki hedefte çalışır. Beklenen fark sınırı algoritma ve CRS başına yazılır;
+iki sonuç farklıysa sessizce istemci sonucunu commit etmeyin. WASM yalnız
+yerel hesap/önizleme ve doğrulamayı yapar; veri yetkisi, PostgreSQL sorgusu
+ve commit sunucudadır. Eski TypeScript algoritması, Rust eşdeğerliği
+kanıtlandıktan sonra tek kaynak ilkesini koruyacak şekilde kaldırılır.
 
-### 15.2 Veri bütünlüğü ve eşzamanlılık
+## 15. PostGIS veri modeli: GIS kaynağı ve CAD tanımı
 
-- Eşzamanlı okuma snapshot'ları; katman ve nesne için `expected_version`
-  kontrolü. 409 yanıtı güncel sürümü ve çatışma özetini taşır.
-- Bir tenant shard'ı için aynı anda **tek aktif writer**. Process'ler arasında
-  dosyayı ağ diski üzerinden çoklu yazıcı olarak açmayın. Lease + monoton
-  fencing epoch ile liderlik verin; yazma kapısı sahipliği kaybında reddetsin.
-- İzolasyon ihtiyacı proje/tenant sınırlarında ADR ile seçilir. Tenant başına
-  dosya veya az sayıda tenant'ın aynı shard'ı paylaşması benchmark ile
-  belirlenir; tek büyük dosyanın tek writer'ı bütün tenant'ları kilitlememeli.
-- Export/snapshot uzun süren read transaction ile compaction'ı kilitlemesin;
-  zaman/byte kotası ve açılıp kapanan snapshot politikası uygulayın.
-- Kısmi hata, elektrik kesintisi, disk dolması, yetersiz alan, yarım upload,
-  stale writer ve bozuk snapshot senaryolarını yeniden başlatma testleriyle
-  doğrulayın. Başarısız komut hiçbir iz/indeks yarım değişikliği bırakmaz.
+**İki gösterimin rolü açıktır:** `geom` GIS sorgu, indeks ve yayın için
+PostGIS `geometry` kolonudur. Nokta/çizgi/poligon gibi doğrudan eşlenen
+nesnelerde `geom` aynı zamanda kaynaktır. Analitik CAD nesnesi PostGIS
+içinde kayıpsız ifade edilemiyorsa sürümlü `cad_definition` (ör. bulge,
+elips, spline, ölçü, ilişkisel tarama, blok) kaynak tanımdır; `geom` onun
+geometri projeksiyonudur. Render/MVT için örneklenen geometri **asıl CAD
+tanımının yerini almaz**. İki kolonun değişimi tek DB transaction'ında,
+aynı Rust dönüşüm sürümüyle olur; değişim tetikleyicisi belirsiz bırakılmaz.
 
-## 16. Bulut kalıcılığı ve dağıtım
+**Kaynak ve türev sözleşmesi:** Her nesne türü için `source_kind`,
+`cad_definition.schema_version` (varsa), kaynak koordinatların SRID'si,
+birim ve tolerans tanımlanır. Nokta/düz çizgi/poligonda kaynak `geom`;
+analitik CAD türünde kaynak `cad_definition` veya kayıpsızlığı round-trip
+ile doğrulanmış native PostGIS curve'dür. Türetilmiş `geom` kaynakla aynı
+revision'da ve **tek** yazma yolunda üretilir; başka bir API yalnızca
+`geom`u güncelleyip CAD tanımını eskitemez. Dönüştürücü sürümü revizyonda
+tutulur. İçe aktarma, kopyalama, bölme, geri alma ve yeniden açma dâhil
+her işlem kaynak -> serialize -> deserialize -> kaynak eşdeğerliğini sınar.
+Görünüm toleransı kaynak geometri toleransından ayrı sürümlenir.
 
-**Nesne depolamayı canlı `redb` veritabanı dosyasının çoklu yazıcılı
-diskinin yerine koymayın.** Aktif shard'ın database dosyası kalıcı yerel
-SSD/volume üzerinde durur. S3 uyumlu bulut obje depolama (KentOS'ta MinIO
-uyarlanabilir) sürümlü yedek, değişmez snapshot, log arşivi, attachment,
-import/export ve uzun iş çıktısı içindir. Bu ayrım veri tutarlılığı şartıdır.
+Örnek kavramsal tablo (migration, indeks ve kısıtları fazda somutlaştır):
 
-API stateless ölçeklenebilir; tenant router o tenant'ın aktif veri shard'ına
-gider. Shard'ı writer'la aynı host/süreçte konumlandırın; query ve tile okumayı
-aynı snapshot'tan yapın. İlk üretim sürümünde bir shard için sıcak bekleyen
-kopya otomatik promotion vaat etmeyin: önce crash recovery, yedekleme,
-geri yükleme ve kontrollü failover; sonra ölçülmüş replika protokolü.
-Nesne deposuna snapshot yüklemede manifest içeriği hash, format sürümü,
-son commit sequence, şifreleme ve önceki manifest bağı taşır. Snapshot +
-ardışık journal/WAL arşivini geri oynatma protokolü ve RPO/RTO ile doğrulayın.
-**Commit başarısı** fsync ve seçilen durability seviyesine bağlanır;
-asenkron bulut kopyasının gecikmesi ve veri kaybı penceresi SLO'da açık yazılır.
-S3 ETag'ini her sağlayıcıda içerik hash'i sanmayın; kendi checksum'unuzu tutun.
-
-Tenant/kaynak bazında prefix, IAM benzeri sınırlı erişim, TLS, dinlenimde
-şifreleme, anahtar rotasyonu, dosya boyutu/ücret kotası, retention ve silme
-politikası uygula. Obje yollarında tenant ID'si bulunsa bile her okuma/yazma
-sunucu tarafında yetki denetiminden geçer. Dosya ekleri iki aşamalı yazılıp
-DB referansı commit edilince görünür olur; yetim dosyalar temizlenir.
-Compose geliştirici kurulumu; üretimde API, shard ve worker ayrı süreç modları.
-
-## 17. Çoklu tenant, kullanıcı tahsisi ve güvenlik
-
-Global katalogda `Tenant`, `User(issuer,subject)`, `Membership`,
-`Invitation`, `SeatAllocation`, `Project`, `ProjectGrant`,
-`ServiceAccount` ve `Quota` tanımlayın. **Üyelik** ile **lisans/koltuk
-tahsisi** farklıdır: tenant yöneticisi kimleri eklediğini, davet durumunu,
-aktif/deaktif erişimi ve tahsis edilmiş/boş koltuk sayısını yönetebilir.
-Bir gerçek kullanıcı birden çok tenant'a ayrı üyelikle katılabilir. E-posta
-kimlik anahtarı değildir; `(issuer, subject)` kullanılır. Keycloak OIDC
-entegrasyonu uyarlanabilir olsun; token audience, issuer, süre, tenant
-bağlamı doğrulanır. Tenant'ı client header veya JWT içindeki serbest role
-güvenerek seçmeyin: istenen tenant için aktif membership ve proje grant
-sunucuda doğrulanır.
-
-İlk roller: tenant sahibi, tenant yöneticisi, proje yöneticisi, editör,
-görüntüleyici; servis hesapları ayrı yetkilerle. Fine-grained işlemler
-`feature.read/write`, `layer.publish`, `style.manage`, `job.run`,
-`data.export`, `member.manage` gibi capability ile denetlenir.
-Katman/satır/alan bazlı kısıtlar yayın, identify, tile, export, event ve
-MCP yollarında **aynı politika kararı** üretir. Tile sonuçlarının
-paylaşılan cache anahtarı güvenli policy-scope/revision olmadan kurulmaz.
-Üyelik iptalinde eski link/cache'in ne zaman hükümsüzleşeceği açık olsun.
-
-Kota tanımları: aktif kullanıcı/koltuk, projeler, depolama byte'ı, istek hızı,
-eşzamanlı job, CPU saniyesi, bellek, tile üretim bütçesi. Hesaplamayı
-tenant sınırına göre izleyin; ortak havuz bir tenant'ın pahalı sorgusuyla
-kilitlenmesin. Her API ve worker yürütmesinde tenant ID, user ID, proje ID,
-policy revision, request ID ve audit actor bağlamı bulunur. Loglara
-geometri/özlük verisi/token koymayın.
-
-## 18. Tile, stil ve anlık düzenleme
-
-**Kaynak veri MVT değildir.** Yerel CAD nesneleri analitik ve tam hassasiyetli
-saklanır. MVT, MapLibre/standart istemci için kayıplı, tile koordinatlarında
-sunumdur. Sıra:
-
-```text
-tile(z,x,y) -> tamponlu bbox'u kaynak CRS'ye dönüştür
-  -> yetkili bbox adayları -> kesin filtre -> ölçeğe göre örnekle
-  -> clip -> quantize -> ring/yön/topoloji düzelt -> attribute encode
-  -> MVT PBF -> ETag/cache
+```sql
+feature (
+  tenant_id uuid, project_id uuid, layer_id uuid, id uuid,
+  version bigint, srid integer, kind text,
+  geom geometry, cad_definition jsonb,
+  properties jsonb, created_by uuid, updated_by uuid,
+  created_at timestamptz, updated_at timestamptz,
+  PRIMARY KEY (tenant_id, project_id, layer_id, id)
+)
 ```
 
-`ST_AsMVTGeom` ile `ST_AsMVT` eşdeğer davranışını ayrı test edin:
-extent/buffer, sınırdaki geometriler, delikler, invalid/empty geometriler,
-çok geniş nesneler, benzersiz attribute sözlüğü ve feature ID. Yay, daire,
-elips, spline ve tarama stilini kaynakta koruyun; tile zoom'a bağlı
-toleransla sunum segmentlerine çevirin. Metre/derece karışıklığına izin
-vermeyin. İlk endpoint'ler:
+`properties jsonb` dinamik alanlar içindir; sık filtrelenen, domain/ilişki
+kuralına sahip alanlar tipli tablo kolonuna veya katman şemasına uygun
+ayrı indeksli yapıya taşınır. Öznitelikler bugün `Record<string,string>`;
+null/boolean/integer/decimal/date/text/enum dönüşümü sürümlü migration'dır.
+Projeye ve layer'a ait SRID doğrulanır; geometrinin SRID'si, boyutu,
+türü, empty/invalid davranışı katman sözleşmesine bağlanır. Bir layer'ın
+CRS'sini sessizce değiştirmeyin. Büyük kataloglar için veri başına tablo
+veya paylaşımlı tablo/partition seçimini gerçek yükle ölçün; her kullanıcıya
+ayrı tablo kurmayın.
+
+PostGIS'in native eğri tiplerini uygun CAD nesnelerinde kullanmayı bir PoC
+ile sınayın: `CircularString`, `CompoundCurve`, `CurvePolygon`, delikler,
+round-trip koordinat ve precision testleri. Özellikle DXF bulge semantiği,
+dağıtık eğri segmentleri, tam daire, elips, spline ve CAD constraint'lerinin
+kaybını kontrol edin. Bazı uzamsal fonksiyonlar ve MVT, doğrusal geometri
+ister; `ST_CurveToLine` veya Rust tessellation çıktısını açık toleransla
+üretin. Edit ekranında analitik kaynak geometriyi ayrı endpoint'ten alın.
+Custom PostgreSQL type/opclass ancak bu PoC'nin açığını, mevcut
+`geometry + cad_definition` ile çözülemediğini ve bakım maliyetini ADR ile
+gösterdikten sonra gündeme gelir. Böyle bir gereksinim çıkarsa CAD tipini
+ve ilgili dönüşüm/indeks işlemlerini uygulamadan bağımsız, sürümlü bir
+PostgreSQL/PostGIS uzantısı olarak tasarlayın; olgunlaşınca başka projelerin
+de kullanabilmesi için ayrı açık kaynak paket olarak paylaşılabilir.
+
+Örnek sorgu stratejisi: `tenant_id/project_id/layer_id` seçimi +
+`geom && bbox` ile GiST aday filtresi + yetkili kesin mekânsal koşul.
+Yazma transaction'ı geometri/CAD tanımı, tipli öznitelik, `version`,
+revision/audit ve outbox'ı birlikte commit eder. `expected_version` koşullu
+`UPDATE` sıfır satır etkilerse 409 döner; sessiz last-write-wins yoktur.
+Kaynak değişince türetilmiş geometri, tile generation ve stil bağımlılığı
+güncellenir. Mevcut `number` ID sunucu kimliği değildir; UUID benzeri kararlı
+kimlik taşıyın, MVT'nin sayısal ID kısıtını ayrı eşleme olarak çözün.
+
+**Edit commit protokolü:** Yerel çizim anında önizlenir; kaydetme isteği
+`tenant/project/feature_id`, `command_id`, `idempotency_key`, `base_version`
+ve kaynak CAD tanımını taşır. Sunucu Rust çekirdeği ve katman kurallarıyla
+yeniden doğrular; yetkiyi kontrol eder; koşullu sürüm güncellemesi, `geom`,
+audit, proje `data_revision` ve outbox'ı bir PostgreSQL transaction'ında
+commit eder. Yanıt kalıcı feature ID + yeni sürüm + proje revizyonudur.
+Tarayıcı ancak bu yanıttan sonra ilgili değişikliği kaydedildi sayar;
+yeniden deneme aynı idempotency sonucu verir. 409'da yerel taslak korunur,
+sunucu ve yerel geometri/alan farkı kullanıcıya gösterilir. Sunucuya
+kaydedilmiş bir değişikliği geri almak, yetki ve güncel sürüm kontrolünden
+geçen **yeni ters komuttur**; başka editörün değişikliğini sessizce geri
+çevirmez. Yerel undo yalnızca henüz commit edilmemiş editleri de kapsayabilir.
+
+## 16. Çoklu tenant, kullanıcı tahsisi ve bulut verisi
+
+`Tenant`, `User(issuer,subject)`, `Membership`, `SeatAllocation`, `Project`,
+`ProjectGrant`, `LayerPolicy`, `Publication`, `Job`, `AuditEvent` başlangıç
+varlıklarıdır. **Üyelik** ile **koltuk tahsisi** ayrı tutulur: tenant yöneticisi
+kullanıcı ekler/davet eder, devre dışı bırakır ve kalan koltuğu görür.
+Bir kullanıcı ayrı üyeliklerle birden çok tenant'a katılabilir. Keycloak
+OIDC entegrasyonunda issuer/audience/subject doğrulayın; e-posta kalıcı
+kimlik değildir. Tenant seçimi yalnızca URL/JWT header değerine güvenmez:
+aktif membership ve proje yetkisi sunucuda kontrol edilir.
+
+İlk dağıtım: paylaşılan PostgreSQL cluster, her tenant-bağlı tabloda
+`tenant_id`, bileşik benzersiz anahtarlar ve **uygulama yetkisi + RLS**.
+RLS'yi gerçek uygulama rolüyle test edin; owner/superuser bypass davranışı,
+connection pool'da `SET LOCAL` ile tenant bağlamı, transaction sonrasında
+bağlam temizliği ve `SECURITY DEFINER` fonksiyonları ayrıca denetlenir.
+İleride büyük/hassas tenant'ı ayrı DB'ye alma ihtimali repository/router
+sınırında kalabilir; başlangıçta tenant başına ayrı cluster veya shard
+orkestrasyonu kurmayın. Tile, identify, export, attachment, event ve MCP'de
+aynı kaynak yetkisi uygulanır; shared cache anahtarı tenant/policy scope
+ve revision içerir.
+
+Bulut kalıcılığı PostgreSQL'ün yönetilen ya da kalıcı volume üzerinde
+kurulması, WAL arşivi, point-in-time recovery, düzenli backup ve **geri
+yükleme tatbikatı** ile sağlanır. MinIO/S3 uyumlu nesne depolama büyük
+attachment, import/export dosyası, job çıktısı ve gerekiyorsa tile paketi
+içindir; canlı veritabanı dosyasını nesne olarak açmaya çalışmayın.
+DB kaydı ve S3 yükleme iki ayrı transaction olduğundan geçici nesne +
+commit sonrası görünürlük + yetim temizliği tasarlayın. Tenant başına kota,
+retention, şifreleme, bağlantı sırrı ve maliyet metriği tutun.
+
+## 17. Martin sınıfı MVT, stil ve güncellik
+
+**Martin ile işlev eşdeğerliği hedefi:** MVT katman yayını, TileJSON,
+stil JSON, sprite, glyph/font ve çoklu kaynak desteği. Martin bunları
+bugün sağlar; ilk sürümde Martin'i ayrı yayın servisi olarak Rust API
+gateway arkasında kullanın. Yayın sihirbazı Martin kaynak/yayın tanımını
+üretebilir; özel PostGIS fonksiyonlarıyla sorguyu kontrol edebilir.
+Üretimde doğrudan Martin erişimini kapatıp private kaynağa her istekte
+gateway yetkisi uygulayın. Stil/sprite/font URL'lerinin de aynı erişim
+denetiminden geçtiğini doğrulayın. Daha sonra tek Rust sürecine gerek
+duyulursa Martin'in `martin-core` kütüphanesini değerlendirin.
+
+PostGIS'in `ST_TileEnvelope`, `ST_AsMVTGeom` ve `ST_AsMVT` işlemleri temel
+MVT yoludur. KentOS Rust API tenant yetkisini, yayın revision'ını, katman
+sihirbazını, özel sorgu doğrulamasını, veri güncelliğini, cache politikasını
+ve event'i üstlenir. Martin'in mevcut özelliklerini sıfırdan kopyalamayın.
+Yalnızca eşit veri/indeks/kaliteyle ölçülen gerçek bir darboğaz veya
+karşılanmayan ürün gereksinimi için özel tile kodu yazın.
 
 ```text
 GET /v1/tenants/{tenant}/projects/{project}/publications/{pub}/tilejson.json
 GET /v1/tenants/{tenant}/projects/{project}/publications/{pub}/tiles/{z}/{x}/{y}.mvt
 GET /v1/tenants/{tenant}/projects/{project}/styles/{style}/style.json
-GET /v1/tenants/{tenant}/projects/{project}/features/{feature}
+GET /v1/tenants/{tenant}/projects/{project}/styles/{style}/sprite[@2x].{json,png}
+GET /v1/tenants/{tenant}/projects/{project}/fonts/{font}/{range}.pbf
+GET /v1/tenants/{tenant}/projects/{project}/features/{id}
 ```
 
-Sonraki sürüm kendi WebGPU sahnesi için sürümlü binary scene tile sağlar:
-feature ID tablosu, buffer offsets, koordinat kaynağı, LOD ve stil IR.
-Gerçek CAD edit için yetkili ve hassas `feature` endpoint'i kullanılır.
-MapLibre uyumlu stil JSON ile mevcut `.kstil` sembolleri ayrı sözleşmedir:
-destek matrisi ve bilinçli extension/export kaybı raporu tutun. Vektör
-tile, stil JSON, sprite ve glyph endpoint'leri ihtiyaca göre yayınlanır;
-stil değişikliği veri tile'ını gereksiz yeniden yazmaz.
+Tile sorgusu izinli alanlara, SRID dönüşümüne, indeksle tamponlu bbox
+seçimine, açık clipping/quantization politikasına ve sorgu sınırına sahip.
+MVT CAD için kayıplıdır; API editörün gerçek CAD tanımını döndürür. Stil
+sistemi veritabanı satırına gömülmez: `.kstil` kaynak belge/sürüm ve
+MapLibre uyumlu stil çıktısı birbirinden ayrılır. Basit çizgi/dolgu,
+etiket, ikon ve desteklenen desenleri sürümlü MapLibre Style JSON, sprite
+ve glyph olarak yayınlayın. `.kstil` içindeki her sembolün MapLibre'a tam
+çevrilebildiğini varsaymayın; yayın önizlemesinde tam/kısmi/desteklenmiyor
+raporu üretin. MPYY tarama, çizgi boyu işaret, ölçü ve özel CAD sembolizminin
+tam görünümü KentOS WebGPU/WebGL2 stil motorundadır. Başka istemciler için
+gerektiğinde sunucu tarafı raster/stil çıktısı ekleyin; etkileşimli CAD edit
+bu raster çıktıdan yapılamaz. Özel binary scene tile ancak MVT + gerçek
+feature API'sinin ölçülen sınırı ortaya çıkarsa ayrı sürüm olarak tasarlanır.
+Mevcut WebGL2 fallback sürer.
 
-Publication wizard draft -> validate -> immutable revision -> activate
-akışıyla layer, CRS, geometri tipi, alanlar, izinler, zoom/extent/buffer,
-stil ve cache politikasını seçer. Yayın esnasında dizini doğrular, örnek
-tile üretir, yetkisiz erişimi test eder. Ortak cache key en az tenant,
-publication revision, dataset generation, policy scope/revision, z/x/y,
-format/encoding taşır. Commit eski/yeni bbox, değişen öznitelik ve zoom
-kapsamından etkilenen tile'ları kirletir; belirsiz bağımlılıkta güvenli
-geniş invalidation uygula. Outbox olayı revizyon taşır; istemci yeni tile
-revizyonu gelene kadar yerel edit overlay'ini ve silme tombstone'unu korur.
-Anlık kullanıcı geri bildirimi sunucu cache süresine bağlanamaz.
+**MapLibre GL JS çalışma zamanı zorunlu değildir.** Martin sunucu/yayın
+katmanıdır; KentOS'un kendi `render/webgpu` ve `render/webgl2` arka uçları
+birincil harita istemcisi olacaktır. Şu anki `SceneLayer` yerel belgeyi
+çizer; MVT/TileJSON'dan veri alma, tile yaşam döngüsü, feature ID/picking,
+zoom LOD, etiket çakışması ve büyük katmanlar için bellek sınırı henüz bu
+depoda tamamlanmış değildir. Bunları geliştirmeden MapLibre'a gerek kalmadı
+diye ürün eşdeğerliği iddia etmeyin. MapLibre Style Specification dış yayın
+formatı; MapLibre GL JS ise bağımsız uyumluluk testi ve isteğe bağlı üçüncü
+taraf istemci olarak tutulur. Gelişmiş `.kstil`/MPYY sembolleri kendi
+renderer'ımızda tam, dışa aktarılan MapLibre stilinde destek matrisi kadar
+görünür. Martin'in MapLibre projesine ait olması, tarayıcıda MapLibre GL JS
+yüklenmesini gerektirmez.
 
-## 19. API, komut, MCP ve sunucu worker modu
+Publication wizard: taslak -> kaynak/şema doğrulama -> alan/erişim/zoom
+profili -> örnek tile -> değişmez revision -> atomik aktifleştirme.
+Cache key tenant, publication revision, veri generation, policy scope,
+filter, z/x/y, encoding içerir. Değişiklik transaction'ında outbox'a eski/
+yeni bbox ve etkilenen katman kaydı yazılır; worker cache'i geçersiz kılar
+ve event yayar. İstemci yeni tile gelene kadar yerel edit overlay'ini
+korur. Public/private cache politikası ayrı; revize yetki eski tile URL'siyle
+aşılamaz. Tile ve güncel veri farklı read replica'lardan geliyorsa
+commit watermark uyumunu gözetin; ilk sürüm primary'den okumak daha basittir.
 
-Arayüz `CommandRegistry` komutları şu anda senkron ve yereldir. Kalıcı
-işlemler için uygulama komut zarfı:
+**Tile güncellik kapısı:** Feature commit'i monoton `data_revision` üretir.
+Outbox olayı commit'ten sonra yayınlanır ve `feature_id`, önce/sonra bbox,
+layer ve revision taşır. Tenant/policy kapsamına bağlı tile cache'i bu
+olayla kirletilir; eski izin anahtarıyla 304 veya eski cache sonucu
+dönülmez. İstemci commit edilen feature'ı yerel overlay'de gösterip eski
+tile'daki aynı ID'yi gizler; silmede tombstone kullanır. Ancak yeni tile'ın
+commit revision'ını kapsadığı doğrulandıktan sonra overlay kaldırılır.
+Olay kaçarsa reconnect sırasında proje revision'ı karşılaştırılıp ilgili
+tile'lar yeniden istenir. Bu akış iki istemci, edit, silme, reconnect ve
+yetki iptali senaryolarıyla doğrulanır; yalnız TTL güncellik garantisi
+sayılmaz. Martin'in dahili cache davranışı bu invariant'ı sağlayamıyorsa
+KentOS gateway revision/URL veya cache devre dışı politikasıyla sağlar.
 
-```json
-{
-  "name": "feature.update",
-  "version": 1,
-  "tenant_id": "...",
-  "project_id": "...",
-  "request_id": "...",
-  "idempotency_key": "...",
-  "expected_versions": { "feature-id": 7 },
-  "input": {}
-}
-```
+Martin karşılaştırması aynı PostgreSQL/PostGIS verisi, benzer sorgu,
+indeksler, tile payload, donanım ve cache sıcaklığıyla yapılır. p50/p95/p99,
+CPU, RSS, QPS, DB süresi, pool beklemesi ve tile byte raporlanır.
+İki ölçüm raporu tutun: (1) saf Martin ve (2) KentOS gateway + yetki +
+cache + gerçek kullanıcı politikası. Aynı sorgu ve veriyle önce en az
+eşdeğer doğruluk ve görsel kalite, sonra performans optimizasyonu.
+"Daha hızlı" hedefini ancak belirtilen veri/donanım/cache koşullarında
+geçen benchmark sonrası ilan edin. Görsel kaliteyi ayrıca aynı sahnede
+MapLibre ve KentOS render ekran görüntüleri, sembol/etiket yerleşimi,
+çizgi kalınlığı, ölçek ve hit-testing sonuçlarıyla değerlendirin.
 
-Sunucu aktörü oturumdan çıkarır. Parse -> authenticate -> authorize ->
-validate -> preview/execute -> transaction -> outbox -> response.
-UI, REST, CLI, chat ve MCP aynı `application` handler'ına bağlanır.
-İstemci komutları (`map.zoomTo` gibi) sunucuya taşınmaz; hangi komutun
-headless çalışabildiğini capability tanımı belirtir. Uzun işlem anında
-`202 + job_id` döndürür; job'ın sonucu ve izinleri ayrıca sorgulanır.
-MCP araç listesi yetkiye göre daralır; çağrıda tekrar denetim yapılır.
-AI planı için preview/diff, riskli toplu işlemler için onay ve audit tutulur;
-serbest SQL/FS/shell ağ erişimi MCP'ye verilmez.
+### 17.1 Uzun vadede Martin bağımlılığını kaldırma (şimdilik uygulanmaz)
 
-Sunucu yürütme modu:
+Martin ilk üretim yayın motorudur. Bağımlılığı kaldırma hedefi **gelecek
+fazın değerlendirme konusu** olarak kayıtlıdır; ilk sürümde kendi MVT
+sunucumuzu yazmak, Martin'i çatallamak veya göç için ayrı framework kurmak
+görev değildir. Önce gerçek katman yayını, stiller, kullanıcı yetkileri,
+worker, backup ve canlı güncelleme çalışır hale gelsin. Gateway URL'leri
+KentOS'a ait kaldığından istemciler Martin'in iç adreslerine bağlanmaz.
+
+Gelecekte karar kapısı:
+
+1. Martin'in karşılamadığı **somut** gereksinimi veya ölçülmüş maliyet/
+   darboğazı bir ADR'de kaydet. Aynı sorgu ve veriyle Martin'i yeniden
+   yapılandırma, PostGIS sorgusunu iyileştirme, cache ve `martin-core`
+   seçeneklerinin yeterli olup olmadığını önce değerlendir.
+2. Çıkacak yayının kapsamını envanterle: MVT/TileJSON, kaynak birleştirme,
+   stil JSON, sprite, glyph/font, kullanılan raster/static çıktı, HTTP
+   encoding/ETag, izin, tenant cache sınırı, yayın revision'ı ve canlı
+   geçersizleştirme. Kullanılmayan Martin özelliklerini sırf eşdeğerlik
+   uğruna uygulama; kullanılan hiçbir özelliği sessizce düşürme.
+3. Rust/PostGIS tabanlı alternatif için aynı veri ve stillerde golden tile,
+   geometrik doğruluk, görsel MPYY/etiket örnekleri, yetkisiz erişim,
+   güncellik, yük ve çökme sonrası toparlanma testleri kur. Karşılaştırmada
+   gateway dahil ve hariç p50/p95/p99, throughput, bellek, DB süresi ve
+   işletim maliyetini ayrı raporla. Kabul eşikleri geçiş ADR'sinde gerçek
+   iş yüküne göre belirlenir; ölçüm olmadan hız üstünlüğü varsayma.
+4. Ancak bu kapı geçilirse yayın uygulamasını gateway arkasında kademeli
+   devreye al: shadow karşılaştırma -> sınırlı tenant/canary -> genişletme.
+   Martin'i geri dönüş yolu olarak tut; veri veya stil formatını müşteri
+   istemcisinde kırmadan geçiş yap. Silme kararı üretim ölçümünden sonra.
+
+Bu göç **PostgreSQL/PostGIS'i kaldırmaz**. Hedef yalnızca tile/stil yayın
+servisindeki Martin bağımlılığını gerekçesi oluştuğunda kaldırmaktır.
+
+## 18. Komut, MCP ve ağır işler için sunucu worker modu
+
+`CommandRegistry` şu anda `run(args?: unknown): void` ile yerelde çalışır.
+Kalıcı komutlar için `command_name`, `version`, `tenant_id`, `project_id`,
+`idempotency_key`, `expected_versions`, `input`, `request_id` zarfı kurun.
+Kimlik doğrulama -> yetki -> input parse/preview -> DB transaction ->
+outbox -> sonuç sırasını bütün HTTP/CLI/MCP girişlerinde kullanın.
+`map.zoomTo` gibi salt istemci komutları sunucu komutu sayılmaz. MCP'nin
+listelediği araçlar ve her çağrı yetkiye göre sınırlanır; ajanlar için
+diff/preview, iptal, audit ve riskli toplu değişikliklerde onay gerekir.
+
+Sunucu modları:
 
 ```text
-kentosd --mode api       # auth, REST, MVT, event ve hafif komutlar
-kentosd --mode worker    # import/export, analitik, TIN, indeks, tile warmup
-kentosd --mode all       # tek süreçli yerel geliştirme
+kentosd --mode api       # auth, CRUD/command, TileJSON/MVT, kalıcı WebSocket
+kentosd --mode worker    # kalıcı analiz, import/export, tile warmup
+kentosd --mode all       # yerel geliştirme
 ```
 
-`processing/worker` (Web Worker) arayüzün donmaması için kalır; dağıtık
-sunucu worker'ı farklı yaşam döngüsüdür. İkisi aynı tool schema ve mümkünse
-aynı Rust fonksiyonlarını kullanır. İş kaydı state:
-`queued -> leased -> running -> succeeded|failed|canceled`. Job tenant,
-actor, command/tool version, input refs/snapshot sequence, quota reservation,
-retry policy, dedupe key, checkpoint, progress, lease expiry ve fencing
-token taşır. Worker başlatırken yetkiyi/tenant durumunu tekrar doğrular;
-lease yenileyemezse sonucu commit edemez. Retry at-least-once olabilir:
-her çıktı ve side effect idempotent/fenced olmalı. Ağır CPU görevleri
-Tokio async reaktörünü bloke etmez; sınırlı CPU pool/ayrı süreç kullanın.
-İptal cooperative; iptal edilemeyen FFI için süreç izolasyonu/zaman aşımı
-uygulayın. Adil tenant kuyrukları ve bellek/CPU/eşzamanlılık kotaları şarttır.
+Job kayıtları PostgreSQL'de kalır. Worker claim için `FOR UPDATE SKIP LOCKED`
+ve lease/fencing token kullanın; job durumları `queued -> running ->
+succeeded|failed|canceled`. Retry en az bir kez olabilir: çıktılar
+idempotent, commit `job_id`/fencing ile korunur. Uzun analiz tutarlı
+snapshot/revision referansı taşır, commit sırasında hedef veri değişmişse
+conflict veya açık rebase politikası uygular. Tokio reaktöründe ağır CPU işi
+bloklamayın; sınırlandırılmış blocking pool/ayrı worker süreci kullanın.
+Tenant başına eşzamanlı job, CPU/bellek, depolama ve tile üretim kotası;
+ilk sürümde adil kuyruk. Web Worker kullanıcı etkileşimi için kalır;
+sunucu worker'ına tarayıcı belgesinin tamamı gönderilmez.
 
-`RunJob` protokolündeki `entities: [...doc.all()]` kopyası büyük belgelerde
-CPU/bellek maliyeti doğurur. Yerel worker'da seçili nesne snapshot'ı veya
-aktarılabilir buffer; sunucu worker'ında `tenant/project/snapshot/selection`
-referansları kullanın. Sayfadaki tüm belgeyi backend'e taşımayın.
-Worker sonucu beklenen veri revision'ına göre doğrulanıp transaction ile
-uygulanır; bir kullanıcı arada veriyi değiştirmişse conflict veya açık
-rebase politikası gerekir.
+WebSocket kopması, proje sekmesinin kapanması veya kullanıcının sayfayı
+yenilemesi kabul edilmiş sunucu job'ını iptal etmez. Job ömrü DB'deki
+kayıt/lease'e bağlıdır; socket veya HTTP request cancellation token'ına
+bağlanamaz. İptal yalnızca yetkili `job.cancel` komutuyla veya açık
+sunucu timeout/kota politikasıyla yapılır. Kabul yanıtı kaybolan isteğin
+sonucu idempotency anahtarıyla sorgulanır; bağlantı geri geldiğinde aynı
+iş sıfırdan başlatılmaz. Bağlantı/proje/autosave sözleşmesi §21'de tanımlıdır.
 
-## 20. Uygulama sırası, kabul ve ölçüm
+## 19. Uygulama sırası ve kabul
 
-### Faz A — Gerçek taban ve sözleşmeler
+### 19.0 Mimari kabul kapıları — üretim iddiası için zorunlu
 
-- Repo envanteri; TypeScript `Entity`, `LayerStore`, `CadDocument`,
-  `StyleFile`, `RunJob`, `SceneLayer` için sürümlü sözleşme ve fixture.
-- `transact` hata davranışını düzelt; başarısız işlemde kısmi commit yok.
-- Cargo workspace + native/WASM aynı analitik geometri işleminde golden test.
-- Rust API `health`; tarayıcı mevcut çizim akışı bozulmadan bağlanır.
+`CLAUDE.md`nin yazılmış olması bu kapıları geçirmez. Her kapının sonucu
+gerçek servis, gerçek PostgreSQL/PostGIS ve hedef tarayıcıda tekrarlanabilir
+olmalı; mock, yalnızca birim testi veya diyagram üretim kanıtı değildir.
 
-**Kabul:** TS ve Rust aynı fixture'da koordinat/tolerans/ring/bulge sonucunu
-üretir; mevcut `pnpm build`, `pnpm test`, `pnpm e2e` geçer.
+| Kapı                                     | Kanıt / başarısızlık ölçütü                                                                                                                                                                                                                                                                         |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Uçtan uca kayıt**                      | A kullanıcısı analitik CAD nesnesini çizer/kaydeder, B aynı projede görür; yenileme ve sunucu yeniden başlaması sonrası nesne, kimlik, stil ve geometri korunur. Sunucu commit'i başarısızsa istemci taslağı ve `dirty` korunur.                                                                    |
+| **Kayıpsız CAD**                         | Her desteklenen tür, delik/bulge/CRS ve büyük koordinat için kaynak round-trip fixture'ı geçer; MVT çiziminden kaynak CAD geometrisi yeniden kurulmaz. Desteklenmeyen tür açık hata verir.                                                                                                          |
+| **Native/WASM ortak çekirdek**           | Aynı crate'in native/WASM sürümleri aynı fixture'larda belgelenmiş toleransı sağlar; eski TS uygulamasıyla geçiş testleri temizdir. Tek işlem için iki ayrı kalıcı hesaplama uygulaması kalmaz.                                                                                                     |
+| **Kadastral sayısal doğruluk**           | §23'ün bağımsız referans, topoloji, eşik/yuvarlama, hisse ve alan korunumu testleri geçer. Native/WASM aynı nihai ondalık sonucu ve topolojik kararı üretir; belirsiz sonuç commit/yayın için engellenir.                                                                                           |
+| **Çakışmasız edit/undo**                 | İki editör aynı sürümü değiştirince biri açık 409 alır, taslağı kaybolmaz; retry/idempotency mükerrer kayıt üretmez; ters komut başka editörün yeni değişikliğini silmez.                                                                                                                           |
+| **Tile ve stil güncelliği**              | Commit sonrası diğer istemci değişikliği görür; overlay ve MVT aynı feature'ı çift çizmez. Stil, sprite/glyph, cache ve yetki iptali için public/private senaryoları geçer. Dış MapLibre stili destek matrisindeki sonucu; KentOS renderer tam CAD/MPYY sahnesini üretir.                           |
+| **Modüler frontend**                     | Günlük 2D çizim ilk yükü stil/model/layout tasarımcısını, gelecekteki 3D urban design kodunu ve kullanılmayan büyük varlıkları indirmez. §20'deki başlangıç ve ilk özellik açılışı bütçeleri gerçek build/tarayıcı ölçümüyle geçer; lazy modül hatasında taslak kaybı olmaz.                        |
+| **Bağlantı, asenkron proje ve autosave** | §21 senaryolarında WebSocket kopunca kabul edilmiş job devam eder; yeniden bağlanmada olay/job/revision eşitlenir. Proje açılışı arayüzü bloke etmez; eski proje isteği yeni projeyi değiştiremez. Bulut projesi otomatik kaydolur; commit yanıtı kaybolsa bile tekrar yazma ve taslak kaybı olmaz. |
+| **Tenant ve iş izolasyonu**              | Farklı tenant üyeleri API, tile, style, identify, export, MCP, event ve job sonucunda diğerinin verisine erişemez. Connection pool/RLS, cache ve worker negatif testleri geçer.                                                                                                                     |
+| **Dayanıklılık ve yük**                  | Worker durup yeniden alınır; yan etki iki kez commit edilmez. Backup + WAL/PITR geri yüklemesiyle seçilen noktadaki veri/audit tutarlıdır. Martin ve KentOS için aynı veri/indeks/donanımda soğuk/sıcak cache p50/p95/p99, hata, bellek, CPU ve görsel kalite raporu vardır.                        |
 
-### Faz B — Bir tenant, bir proje, gerçek kayıt
+Kritik bir veri kaybı, tenant sızıntısı, kayıpsız geometri bozulması veya
+yeniden başlatmada kaybolan commit **sürüm engelidir**. Etkileşim/tile/job
+p95/p99 hedefleri, kabul edilecek veri seti, eşzamanlı kullanıcı sayısı,
+referans donanım ve renderer görsel toleransı Faz A'da ADR'ye **ölçümden
+önce** yazılır; sonra rapora uyacak şekilde değiştirilmez. Kapsamı eksilterek
+benchmark kazanmak kabul edilmez. Kapıların sonuçları test komutu, commit,
+ortam ve sınırlamayla raporlanır. Bu kapılar geçmeden ürün veya mimari için
+"10/10 tamamlandı" ifadesi kullanmayın.
 
-- Tenant/user/membership/rol; OIDC doğrulama ve yerel test issuer.
-- Gömülü depolama PoC, sürümlü feature schema, bbox indeks, commit/revision.
-- Bir çizginin oluştur/güncelle/oku/sil akışı; başka kullanıcıda revision 409;
-  gerçek Save/Open; sunucu commit sonucu `dirty` senkronu.
-- Backup/restore ve crash injection testleri.
+### Faz A — Kod güvenilirliği ve ortak sözleşme
 
-**Kabul:** Sunucu öldürülüp açılınca nesneler, indeks ve audit tutarlıdır;
-tenant B, tenant A nesnesini ID veya tile URL tahminiyle göremez.
+- `transact` rollback ve `dirty` doğruluğu; gerçek Save/Open akışı öncesi test.
+- Cargo workspace, ilk native/WASM analitik geometri fixture'ları;
+  TypeScript bulge/delik/CRS sonuçlarıyla karşılaştırma.
+- §23 sayısal politika/yuvarlama sözleşmesi ve bağımsız doğruluk
+  fixture'ları; eski TS sonucuyla eşitliği tek doğruluk ölçütü saymayın.
+- Sürümlü `Entity`, stil, `RunJob`, command sözleşmeleri; Rust API health.
+- §20'deki yöntemle build çıktısının entry ve isteğe bağlı chunk
+  envanteri; başlangıç yükünün tekrar üretilebilir baseline ölçümü.
 
-### Faz C — MVT ve yayın
+**Çıkış:** Var olan `pnpm build`, `pnpm test`, `pnpm e2e` korunur; aynı
+analitik nesne iki ortamda belirtilen toleransla aynı sonucu verir.
 
-- Bir katmanın MVT/TileJSON endpoint'i, publish wizard'ın asgari sürümü,
-  stil revizyonu, yetkili/private tile, ETag ve generation invalidation.
-- MapLibre uyumluluk fixture'ları, PostGIS/Martin karşılaştırma veri seti.
+### Faz B — Bir tenant'ta gerçek proje ve izinli kayıt
 
-**Kabul:** Standart MVT istemcisi yetkili yayını açar, edit sonrası doğru
-tile gelir, eski yetkiyle cache/API/MCP veri sızdırmaz.
+- OIDC, tenant membership/rol; PostgreSQL/PostGIS migration ve RLS.
+- Bir katmanda aç/düzenle/kaydet, tipli alanlar, `expected_version`, audit.
+- Bir tenant'ın diğerini ID, API ve tile yolu ile görememesi testi.
+- Asenkron proje açılışı, bulut autosave, yerel bekleyen değişiklik günlüğü
+  ve izlenen WebSocket bağlantısı; §21'deki ilk bağlantı/commit kopma testleri.
 
-### Faz D — Worker ve ağır analiz
+**Çıkış:** Tarayıcı yenilenince çizim verisi durur; iki editörde çakışma
+409 olur; `Kaydet` ancak DB commit başarısında tamamlanır.
 
-- `kentosd --mode worker`, kalıcı job/lease/fencing, ilerleme, iptal,
-  tenant kota; örnek gerçek GIS analizi ve import.
-- Worker yeniden başlatma, çift yürütme, aynı kayıt üstünde çakışma testleri.
+### Faz C — Yayın ve stil
 
-**Kabul:** Worker ölürse iş kaybolmaz; iki worker aynı etkiyi iki kez
-commit edemez; API yoğun işlem sırasında yanıt verir.
+- Martin üzerinden PostGIS -> MVT/TileJSON, stil JSON, sprite, glyph;
+  yayın wizard, izin, cache, outbox invalidation.
+- Native eğri ve CAD JSONB round-trip, zoom'a göre örnekleme fixture'ları.
+- Standart MapLibre ve KentOS WebGPU istemcisinde aynı veri kimliği.
 
-### Faz E — Ölçekleme ve bulut
+**Çıkış:** Yetkili kullanıcı yayını açar; değişiklik doğru tile'da görünür;
+yetkisiz tile, metadata, identify ve export alamaz.
 
-- Snapshot + log arşivi + geri yükleme tatbikatı; tenant shard routing,
-  public/private CDN politikası; metadata/feature/scene tile optimizasyonu.
-- Düşük donanım WebGL2 ve WebGPU profilleri, yoğun MPYY katmanı benchmark'ı.
+### Faz D — Worker, analiz, operasyon
 
-**Kabul:** Tanımlı veri ve donanımda p50/p95/p99 tile gecikmesi, QPS,
-cache hit, build/render frame time, RSS, writer kuyruk ve RPO/RTO raporlanır.
-Martin karşılaştırması aynı kaynak veri, benzer kalite, indeks, donanım,
-warm/cold cache ve eşit güvenlik maliyetiyle yapılır. Ölçüm yoksa
-"Martin kadar hızlı" veya "sıfır kopya" iddiası yazılmaz.
+- PostgreSQL job tablosu/lease/retry; gerçek ağır GIS analizi veya import.
+- PITR/yedek/geri yükleme tatbikatı; yük altında RLS, pool, tile ve job testi.
+- Kademeli performans iyileştirmesi; yalnızca kanıtlanan darboğazı düzelt.
 
-### Claude Opus için çalışma kuralı
+**Çıkış:** Worker çökmesi iş kaybettirmez veya iki kez yan etki üretmez;
+API ağır işte yanıt verir; restore edilen proje geometri ve revizyonu korur.
 
-Bu dosyayı okuduğunda önce depoyu ve kodu incele; burada yazan gelecek
-sınıflarını mevcut sanma. Faz A'dan başla ve en küçük çalışan dilimi
-tamamla. Her PR'da: değişen sözleşme, migration, erişim kontrolü,
-başarısızlık kurtarma, ilgili test/benchmark sonucu ve açık kalan risk.
-Yüksek hacimli dosyaları veya mevcut stil motorunu topluca yeniden yazma.
-Mimari seçimleri `docs/adr/` içinde gerekçelendir. Gerekli doğrulamayı
-yapmadan performans/ACID/tenant izolasyonu iddiasında bulunma. Projenin
-mevcut kod politikası gereği yeni runtime dependency seçimini kullanıcıyla
-değerlendir; onay alınan tasarımı somut öneri ve sürüm bilgisiyle sun.
+### Gelecek Faz E — Yayın motoru bağımsızlığı için karar
 
-Resmî teknik referanslar (uygularken erişilen sürümü sabitle):
-redb transaction API: https://docs.rs/redb/latest/redb/struct.WriteTransaction.html ;
-PostGIS karşılaştırma: https://postgis.net/docs/ST_AsMVTGeom.html ve
-https://postgis.net/docs/ST_AsMVT.html ;
-Martin endpoint davranışı: https://maplibre.org/martin/using/ ;
-MapLibre stil: https://maplibre.org/maplibre-style-spec/ ;
-S3 uyumlu obje arayüzü adayı: https://docs.rs/object_store/latest/object_store/ .
+- Faz A–D gerçek üretim ölçümleri ve §17.1 karar kapısı tamamlanmadan
+  başlanmaz. Çıkış kararı Martin'i korumak da olabilir.
+- Geçiş gerekiyorsa doğrulanmış kapsam, kademeli rollout ve geri dönüş
+  planıyla Martin bağımlılığını kaldır; PostGIS veri katmanını koru.
+
+### Gelecek Faz F — İmar planından 3D urban design
+
+- §22'nin veri ve modül sınırlarını bugünkü tasarımda koruyun; 3D ürün
+  özelliklerini şimdi topluca uygulamayın. Uygulamaya Faz A–D'nin ilgili
+  kayıt, ortak çekirdek, iş ve izolasyon kapıları geçildikten sonra başlayın.
+- İlk dikey dilim: tek parsel + sürümlü imar kısıtları -> ortak Rust
+  çekirdeğinde yapı kütlesi -> isteğe bağlı 3D görünüm -> senaryo kaydı.
+- Sonra arazi, çok parsel, senaryo karşılaştırma, ileri analiz ve büyük
+  şehir sahnelerine ölçülmüş ihtiyaçla genişletin.
+- Bu fazın başlaması Martin'in kaldırılmasına bağlı değildir; Faz E
+  ayrı bir yayın motoru kararıdır.
+
+Claude Opus görevi: Önce repo ve bu dokümanın mevcut/güncel ayrımını oku.
+Faz A'dan bir dikey dilim tamamla; ölçmeden "Martin'den hızlı" yazma.
+Mevcut stil ve WebGPU kodunu koru. Yeni DB motoru veya PostgreSQL tipi
+önermeden önce bu kararın hangi somut eksikliği çözdüğünü benchmark/ADR ile
+göster. Her değişiklikte migration, tenant sınırı, başarısızlık kurtarma ve
+uygun doğrulamayı raporla.
+
+## 20. Modüler frontend ve isteğe bağlı yükleme
+
+KentOS'un arayüzü mevcut DOM/`h()`/Signal mimarisini sürdürür (§3–4);
+React veya büyük bir plugin framework'ü yalnızca modülerlik için eklemeyin.
+**Modülerlik iki ayrı gerektir:** kod sahipliği/bağımlılık sınırı ve gerçek
+bundle ayrımı. Sadece klasör açmak başlangıç JS'ini küçültmez; yalnızca
+`import()` yazmak da ortak statik import edilen ağır modülü ayırmaz.
+
+### 20.1 Mevcut kod envanteri ve ilk sınırlar
+
+Bu commit'te `StyleManager`, `LayerStyleDialog`, `SymbolDesigner` ve
+`ModelDesigner` dinamik import ile açılıyor; bunları tekrar "henüz yok"
+diye raporlamayın. Ancak `src/app/createApp.ts` uygulama başında demo/
+showcase, sistem stil kitaplığı ve işlem penceresini; `src/ui/dock/RightDock.ts`
+görünür olmasa bile `ProcessingPanel`i statik import/oluşturma yoluyla
+yüklüyor. `src/style/system/mpyy/index.ts` içindeki `import.meta.glob`
+`eager: true` bütün MPYY sayfa tanımlarını ilk grafiğe alıyor.
+`src/main.ts` stil/model/processing CSS'ini baştan yüklüyor.
+`createBackend.ts` her iki renderer'ı import ediyor; varsayılan WebGL2
+oturumunda WebGPU kodunun ayrı chunk olmasını ölçerek değerlendirin.
+
+Kullanıcının bildirdiği yaklaşık **700 KB** build çıktısı bu ortamda
+ölçülmüş başlangıç aktarım boyutu değildir. Önce `pnpm build` çıktısında
+**toplam üretilen dosya**, **ilk sayfada istenen JS/CSS**, **gzip/Brotli
+aktarımı**, **parse/evaluate süresi** ve **ilk etkileşime hazır olma**
+ölçümlerini ayrı kaydedin. Başlangıç maliyetini toplam dist boyutuyla
+karıştırmayın. Profilde hangi importun chunk'a girdiği somut olarak
+görülmeden dosya adı veya elle `manualChunks` kuralıyla optimize etmeyin.
+
+| Başlangıç çekirdeği                                                                                                                    | İsteğe bağlı modül                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Kabuk, katman ağacı, komut/kısayol kataloğunun hafif metadata'sı, kamera, temel çizim/render, aktif belgenin kullandığı stil tanımları | Stil yöneticisi/tasarımcısı, tüm MPYY katalog/önizleme verisi, stil import/export                         |
+| Temel çizim araçları, seçim, aktif nesnenin düzenlenmesi                                                                               | Model/iş akışı tasarımcısı, ileri analiz/rapor/pafta-layout ve gelecekte raster/TIN araçları              |
+| Varsayılan WebGL2; açıkça seçilirse WebGPU                                                                                             | Büyük format parser'ları ve ilgili WASM/worker kodu                                                       |
+| 2D proje/nesne kimliği, hafif görünüm ve senaryo metadata'sı                                                                           | Gelecekte 3D urban design, 3D sahne, arazi, yapı kütlesi üretimi ve bunlara özel shader/texture/mesh/WASM |
+
+Bu tablo varsayılan çizim için gereken gerçek sembollerin eksik
+kalabileceği anlamına gelmez. **Aktif projenin bağımlı stillerini** açılışta
+çözün; geri kalan sistem kataloğunun ad/kategori/arama indeksini hafif
+metadata olarak tutup sembol tanımı ve SVG/raster içeriğini kategori veya
+kullanım bazında isteyin. Katalog ve stil varlıkları sürümlü/cache'lenebilir
+olsun. Mevcut showcase bütün sistem kütüphanesini kullandığından gerçek
+ürün başlangıç ölçümünde demo ayrı senaryo olmalıdır; testleri kırmadan
+özel demo girişine veya açılır örneğe taşımayı planlayın.
+
+### 20.2 Yükleme sözleşmesi
+
+- Bir özellik girişinde hafif `id`, `command`, `capabilities`, `load()`
+  tanımı bulunur. Komut araması menüde görünür kalır; çalıştırınca ilgili
+  modül yüklenir. Domain çekirdeği özellik UI dosyasını statik import etmez.
+- Modüller yalnızca gerekli olduğunda açılır. Stil tasarımcısı,
+  model/iş akışı tasarımcısı, layout tasarımcısı, ileri processing penceresi,
+  format import/export ve ağır veri analizleri ayrı yükleme sınırlarıdır.
+  Panel ilk etkinleştirmede kurulup kapanırken abonelik/GPU kaynağı bırakır;
+  kaydedilmiş panel sekmesi geri açılıyorsa önceden hazırlanır.
+- Dinamik import/asset/WASM yüklemesi başarısızsa komut açık bir hata ve
+  yeniden dene eylemi verir; boş pencere veya kaybolan taslak bırakmaz.
+  Geç açılan editör mevcut belge/sürüm/tenant bağlamını yeniden kontrol
+  eder. Geç gelen import sonucu eski belgeye uygulanmaz.
+- CSS özellik modülüyle yüklenir; başlangıç kabuğunun tema/token CSS'i
+  ortak kalır. İki modülde kullanılan küçük stil/yardımcı kodu gereksiz
+  tekrarlamayın; devasa ortak chunk'a taşımayın.
+- Geometri için başlangıçta zorunlu Rust/WASM altkümesi ile ağır analiz,
+  CRS grid, büyük format parser veya model tasarım araçlarının kod/verisi
+  ayrı yükleme kararlarıdır. `wasm-bindgen` ile tek büyük `.wasm` üretilirse
+  lazy JS importu başlangıç indirmesini azaltmayabilir; `.wasm` indirme,
+  derleme, başlatma ve transferi de ayrıca ölçün. Backend native çekirdeği
+  aynı sözleşmeleri sağlar; chunk ayrımı hesap semantiğini değiştirmez.
+- Her komutun modülü sürüm ve yetenek bildirir. Yetkisiz kullanıcının
+  özelliği gizlense bile sunucu yetkisi ayrıca doğrulanır. Sadece paket
+  parçalaması için gereksiz ağ isteği, paket tekrarı veya bellek şişmesi
+  yaratmayın.
+
+### 20.3 Büyük uygulama için modül sınırları ve yaşam döngüsü
+
+- Kabuk; oturum, proje, komut, seçim, kayıt kuyruğu, job ve bağlantı
+  servislerini yayımlanan dar arayüzlerle sunar. Özellik modülleri bu
+  sözleşmelere bağımlıdır; kabuk özelliklerin iç uygulamasına bağımlı
+  olamaz. Modüller birbirinin iç dosyalarını import etmez; birlikte
+  çalışma sürümlü sözleşme/komut/olay üzerinden olur. Döngüsel bağımlılık
+  ve ağır özellikleri yeniden dışa aktaran ortak barrel dosyaları engellenir.
+- Stil, workflow, layout ve gelecekte urban design ayrı özellik
+  girişleridir. Urban design içinde 3D görünüm, arazi, kütle üretimi ve
+  analiz de ihtiyaçlarına göre ayrılır; tek devasa "3D" chunk zorunlu
+  değildir. Manifestler yalnız hafif metadata ve loader içerir.
+- Yaşam döngüsü `load -> activate -> deactivate -> dispose` olarak
+  tanımlanır. `deactivate` sırasında tutulacak kaynaklar bütçeyle
+  sınırlanır; `dispose` DOM, abonelik, zamanlayıcı, özel worker ve GPU
+  buffer/texture kaynaklarını bırakır. Ortak kaynakların sahipliği ve
+  referans sayımı belirgindir. Dinamik import edilmiş JS modülünün
+  tarayıcı modül cache'inden silineceği varsayılmaz; kaynak temizliği
+  ile kodun bellekten tamamen boşaltılması aynı garanti değildir.
+- Proje verisi, bekleyen autosave ve sunucu job'ı panel yaşam döngüsüne
+  bağlı değildir. Panel kapanması bunları kaybettirmez veya job'ı iptal
+  etmez. Yeniden açılış aynı proje/senaryo revision'ına bağlanır; geç
+  sonuçlar §21'deki generation kontrolünden geçer.
+- İlk 2D açılışta 3D'ye özel JS/CSS/WASM, shader, texture, mesh ve worker
+  yüklenmez/başlatılmaz. Ortak Rust kaynak kodu kullanımı bütün WASM
+  özelliklerini tek başlangıç dosyasına bağlamayı gerektirmez; temel 2D
+  ve ileri 3D için ayrı derleme girişleri ve açık veri sözleşmeleri kurun.
+- Prefetch yalnız kullanıcı niyeti, açıkça geri yüklenecek görünüm veya
+  ölçülmüş ihtiyaçla, ağ/bellek bütçesi içinde çalışır. Bütün modülleri
+  açılıştan hemen sonra arka planda indirmek lazy load kabul edilmez.
+- CI'da import/chunk grafiğiyle bağımlılık sınırlarını ve 2D girişinin
+  3D koduna erişmediğini doğrulayın. Her ağır modülün aktarım, ilk açılış,
+  ana thread süresi, CPU/GPU bellek ve arka plan iş bütçesi olsun.
+  Tekrarlı aç/kapat ve 2D/3D geçişlerinde kaynakların bütçede kaldığını
+  ölçün; paket boyutu tek performans ölçütü değildir.
+
+### 20.4 Kabul ve uygulama sırası
+
+1. Sabit referans tarayıcı/cihaz ve soğuk/ılık cache ile ilk yük, ilk çizim,
+   ağır modülü ilk/ikinci açma ve modül arası geçişi ölç; chunk grafiğini
+   kaydet. Başlangıç JS/CSS/WASM byte ve çalıştırma bütçesini ADR'de
+   **değişiklikten önce** belirle. Başka bir modülü ilk yükten çıkarıp ilk
+   tıklamayı kabul edilemez geciktirmek kazanım sayılmaz.
+2. Mevcut lazy sınırların gerçekten ayrı chunk verdiğini doğrula; sonra
+   sistem stil kataloğu/showcase, işlem paneli/dialog ve alternatif renderer
+   gibi ölçülen başlangıç bağımlılıklarını sırayla ayır. Her adımda farkı
+   yeniden ölç ve bağımlılık yönünü gözden geçir.
+3. Gelecek layout/pafta, workflow ve stil tasarımcısı modüllerinin hafif
+   komut kaydı + dinamik yükleme + hata/iptal/dispose şablonunu uygula.
+   Açılmayan modülün kodu, CSS'i, asset'i ve ona özel WASM'i ilk ağ
+   isteğinde görünmemelidir; kullanılan modül ilk kullanımda eksiksiz
+   çalışmalıdır.
+4. Görsel ve uçtan uca testler: doğrudan komutla ve menüden açma,
+   internet/asset hatası ve retry, tema, panel geri yükleme, belge
+   değiştirme sırasında geç import, aktif stilin doğru çizimi, WebGPU
+   fallback, worker/işlem iptali. Başlangıç ve ağır modül budget'ları CI'da
+   izlenir; meşru büyüme için açıklamalı budget güncellemesi gerekir.
+
+**Mimari kabul kapısı:** Günlük çizim akışı büyük tasarımcıların kodunu
+yüklemeden çalışır; büyük özellikler gerektiğinde açılır ve taslağı
+korur. Gerçek `pnpm build` çıktısı ve tarayıcı ölçümüyle başlangıç maliyeti
+iyileştirilmiş, özelliklerin ilk açılış gecikmesi görünür ve kabul edilen
+bütçeye uygun, davranış eşdeğerliği testle gösterilmiş olmalıdır.
+
+## 21. Sürekli bağlantı, asenkron projeler ve bulut otomatik kaydı
+
+Bu bölüm hedef davranıştır; mevcut tarayıcı uygulamasında uygulanmış
+sayılmaz. Axum WebSocket sunucusu, Tokio ağ işleri ve SQLx/PostgreSQL
+kalıcılığı kullanılır. WebSocket sürekli oturum/olay kanalıdır; tile,
+büyük dosya, sayfalı sorgu ve idempotent command gönderimi HTTP üzerinden
+çalışabilir. Socket açık olmak bütün servislerin sağlıklı olduğu veya
+bir değişikliğin veritabanına kaydedildiği anlamına gelmez.
+
+### 21.1 Bağlantı izleme ve yeniden eşitleme
+
+- İstemci durumu `connecting`, `online`, `reconnecting`, `offline`,
+  `auth_required` olarak izler. Durum çubuğunda bağlantı, son başarılı
+  eşitleme ve bekleyen kayıt sayısı gösterilir. Bağlantı durumu ile
+  kaydetme durumu ayrı sinyallerdir.
+- Tarayıcı uyumlu uygulama heartbeat/ack mesajı ve timeout kullanın;
+  native WebSocket ping API'sinin tarayıcı JavaScript'inde var olduğunu
+  varsaymayın. İlk ayar heartbeat 20 saniye, yanıt yokluğu eşiği 60 saniye;
+  bunlar yapılandırılabilir ve arka plan sekmesi/cihaz uyku durumunda
+  yeniden değerlendirilir. `navigator.onLine` yalnızca ipucudur.
+- Otomatik reconnect üstel bekleme + jitter uygular (başlangıç 1 saniye,
+  üst sınır 30 saniye); normal kullanımda denemeler sürer. Kimlik doğrulama
+  hatası sonsuz retry üretmez; oturum yenileme/giriş gerekir. Uykudan veya
+  yeniden görünür duruma dönüşte sağlık ve revision kontrol edilir.
+- Her istemci/proje aboneliği son uygulanmış event cursor'ını tutar.
+  Sunucu kalıcı outbox/event akışından eksikleri tekrar verir; yinelenen
+  olaylar event ID/revision ile elenir. Saklama süresi aşılmış cursor için
+  `resync_required` döner; yeni proje snapshot'ı alınır. Snapshot revision'ı
+  ile sonraki event cursor'ı arasında boşluk kalmayacak bir bootstrap
+  protokolü kurun. Cursor taşıma katmanının "mesaj gönderildi" bilgisi değil,
+  istemcinin olayı uygulamış olduğunun işaretidir.
+- Socket yeniden kurulduğunda tenant/proje abonelikleri ve yetkiler tekrar
+  doğrulanır; aktif job'ların durumu DB'den alınır. Presence/cursor gibi
+  geçici olaylar kalıcı komut ve veri revizyonlarından ayrıdır. Yavaş
+  istemcide sınırlı kuyruk/backpressure kullanın; kalıcı veri olayını
+  sessizce düşürmek yerine resync başlatın.
+- WSS, oturum doğrulama ve Origin kontrolü uygulanır. Uzun ömürlü token
+  URL/query string'e konmaz. Yetki iptalinde ilgili abonelik kapanır;
+  sonraki komutlar tekrar yetkilendirilir.
+
+**Kopma davranışı:** Sunucunun kalıcı olarak kabul ettiği işler §18'e göre
+devam eder. Henüz sunucuya ulaşmamış komutlar "bekliyor" durumundadır;
+başlamış veya kaydedilmiş gösterilmez. Kullanıcı yüklenmiş veri üzerinde
+izinli yerel çizim/önizlemeye devam edebilir; yeni uzak sorgu, eksik tile
+ve sunucu analizi bağlantı bekler. Web Worker ve yerel WASM hesapları
+socket'a bağlı değildir. Bu davranış ilk sürümde tam offline proje
+replikası desteği olduğu anlamına gelmez.
+
+### 21.2 Bütün projeler asenkron ve aşamalı açılır
+
+Bulut ve yerel kaynak sağlayıcıları `openProject` işlemini asenkron
+sunmalıdır. Önce proje kimliği/yetki, metadata, layer ağacı, CRS ve stil
+manifesti gelir; ardından görünür bölge tile'ları, gerekli semboller ve
+seçili/editlenecek nesnelerin tam geometrileri öncelikle yüklenir.
+Milyonlarca nesnenin tamamını RAM'e almadan kullanılabilir çalışma alanı
+açılır. Yerel büyük dosya ayrıştırma ve ağır dönüşüm worker/WASM'da
+yapılır; `async` anahtar kelimesi tek başına CPU işini ana thread'den ayırmaz.
+
+Proje durumu `opening -> interactive -> ready`, ayrıca `error/canceled`
+durumlarını taşır. `interactive` görünür çalışma alanının kullanılabilir
+olduğunu, `ready` ise açılış için gerekli manifest/ilk veri kapsamının
+tamamlandığını belirtir; tüm veri kümesinin indirilmesi demek değildir.
+Yükleme adımı/ilerleme ve iptal görünür olur; toplam bilinmiyorsa sahte
+yüzde gösterilmez. Metadata, tile, özellik ve asset yüklemeleri ayrı
+eşzamanlılık/bellek bütçesi ve geri basınç kullanır.
+
+Her açılış bir `load_generation` ve iptal sinyali taşır. Proje veya tenant
+değişince eski istekler/abonelikler iptal edilir; geç dönen cevap yalnızca
+eşleşen proje/generation'a uygulanır. Render ve edit servisleri yeni
+belgeye atomik bağlanır; eski projenin seçim, undo, job görünümü ve taslağı
+yenisine karışmaz. Sekme değişimi kayıt kuyruğunu kaybetmez; kuyruğun sahibi
+panel yaşam döngüsü değil proje oturum servisidir.
+
+### 21.3 Bulut projelerinde otomatik kayıt varsayılandır
+
+Kaynak sağlayıcı `storage_mode: cloud | local` ve yazma yeteneğini bildirir.
+Bulut projesinde otomatik kayıt varsayılan olarak açıktır; yerel dosyada
+ayrı dosya kaydetme ve kurtarma taslağı politikası geçerlidir. Otomatik
+kayıt; tamamlanmış CAD komutlarını, katman/proje metadata'sını, proje
+stillerini ve projeye ait model/layout tanımlarını kapsar. Kişisel UI
+tercihleri kendi kullanıcı kapsamındadır. Tasarımcıdaki henüz onaylanmamış
+taslak ayrı kurtarılır; her form tuşu yayınlanmış proje verisi sayılmaz.
+
+- Pointer hareketlerini sunucuya yazmayın. Tamamlanmış yerel transaction
+  sonrası değişikliği proje/tenant/kullanıcı kimliğiyle IndexedDB'de
+  dayanıklı bekleyen komut günlüğüne alın. Başarısız yerel yazma/kota
+  durumunda taslağın kalıcı olduğu iddia edilmez; kullanıcıya açık hata
+  gösterilir ve veri bellekten sessizce atılmaz.
+- İlk ayar son tamamlanmış değişiklikten 1 saniye sonra debounce,
+  kesintisiz değişiklikte en geç 5 saniyede gönderim; yapılandırılabilir.
+  Manuel Kaydet/Ctrl+S bekleyen kuyruğu hemen göndermeyi dener. Tüm proje
+  snapshot'ı yerine değişen komut/nesne/metadata gönderilir; undo adımları
+  ve atomiklik korunur.
+- Her projede sıralı commit kuyruğu kullanın; bir kayıt sürerken yapılan
+  yeni editler yeni yerel revision ile sırada kalır. Sunucunun ACK'i
+  yalnız kapsadığı `local_revision`/komutları temizler; eski ACK yeni editin
+  `dirty` durumunu silemez. Kimlik eşlemesi, base version ve idempotency
+  §15'teki protokolle aynıdır. IndexedDB'deki komut ancak sunucu commit'i
+  doğrulandıktan sonra kuyruktan çıkarılır.
+- Durumlar `saved`, `pending`, `saving`, `offline_pending`, `conflict`,
+  `error` olarak görünür. "Kaydedildi" yalnızca sunucu commit ACK'i ve
+  bekleyen edit olmaması halinde gösterilir. Yerel taslak koruması ile
+  bulut kaydı farklı durumlardır.
+- Kopma veya zaman aşımında kuyruğu koruyup aynı idempotency anahtarıyla
+  devam edin. Commit gerçekleşip yanıt kaybolursa aynı komutun sonucu
+  sorgulanır/yeniden döndürülür. 409'da otomatik üzerine yazma yoktur;
+  yerel taslak korunur, etkilenen kuyruğun devamı çatışma çözülene kadar
+  durur. Yetki iptalinde göndermeyi durdurup açıklayıcı durum gösterin.
+- Sekme/uygulama kapanışındaki son ağ isteğine güvenmeyin. Kurtarma
+  günlüğü edit sırasında kalıcılaşır. Sayfa yeniden açılınca oturum,
+  tenant, kaynak proje revision'ı ve bekleyen komutlar karşılaştırılarak
+  devam edilir; sunucudan gelen snapshot bekleyen yerel editleri ezemez.
+  Oturum/tenant değişimi başka kullanıcının taslağını otomatik göndermez.
+
+### 21.4 Zorunlu uçtan uca doğrulama
+
+1. Bağlantıyı heartbeat öncesinde/sonrasında kes; arayüz doğru durumu
+   gösterir, yeniden bağlanır ve kaçırılan olayları çift uygulamadan alır.
+2. Uzun job sırasında socket'ı ve sekmeyi kapat; job devam eder, tekrar
+   açılışta aynı `job_id` ilerleme/sonuç görünür; yeni job üretilmez.
+3. Commit öncesinde, commit sonrasında ACK ulaşmadan ve autosave sırasında
+   yeni edit yapılırken ağı kes; kurtarma sonrası kayıp/mükerrer kayıt ve
+   yanlış "Kaydedildi" durumu oluşmaz.
+4. İki istemcide aynı feature'ı değiştir; reconnect/autosave çatışmayı
+   gösterir, kaynak CAD tanımı ile yerel taslak korunur.
+5. Büyük proje açılırken arayüz/iptal çalışır; hızlı proje/tenant değişiminde
+   eski yanıt, tile, seçim ve stil yeni projeye uygulanmaz.
+6. IndexedDB kota/yazma hatası, süresi dolmuş oturum, event cursor süresinin
+   aşılması ve read-only projede otomatik kayıt durumları doğru gösterilir.
+
+## 22. Gelecek hedef: imar planına dayalı 3D urban design
+
+KentOS uzun vadede CAD/GIS, imar planlama ve 3D kentsel tasarım çalışma
+alanlarını aynı proje üzerinde sunacaktır. Bu bölüm **gelecek ürün
+kapsamıdır**; mevcut kodda 3D urban design tamamlanmış değildir. Bugün
+§20'nin sınırlarını kurun; henüz kullanılmayan 3D motoru, bağımlılıkları
+ve araçlarını başlangıç uygulamasına eklemeyin. Render motoru/format
+seçimini ilk dikey dilimde mevcut renderer, veri ölçeği ve cihaz
+yetenekleriyle karşılaştırılmış bir ADR ile yapın.
+
+### 22.1 Kaynak veri, kurallar ve senaryolar
+
+- Parsel, imar planı/kullanım kararı, yapı ve arazi kaynakları kalıcı
+  kimlikleri ve revision'larıyla tutulur. Yükseklik/kat, çekme mesafesi,
+  TAKS/KAKS/emsal gibi parametreler kapsam, birim, kaynak plan ve kural
+  sürümüyle modellenir. Eksik veya çelişkili kural sessiz varsayımla
+  doldurulmaz; kullanıcıya çözümlenecek durum olarak gösterilir.
+- Parametrik tasarım tanımı, kullanıcı kararları ve senaryo girdileri
+  kaynağı oluşturur; mesh/LOD/önizleme yeniden üretilebilir çıktıdır.
+  Serbest düzenlenmiş geometri veya elle yapılan istisnalar ayrıca
+  sürümlenir; yeniden üretim bunları sessizce ezemez.
+- Her üretim `scenario_id`, kaynak revision'ları, parametreler,
+  `algorithm_version` ve sonuç manifestiyle izlenir. Plan/parsel değişince
+  bağımlı sonuçlar eski olarak işaretlenir; yalnız etkilenen kapsam
+  yeniden hesaplanır. Senaryo karşılaştırması aynı kaynak tabanını veya
+  tabanlar arasındaki farkı açıkça gösterir.
+- 2D ve 3D aynı kalıcı feature kimliklerini kullanır; seçim ve özellik
+  inceleme ortak servisler üzerinden eşitlenir. Ayrı ve zamanla ayrışan
+  bir "3D proje veritabanı" oluşturmayın. PostGIS kaynak mekânsal veriyi,
+  PostgreSQL senaryo/kural tanımlarını, nesne depolama büyük türetilmiş
+  sahne varlıklarını tutar; hepsi tenant/proje yetkilerine tabidir.
+- Hesap sonuçları kullanılan kuralların değerlendirmesidir; belirsiz
+  kural veya eksik veri varken otomatik "imar uygunluğu onaylandı"
+  sonucu üretilmez. Sonuç, kullanılan veri ve kural sürümünü gösterir.
+
+### 22.2 Ortak hesaplama ve büyük sahne
+
+- Yapı kütlesi/parametrik geometri hesapları tek Rust uygulamasından
+  native worker ve tarayıcı WASM olarak derlenir. §14'ün parity/tolerans
+  kapısı burada da geçerlidir. İleri 3D crate'leri temel 2D çekirdeğine
+  ters bağımlılık yaratmaz; farklı paketleme ayrı algoritma yazmak değildir.
+- Etkileşimli küçük önizleme Web Worker/WASM'da, büyük parsel kümeleri,
+  arazi/mesh üretimi ve ağır analiz sunucu job'ında çalışır. Her girdide
+  tüm şehir yeniden üretilmez. Sunucu kabul ettiği job'ı socket kapansa
+  da sürdürür; eski revision için biten sonuç yeni senaryonun güncel
+  sonucu olarak otomatik etkinleştirilmez.
+- Yatay CRS, düşey referans, yükseklik birimi ve yerel sahne orijini açık
+  sözleşmelerdir. Kaynak/hesap koordinatları f64 hassasiyetini korur;
+  render aktarımında yerel orijine göre f32 kullanılabilir. Büyük
+  koordinat ve 2D/3D dönüşüm fixture'ları gerekir. Z koordinatı bulunması
+  bütün mekânsal işlemlerin 3D semantiği sağladığı varsayımına dönüşmez;
+  her işlemin boyutu ve doğruluğu ayrı doğrulanır.
+- Sahne görünür bölge/mesafe/önceliğe göre aşamalı yüklenir; LOD,
+  görünürlük elemesi, uygun tekrarlar için instancing ve sınırlı cache
+  kullanır. Bütün kent mesh'lerini RAM/GPU'ya almayın. Ağ, çözümleme,
+  worker, GPU upload ve GPU bellek ayrı bütçelenir; kullanılmayan
+  varlıklar sahiplik kurallarıyla serbest bırakılır.
+- Cihaz yetenekleri kontrol edilir; destek yetersizse açıklayıcı durum
+  ve kullanılabilir 2D çalışma alanı sunulur. 3D açılış hatası mevcut
+  2D projeyi veya kaydedilmemiş değişikliklerini kapatmaz.
+
+### 22.3 3D uygulamaya alındığında kabul kapıları
+
+1. Aynı sürümde yalnız 2D proje açıldığında 3D'ye özel ağ isteği/worker
+   oluşmaz; 3D komutu ilk kullanımda modülü ve gerekli bölgeyi yükler.
+2. Aynı parsel/parametre fixture'ı native ve WASM'da belgelenmiş
+   toleransla aynı geometri ve hesap değerlerini verir.
+3. Plan revision'ı değişince ilgili sonuç eski görünür; yeniden üretim
+   doğru kapsamı günceller, elle düzenlemeler ve başka senaryolar korunur.
+4. Üretim sırasında bağlantı kopması, worker yeniden başlaması ve modül
+   kapanması job/sonuç kimliğini veya kaydı kaybettirmez.
+5. Büyük sahne ve tekrarlı 2D/3D geçişleri belirlenmiş kare süresi,
+   ilk açılış ve CPU/GPU bellek bütçelerini geçer; feature kimliği,
+   seçim, koordinat hassasiyeti ve autosave tutarlı kalır.
+
+## 23. Kadastral ve mülkiyet hesaplarında sayısal doğruluk
+
+**Bağlayıcı öncelik:** Kaynak sınır, koordinat, alan, hisse ve hak
+hesabının doğruluğu performanstan önce gelir. Görsel yaklaşıklaştırmalar
+serbest olabilir; mülkiyeti etkileyen kaynak işlemde sessiz yuvarlama,
+koordinat kaydırma veya yaklaşık sonucun kesin gibi kaydı yasaktır.
+Bu bölüm §5 ve diğer bölümlerdeki genel f64/tolerans ifadelerini
+kadastral işlemler için tamamlar ve çelişki halinde önceliklidir.
+Hiçbir veri tipi veya ortak Rust kodu tek başına "sıfır hata" kanıtı
+sayılmaz; aşağıdaki kapılar geçmeden kadastral kullanıma hazır denmez.
+
+### 23.1 Sayı temsili ve kayıpsız veri yolu
+
+- Kaynaktan gelen koordinatların özgün ondalık değerleri, birimleri,
+  CRS/datum bilgisi ve kaynak hassasiyeti korunur. İçe aktarmada erken
+  `Number`/f64 dönüşümüyle kaybolmuş basamaklar sonradan decimal'a
+  çevirerek geri kazanılmış sayılmaz. Kesin ondalık koordinat gerektiren
+  kaynaklarda §15'in `source_kind` sözleşmesi genişletilir: sürümlü
+  kesin koordinat tanımı kaynak, PostGIS geometry sorgu/render türevidir;
+  çift yönlü bağımsız yazma yolu açılmaz.
+- Geometri algoritmaları için f64 kullanılabilir; fakat hata analizi,
+  sağlam geometrik kararlar ve gereken yerde adaptif/yüksek hassasiyetli
+  hesap yolu zorunludur. Tüm geometriyi decimal'a çevirmek tek başına
+  kesişim, trigonometrik işlem veya topoloji doğruluğunu çözmez.
+- Kayıtlı resmî alan, kesin ondalık katsayılar ve nihai ondalık sonuçlar
+  PostgreSQL `NUMERIC` ve uyumlu Rust decimal temsiliyle taşınır.
+  Hisse pay/payda olarak kesin rasyonel tutulur; 1/3 sonlu ondalığa
+  zorlanmaz. Tip kapasitesi, taşma, ölçek ve aritmetik kuralları açıktır.
+  API/WASM/IndexedDB aktarımında bu değerler decimal string veya
+  pay/payda sözleşmesiyle korunur; JavaScript `Number` üzerinden geçmez.
+- DB kolon ölçeğinin örtük yuvarlamasına güvenmeyin. Ölçek aşımı
+  uygulama katmanında doğrulanır; yalnız tanımlı politika dönüştürebilir.
+  NaN/Infinity, taşma ve geçersiz birim kontrollü hata verir.
+- Geometriden hesaplanan alan, kaynaktan alınan kayıtlı alan ve
+  yuvarlanmış gösterim ayrı alanlar/anlamlardır. Birbirini otomatik
+  güncellemez; fark ve hesap yöntemi kullanıcıya açıklanabilir olmalıdır.
+
+### 23.2 Yuvarlama tek, açık ve sürümlü bir iş kuralıdır
+
+- İşlem türüne göre `numeric_policy_id/version`; birim, çıktı ölçeği,
+  ara işlem hassasiyeti, yuvarlama noktaları, eşitlikte yön, negatif
+  sayılar ve dağıtım artığı davranışı tanımlanır. Evrensel olarak
+  "iki ondalık" veya tek bir yuvarlama modu seçmeyin. Uygulanacak
+  kurumsal/resmî kural doğrulanıp sürümlenmeden nihai işlem açılmaz.
+- Gösterim basamakları kaynak değeri değiştirmez. `ctx.format` yalnız
+  sunum yapar; onun çıktısı hesap girdisi olarak geri okunmaz. Düzenleme
+  ve tam değer kopyalama kaynağı korur. `toFixed`, `Math.round`, SQL
+  `round` ve decimal kütüphanesinin varsayılanları iş kuralı olamaz.
+- Ara adımlarda gereksiz yuvarlamayı ve çift yuvarlamayı önleyin.
+  Kural açıkça ara adım yuvarlaması istiyorsa o adım uygulanır ve
+  denetim izine girer. Sonsuz ondalıklı/irrasyonel sonuçlarda gerekli
+  hassasiyet ve hata sınırıyla nihai yuvarlama kararını doğrulayın.
+- Hisse ve alan dağıtımında toplam korunumu ayrı invariant'tır.
+  Yuvarlama artığını rastgele son parsele veya hissedara vermeyin;
+  varsa onaylı dağıtım kuralını deterministik uygulayıp farkı kaydedin.
+  Kural yoksa uyuşmazlık çözülmeden nihai kayıt tamamlanmaz.
+
+### 23.3 Geometrik kararlar, toleranslar ve dönüşümler
+
+- Yönelim, kesişim, çakışma, iç/dış ve ortak sınır kararlarında sağlam
+  (robust/adaptive veya gerektiğinde exact) predicates kullanın.
+  Kesin predicate, üretilen kesişim koordinatının da kesin olduğu
+  anlamına gelmez; constructions ayrıca doğrulanır. Yakın paralel,
+  teğet, çok kısa kenar ve büyük koordinatlarda sabit epsilon ekleyerek
+  hata gizlemeyin.
+- Piksel seçim toleransı, kullanıcı kenet işlemi, topoloji birleştirme
+  toleransı, hesap hata sınırı, kaynak ölçü belirsizliği ve rapor
+  basamakları ayrı kavramlardır. Yakın iki sınır otomatik aynı kabul
+  edilmez. Snap/grid/simplify/geometry repair kaynak değiştiriyorsa
+  açık komut, önizleme, audit ve geri alma gerekir; okuma/kayıt sırasında
+  gizli tamir uygulanmaz. Ortak parsel sınırları tutarlı güncellenir;
+  boşluk, çakışma ve alan değişimi doğrulanmadan commit edilmez.
+- Alan/uzunluk yöntemi düzlemsel, elipsoidal veya 3D olarak açıkça
+  seçilir; ekran projeksiyonundan ölçüm yapılmaz. Eğri alan/uzunluğu
+  render tessellation'ından alınmaz. Yerel orijin, kararlı toplama ve
+  gerektiğinde yüksek hassasiyetli yöntemler bağımsız referansla sınanır.
+- CRS dönüşümü kaynak/hedef datum, eksen sırası, birim, gerekiyorsa
+  epoch, kullanılan grid ve dönüşüm sürümünü kaydeder. Gerekli grid
+  eksikse daha düşük doğruluklu dönüşüme sessiz fallback yasaktır.
+  Gidiş-dönüş testinin geçmesi tek başına mutlak doğruluk kanıtı değildir.
+- Karar/yuvarlama eşiğini kesen hata aralığında hesap hassasiyeti
+  artırılır. Kaynak belirsizliği veya algoritma sınırı nedeniyle karar
+  yine doğrulanamıyorsa sonuç `needs_review` olur; nihai komut atomik
+  olarak reddedilir veya inceleme bekler. İnceleme sayısal belirsizliği
+  sihirli biçimde ortadan kaldırmaz; çözüm ve dayanak kayda girer.
+
+### 23.4 Bağımsız doğrulama ve üretim engelleri
+
+- Native/WASM eşitliği gereklidir ama aynı hatayı paylaşabilirler.
+  Bağımsız yüksek hassasiyetli referanslar, analitik örnekler ve
+  uzmanlarca doğrulanmış kontrol verileriyle sonuçları karşılaştırın.
+- Tam yarım değer, eşiğin iki yanı, negatif değer, çok büyük/küçük
+  koordinat, delik, eğri, ortak kenar, yakın paralel/teğet, hisse
+  toplamı ve bölme/birleştirme alan korunumu fixture'ları zorunludur.
+  DB/API/WASM/IndexedDB/export round-trip testleri kaynak hassasiyetini
+  ve kesin ondalık/rasyonel değerleri korumalıdır.
+- Native/WASM geometrik ara sonuçları belgelenmiş hata sınırında
+  olabilir; fakat nihai ondalık sonuç, yuvarlama yönü ve topolojik
+  karar aynı olmak zorundadır. Farkta sunucu sonucu sessizce seçilmez;
+  işlem engellenir ve sürüm/hata araştırılır. Deterministik işlem sırası,
+  paralel toplamlar ve derleyici optimizasyonları da doğrulanır.
+- Denetim kaydı kaynak revision'ları/hash'leri, algoritma/build sürümü,
+  sayısal politika, CRS dönüşümü, yuvarlama öncesi sonuç/hata sınırı,
+  nihai sonuç ve aktörü içerir; işlem yeniden üretilebilir olmalıdır.
+  Onaysız politika, doğrulanamayan eşik, sınır kayması veya açıklanamayan
+  alan/hisse farkı üretim engelidir. Mevcut sabit toleransları büyütmek
+  ya da test beklentisini değiştirmek bu kapıyı geçirmez.
+
+## 24. Korunan CBS ürün kapsamı ve operasyon sözleşmeleri
+
+Bu bölüm önceki genel CBS planındaki tamamlayıcı gereksinimleri mevcut
+CAD deposuna uyarlar. Tamamlanmış özellik listesi değildir; §19'un
+fazları içinde ihtiyaç duyulan dikey dilime eklenir. Paket/framework
+adayları zorunlu bağımlılık sayılmaz; mevcut DOM/Signal, `.kstil`,
+WebGL2/WebGPU ve §13–23 kararları korunur.
+
+### 24.1 Veri kataloğu, sağlayıcı ve şema
+
+- `Connection`, `Dataset`, `DatasetView`, `ProjectLayer`, alan/domain,
+  ilişki, form ve publication tanımları ayrıdır. Aynı dataset farklı
+  projelerde farklı stil/formla kullanılabilir. Tenant güvenlik sınırıdır;
+  proje/çalışma alanı paylaşımı kaynak erişimini kendiliğinden genişletmez.
+- Provider şema, geometri tipi, Z/M, CRS, extent, kararlı kimlik, revision
+  ve `query/read/edit/transaction/tile/identify/export/schema_edit`
+  yeteneklerini bildirir. Yönetilen PostGIS, haricî table/view ve uzak
+  harita kaynakları aynı yeteneklere sahip varsayılmaz. Güvenilir kimliği
+  veya açık yazma eşlemesi olmayan view düzenlemeye açılmaz.
+- Yönetilen kayıtlarda tenant, kalıcı UUID, sürüm, oluşturma/güncelleme
+  zamanı ve iç kullanıcı kimlikleri bulunur. Sayısal bigint kullanılıyorsa
+  API'de decimal string taşınır. Tipli iş alanları normal kolonlarda,
+  yapılandırılmış ilave veri JSONB'de tutulur; aynı anlam iki yerde
+  bağımsız kaynak olamaz. `hstore` yalnız somut metin anahtar/değer veya
+  uyumluluk ihtiyacı varsa eklenir; bütün veriye zorunlu değildir.
+- Kodlu/aralık domain, subtype, bağımlı alan kombinasyonları, lookup ve
+  ilişkiler sürümlenir. Bölme/birleştirme/silmenin öznitelik ve ilişkili
+  kayıtlara etkisi açık politikadır; alan/hisse dağıtımında §23 geçerlidir.
+- Şema değişimi önce veri kaybı, form/stil/yayın/ilişki bağımlılıkları ve
+  kilit/süre etkisini gösteren migration planı üretir. Kontrolsüz DDL veya
+  sessiz kolon silme yoktur. Şema revizyonu edit ve autosave ile denetlenir.
+- Büyük öznitelik tablosu sunucuda filtre/sıralama ve kararlı sayfalama
+  kullanır; tüm kayıtları tarayıcıya almaz. Büyük seçimler yetki ve veri
+  revision'ına bağlı sorgu/selection token ile temsil edilebilir.
+
+### 24.2 Form, ifade, workflow, layout ve ajan arayüzü
+
+- Form veri şeması, yerleşim ve davranış tanımları ayrı sürümlenir.
+  Domain/decimal/tarih/dosya, sayfalı lookup, ilişkili alt form ve
+  haritadan nesne seçimi desteklenir. Koşullu görünürlük yetki yerine
+  geçmez; alan ve işlem izni sunucuda doğrulanır. Form tasarımcısı lazy
+  yüklenir; sıradan nesne inceleme bütün tasarımcıyı indirmez.
+- İş kuralı ifadeleri ortak Rust çekirdeğinde native/WASM çalışır;
+  tip/null/decimal/birim/saat dilimi/hata semantiği sürümlüdür. Ağ,
+  dosya, keyfî SQL veya `eval` erişimi yoktur; işlem ve derinlik bütçesi
+  vardır. MapLibre ifade diliyle aynı dil olduğu varsayılmaz.
+- Workflow tanımı tipli giriş/çıkışlı DAG, veri/komut/kural revision'ları,
+  ara çıktı, retry/iptal ve provenance içerir. Sunucu job'ının yaşam
+  döngüsü tasarımcıdan bağımsızdır. Layout/pafta; sayfa, ölçek, harita
+  çerçevesi, lejant ve çıktı tanımlarını proje verisi olarak saklar;
+  büyük export sunucu job'ıdır. İkisi de ayrı lazy özelliklerdir.
+- Her ürün işlevi yetki kapsamında UI, komut, MCP ve chat üzerinden
+  kullanılabilir olmalıdır. Komut şeması sürüm, girdi/çıktı, capability,
+  önkoşul, preview, idempotency, iptal ve undo/compensation taşır.
+  Headless çalışamayan görsel komut bunu açıkça bildirir.
+- Model sağlayıcısı adaptörle ayrılır; ajan şemalı komut çağırır.
+  Proje/seçim bağlamı yetkiyle filtrelenir; veri metni talimat sayılmaz.
+  Ajan doğrudan SQL/DOM yoluyla iş kurallarını aşamaz. Yüksek etkili
+  toplu silme, paylaşım ve şema değişimi etki önizlemesi ve ürün onay
+  politikası gerektirir; sıradan yetkili işlemlerde gereksiz onay yoktur.
+
+### 24.3 Yayın sihirbazının tam akışı
+
+Taslak kaydedilip devam ettirilebilir; aynı adımlar MCP/komutla erişilir:
+
+1. Tenant/proje ve izinli kaynak/dataset/view seç.
+2. Kimlik, geometri, CRS, boyut ve alan şemasını doğrula.
+3. Yayınlanacak alan, filtre ve gerçekten desteklenen query/edit/export
+   yeteneklerini belirle; gizli alanlar varsayılan yayınlanmaz.
+4. Rol/grup, alan/satır, public/private ve paylaşım kapsamını belirle.
+5. Zoom/LOD, tile boyutu/süre sınırı, cache ve güncellik profili seç.
+6. Kaynak `.kstil` ve form revision'ını bağla; dış MapLibre uyumluluk
+   raporunu ve gerekli sprite/glyph varlıklarını doğrula.
+7. İndeks/sorgu planı, örnek tile, farklı roller ve yetkisiz erişimi sına.
+8. Sonuç URL'leri, kapsam ve maliyet özetinden sonra değişmez revision
+   oluştur; hazır olduğunda aktif işaretçiyi atomik değiştir.
+
+İlk motor Martin'dir. İndeks/materialized view önerisi ayrı migration
+planıdır; yayın komutu gizli DDL çalıştırmaz. Pause/archive/yetki iptali
+cache ve katalogda uygulanır. Yapılandırmayı geri almak veriyi geçmişe
+döndürmez. Haricî DB değişiklikleri için trigger/change feed veya açık
+polling+TTL güncellik profili seçilir; LISTEN/NOTIFY kalıcı günlük değildir.
+
+### 24.4 Operasyon, güvenlik ve ileri çevrimdışı kapsam
+
+- OIDC oturumu; issuer/audience/imza/süre ve key rotation doğrulaması,
+  uygun PKCE/BFF ve cookie/CSRF politikası içerir. Kaynak sırları tarayıcı,
+  log veya MCP çıktısına verilmez. Uzak kaynak proxy'sinde SSRF, redirect,
+  boyut ve süre sınırları uygulanır. SQL değerleri bind, identifier'lar
+  izinli katalogdan seçilip doğru quote edilir.
+- Request -> command -> job -> SQL -> tile akışı correlation ID ile
+  izlenir. Yapısal log/trace/metric; pool beklemesi, sorgu, cache, job
+  backlog, lease kaybı, reconnect ve autosave hatasını kapsar. Token ve
+  hassas koordinat/öznitelik loglanmaz; audit erişimi ayrı yetkidir.
+- Docker/Compose geliştirme ve üretim dağıtımı, ayrı API/worker ölçeği,
+  health/readiness, graceful shutdown, queue/pool drain ve kontrollü
+  migration tanımlanır. Tile yükü edit/commit işlerini aç bırakmaz;
+  bağlantı/CPU bütçeleri ayrılır. Yedek/PITR için hedef RPO/RTO belirlenir
+  ve restore tatbikatıyla doğrulanır; ölçülmeden SLA iddia edilmez.
+- Worker `auto/embedded/external` seçimi gerekirse aynı kalıcı kuyruk ve
+  lease/fencing üzerinden yapılır. Dış worker yokken sınırlı embedded
+  executor yalnız açık ayarla açılır; failover mükerrer commit üretmez.
+- Gelecek masaüstü/tam offline paket için taşıma bağımsız servis,
+  kalıcı kimlik, schema revision, tombstone ve değişiklik günlüğü korunur.
+  Tauri/Electron ve yerel veri adaptörü ayrıca ADR ile seçilir; bulut
+  PostgreSQL kararı değişmez. §21'deki bağlantı kaybı/kurtarma desteği tam
+  offline replica değildir. Tam replica; veri kapsamı, indirme izni,
+  sync cursor, çatışma, yerel erişim süresi ve platform testleri ister.
+- GEOS/GDAL/PROJ ve GPU compute gibi ileri sağlayıcılar ölçülen ihtiyaçla
+  eklenir. Lisans, FFI/süreç sınırı, capability, doğruluk ve native/WASM
+  kapsamı doğrulanmadan destekleniyor denmez. GPU görüntüsü veya yaklaşık
+  analiz, §23 kadastral hesabının doğruluk sözleşmesini değiştiremez.
+
+Resmî referanslar (uygularken sürüm sabitle):
+PostgreSQL numeric/floating-point ve yuvarlama: https://www.postgresql.org/docs/current/datatype-numeric.html ;
+Robust predicates, Shewchuk: https://www.cs.cmu.edu/~quake/robust.html ;
+PostGIS veri/curve türleri: https://postgis.net/docs/using_postgis_dbmanagement.html ;
+ST_CurveToLine: https://postgis.net/docs/ST_CurveToLine.html ;
+ST_AsMVTGeom: https://postgis.net/docs/ST_AsMVTGeom.html ;
+ST_AsMVT: https://postgis.net/docs/ST_AsMVT.html ;
+PostgreSQL RLS: https://www.postgresql.org/docs/current/ddl-rowsecurity.html ;
+PostgreSQL queue claim: https://www.postgresql.org/docs/current/sql-select.html ;
+Martin yayın: https://maplibre.org/martin/using/ .
+Martin stil/sprite/font: https://maplibre.org/martin/sources-styles/ ;
+Martin kütüphane: https://maplibre.org/martin/martin-as-a-library/ ;
+MapLibre stil katmanları: https://maplibre.org/maplibre-style-spec/layers/ .

@@ -121,6 +121,9 @@ function fitRange(d: readonly Pt[], first: number, last: number, t1: Pt, t2: Pt,
       if (err < tol2) return void out.push(c);
     }
   }
+  // Far off (a long smooth run): halve it, which keeps the pieces even;
+  // close: split at the worst point, where the detail is.
+  if (err > tol2 * 256) at = Math.floor((first + last) / 2);
   if (at <= first) at = first + 1;
   if (at >= last) at = last - 1;
   const centre = unit(sub(d[at - 1], d[at + 1]));
@@ -141,6 +144,20 @@ export function fitRun(pts: readonly Pt[], tol: number, t1?: Pt, t2?: Pt): (Cubi
   const s2 = t2 ?? unit(sub(d[d.length - 2], d[d.length - 1]));
   fitRange(d, 0, d.length - 1, s1, s2, tol * tol, out, 0);
   return out;
+}
+
+/** The one cubic that best fits the points with these end tangents (node deletion keeping the shape). */
+export function fitOne(pts: readonly Pt[], t1: Pt, t2: Pt): Cubic | null {
+  const d = dedupe(pts);
+  if (d.length < 2) return null;
+  const last = d.length - 1;
+  let u = chordParams(d, 0, last);
+  let c = generate(d, 0, last, u, t1, t2);
+  for (let it = 0; it < 8; it++) {
+    u = reparameterize(d, 0, c, u);
+    c = generate(d, 0, last, u, t1, t2);
+  }
+  return c;
 }
 
 function dedupe(pts: readonly Pt[]): Pt[] {

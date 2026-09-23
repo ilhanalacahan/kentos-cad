@@ -29,6 +29,8 @@ interface ShapeBase {
   /** Shapes with the same group move and select together. */
   group?: string;
   hidden?: boolean;
+  /** Not picked on the canvas nor moved by tools (the list and the panels still reach it). */
+  locked?: boolean;
   name?: string;
 }
 
@@ -38,6 +40,14 @@ export type SvgShape =
   | (ShapeBase & { kind: 'path'; subs: SubPath[] })
   | (ShapeBase & { kind: 'text'; x: number; y: number; text: string; size: number; weight: 400 | 700 | 900; font: 'sans' | 'serif'; anchor: 'start' | 'middle' | 'end'; rotate?: number });
 
+/** A guide: an endless line through (x, y) at `angle` degrees from the x axis (0 horizontal, 90 vertical). */
+export interface Guide {
+  id: string;
+  x: number;
+  y: number;
+  angle: number;
+}
+
 export interface SvgDoc {
   width: number;
   height: number;
@@ -46,6 +56,8 @@ export interface SvgDoc {
   sizeMm?: number;
   /** Preview background (paper) colour kept with the drawing; absent = the theme's paper. */
   background?: string;
+  /** Guide lines of the editor (snap targets); editing only, the SVG file does not keep them. */
+  guides?: Guide[];
 }
 
 export const newDoc = (width = 100, height = 100): SvgDoc => ({ width, height, shapes: [] });

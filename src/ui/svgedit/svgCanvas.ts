@@ -1,86 +1,55 @@
-import type { PathNode, Pt, SubPath } from '../../style/svg/pathData';
-import { boxToBox, elementOf, regularPolygon, rotation, shapeBox, shapeId, shapesBox, transformShape, translate, type Paint, type SvgDoc, type SvgShape } from '../../style/svg/svgModel';
-import type { Box } from '../../style/svg/pathData';
+import type { Box, Matrix, Pt } from '../../style/svg/pathData';
+import { boxToBox, elementOf, rotation, shapeBox, shapesBox, transformShape, translate, type Paint, type SvgDoc, type SvgShape } from '../../style/svg/svgModel';
+import { DrawTool } from './svgDrawTool';
+import { Measure } from './svgMeasure';
+import { NodeTool } from './svgNodeTool';
+import { RULER, Rulers } from './svgRulers';
+import { Snapper } from './svgSnap';
+import { el, type CanvasHost, type CanvasView, type SnapOptions } from './svgView';
+
+export type { CanvasHost, CanvasOptions, ToolId } from './svgView';
 
 /**
  * The SVG editor's drawing surface: the canvas (viewBox) on paper with a
- * grid, the shapes, and screen-space handles on top. Tools: select (move,
- * scale by eight handles, rotate by the top knob), node editing of paths
- * (drag nodes and handles, click a segment to add a node), rectangle,
- * ellipse, regular polygon/star, polyline, Bézier pen and text. Points snap
- * to the grid and to other shapes' corners, centres and nodes.
+ * grid, the shapes, and screen-space handles on top, rulers and guides at
+ * the edges. Tools: select (move, scale by eight handles, rotate by the
+ * top knob), nodes (svgNodeTool.ts), the drawing tools (svgDrawTool.ts:
+ * rectangle, ellipse, polygon/star, polyline, Bézier pen, text) and
+ * measure (svgMeasure.ts).
+ * Points snap to shapes, guides and the canvas (svgSnap.ts), else to the
+ * grid. Panels may ask for a point on the canvas (a rotation centre) and
+ * show copies about to be made (array preview).
  */
-
-export type ToolId = 'select' | 'node' | 'rect' | 'ellipse' | 'polygon' | 'line' | 'pen' | 'text';
-
-export interface CanvasOptions {
-  grid: number;
-  snapGrid: boolean;
-  snapObjects: boolean;
-  tile: boolean;
-  sides: number;
-  star: boolean;
-  /** Preview colours: the symbol's colour, its second colour, the paper. */
-  ink: string;
-  second: string;
-  paper: string;
-}
-
-export interface CanvasHost {
-  readonly doc: SvgDoc;
-  readonly selection: ReadonlySet<string>;
-  readonly tool: ToolId;
-  readonly nodeEdit: string | null;
-  readonly options: CanvasOptions;
-  /** Remember the drawing before an interactive change (one undo step). */
-  begin(): void;
-  /** The interactive change is over. */
-  commit(label: string): void;
-  /** Redraw after the drawing changed (during a drag). */
-  changed(): void;
-  select(ids: string[]): void;
-  setTool(t: ToolId): void;
-  editNodes(id: string | null): void;
-  status(text: string): void;
-  /** Draws under the drawing, on the paper (the tracing reference), in drawing units. */
-  underlay?(world: SVGGElement): void;
-  /** The view's scale changed (fit, zoom buttons, wheel): the zoom label follows. */
-  zoomed?(scale: number): void;
-}
-
-const SVGNS = 'http://www.w3.org/2000/svg';
-const el = (tag: string, attrs: Record<string, string | number> = {}) => {
-  const e = document.createElementNS(SVGNS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  return e;
-};
 
 type Op =
   | { kind: 'pan'; x: number; y: number; ox: number; oy: number }
-  | { kind: 'move'; p0: Pt; orig: Map<string, SvgShape>; box: Box }
+  | { kind: 'move'; p0: Pt; orig: Map<string, SvgShape>; box: Box; sources: Pt[]; narrow: string[] | null }
   | { kind: 'scale'; handle: number; orig: Map<string, SvgShape>; box: Box }
   | { kind: 'rotate'; p0: Pt; orig: Map<string, SvgShape>; box: Box }
   | { kind: 'marquee'; p0: Pt; p1: Pt; add: boolean }
-  | { kind: 'draw'; p0: Pt; p1: Pt }
-  | { kind: 'node'; sub: number; index: number; part: 'node' | 'in' | 'out'; p0: Pt; orig: SubPath[]; smooth: boolean };
+  | { kind: 'draw'; p0: Pt; p1: Pt };
 
-export class SvgCanvas {
+export class SvgCanvas implements CanvasView {
   readonly el: HTMLElement;
-  private readonly host: CanvasHost;
+  readonly host: CanvasHost;
+  readonly nodes: NodeTool;
+  readonly rulers: Rulers;
+  private readonly measure: Measure;
+  private readonly drawing: DrawTool;
+  private readonly snapper: Snapper;
   private readonly svg: SVGSVGElement;
   private zoom = 4;
   private ox = 20;
   private oy = 20;
   private op: Op | null = null;
   private spaceDown = false;
-  /** Points of the polyline or pen path being drawn. */
-  private draft: PathNode[] = [];
-  private cursor: Pt | null = null;
-  private snapMark: Pt | null = null;
-  private nodeSel: { sub: number; index: number } | null = null;
   private fitted = false;
-  /** Shift was held at the last pointer event (square, circle, proportional scale). */
-  private shift = false;
+  /** A panel waits for a point (rotation or array centre). */
+  private picking: { prompt: string; done: (p: Pt) => void } | null = null;
+  /** A point a panel shows (the chosen centre). */
+  private marker: Pt | null = null;
+  /** Copies a panel is about to make, drawn as ghosts. */
+  private preview: { ids: ReadonlySet<string>; matrices: readonly Matrix[] } | null = null;
 
   constructor(host: CanvasHost) {
     this.host = host;
@@ -89,6 +58,11 @@ export class SvgCanvas {
     this.el.className = 'svge__stage';
     this.el.tabIndex = 0;
     this.el.append(this.svg);
+    this.snapper = new Snapper(host);
+    this.nodes = new NodeTool(this);
+    this.rulers = new Rulers(this);
+    this.measure = new Measure(this);
+    this.drawing = new DrawTool(this);
     this.svg.addEventListener('pointerdown', (e) => this.down(e));
     this.svg.addEventListener('pointermove', (e) => this.move(e));
     this.svg.addEventListener('pointerup', (e) => this.up(e));
@@ -110,14 +84,19 @@ export class SvgCanvas {
 
   // ── View ─────────────────────────────────────────────────────────────
 
+  get stage(): HTMLElement {
+    return this.el;
+  }
+
   fit(): void {
     const { width, height } = this.host.doc;
-    const w = this.el.clientWidth || 600;
-    const h = this.el.clientHeight || 500;
+    const r = this.host.options.rulers ? RULER : 0;
+    const w = (this.el.clientWidth || 600) - r;
+    const h = (this.el.clientHeight || 500) - r;
     const k = this.host.options.tile ? 3 : 1;
     this.zoom = Math.min((w - 48) / (width * k), (h - 48) / (height * k));
-    this.ox = (w - width * this.zoom) / 2;
-    this.oy = (h - height * this.zoom) / 2;
+    this.ox = r + (w - width * this.zoom) / 2;
+    this.oy = r + (h - height * this.zoom) / 2;
     this.render();
     this.host.zoomed?.(this.zoom);
   }
@@ -137,57 +116,48 @@ export class SvgCanvas {
     return this.zoom;
   }
 
-  private toDoc(e: { clientX: number; clientY: number }): Pt {
+  toDoc(e: { clientX: number; clientY: number }): Pt {
     const r = this.svg.getBoundingClientRect();
     return [(e.clientX - r.left - this.ox) / this.zoom, (e.clientY - r.top - this.oy) / this.zoom];
   }
 
-  private toScreen(p: Pt): Pt {
+  toScreen(p: Pt): Pt {
     return [p[0] * this.zoom + this.ox, p[1] * this.zoom + this.oy];
   }
 
   private paint = (p: Paint): string => (p === 'fill' ? this.host.options.ink : p === 'stroke' ? this.host.options.second : p);
 
-  // ── Snapping ─────────────────────────────────────────────────────────
+  snap(p: Pt, o: SnapOptions = {}): Pt {
+    return this.snapper.snap(p, this.zoom, o);
+  }
 
-  /** A point snapped to other shapes' key points (preferred) or the grid. */
-  snap(p: Pt, exclude: ReadonlySet<string> = new Set()): Pt {
-    const o = this.host.options;
-    const tol = 8 / this.zoom;
-    let best: Pt | null = null;
-    let bestD = tol;
-    if (o.snapObjects) {
-      for (const s of this.host.doc.shapes) {
-        if (exclude.has(s.id) || s.hidden) continue;
-        for (const q of keyPoints(s)) {
-          const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
-          if (d < bestD) {
-            bestD = d;
-            best = q;
-          }
-        }
-      }
-      for (const q of [
-        [0, 0],
-        [this.host.doc.width, 0],
-        [0, this.host.doc.height],
-        [this.host.doc.width, this.host.doc.height],
-        [this.host.doc.width / 2, this.host.doc.height / 2],
-      ] as Pt[]) {
-        const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
-        if (d < bestD) {
-          bestD = d;
-          best = q;
-        }
-      }
-    }
-    if (best) {
-      this.snapMark = best;
-      return best;
-    }
-    this.snapMark = null;
-    if (!o.snapGrid || !(o.grid > 0)) return p;
-    return [Math.round(p[0] / o.grid) * o.grid, Math.round(p[1] / o.grid) * o.grid];
+  /** The drawing, guides or snap options changed outside a drag: snap points are found anew. */
+  invalidate(): void {
+    this.snapper.reset();
+  }
+
+  // ── Requests from panels ─────────────────────────────────────────────
+
+  /** The next click (snapped) gives a point; Esc gives up. */
+  pickPoint(prompt: string, done: (p: Pt) => void): void {
+    this.picking = { prompt, done };
+    this.host.status(prompt);
+    this.el.focus();
+    this.render();
+  }
+
+  get isPicking(): boolean {
+    return !!this.picking;
+  }
+
+  setMarker(p: Pt | null): void {
+    this.marker = p;
+    this.render();
+  }
+
+  setPreview(ids: ReadonlySet<string> | null, matrices: readonly Matrix[] | null): void {
+    this.preview = ids && matrices?.length ? { ids, matrices } : null;
+    this.render();
   }
 
   // ── Rendering ────────────────────────────────────────────────────────
@@ -220,6 +190,7 @@ export class SvgCanvas {
         }
     }
     world.append(shapes);
+    if (this.preview) world.append(this.ghosts(this.preview));
     world.append(el('rect', { x: 0, y: 0, width: doc.width, height: doc.height, fill: 'none', class: 'svge__frame', 'stroke-width': 1 / this.zoom, 'pointer-events': 'none' }));
     svg.append(world);
     svg.append(this.overlay());
@@ -230,67 +201,76 @@ export class SvgCanvas {
     const node = el(spec.tag, spec.attrs);
     if (spec.text !== undefined) node.textContent = spec.text;
     node.setAttribute('data-id', s.id);
-    node.setAttribute('pointer-events', 'all');
+    // A locked shape lets clicks through to what is under it.
+    node.setAttribute('pointer-events', s.locked ? 'none' : 'all');
     return node;
+  }
+
+  /** The copies an array or mirror would make (at most 400 shapes). */
+  private ghosts(pv: { ids: ReadonlySet<string>; matrices: readonly Matrix[] }): SVGElement {
+    const g = el('g', { class: 'svge__ghosts', 'pointer-events': 'none' });
+    const src = this.host.doc.shapes.filter((s) => pv.ids.has(s.id) && !s.hidden);
+    let count = 0;
+    for (const m of pv.matrices)
+      for (const s of src) {
+        if (count++ > 400) return g;
+        const spec = elementOf(transformShape(s, m), this.paint);
+        const node = el(spec.tag, spec.attrs);
+        if (spec.text !== undefined) node.textContent = spec.text;
+        g.append(node);
+      }
+    return g;
   }
 
   private overlay(): SVGGElement {
     const g = el('g', { class: 'svge__overlay' }) as SVGGElement;
-    const { doc, selection } = this.host;
-    const sel = doc.shapes.filter((s) => selection.has(s.id));
-    // Draft of the polyline or pen path.
-    if (this.draft.length) {
-      const pts = [...this.draft];
-      const d = pathD(pts.map((n) => ({ ...n, x: n.x, y: n.y })), false, (p) => this.toScreen(p));
-      g.append(el('path', { d, class: 'svge__draft' }));
-      if (this.cursor) {
-        const last = this.toScreen([pts[pts.length - 1].x, pts[pts.length - 1].y]);
-        const c = this.toScreen(this.cursor);
-        g.append(el('line', { x1: last[0], y1: last[1], x2: c[0], y2: c[1], class: 'svge__draft' }));
-      }
-      for (const n of pts) {
-        const s = this.toScreen([n.x, n.y]);
-        g.append(el('rect', { x: s[0] - 3, y: s[1] - 3, width: 6, height: 6, class: 'svge__node' }));
-      }
-    }
+    const { doc, selection, tool } = this.host;
+    this.rulers.drawGuides(g);
+    this.drawing.draw(g);
     if (this.op?.kind === 'draw') this.drawPreview(g, this.op.p0, this.op.p1);
     if (this.op?.kind === 'marquee') {
       const a = this.toScreen(this.op.p0);
       const b = this.toScreen(this.op.p1);
       g.append(el('rect', { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(a[0] - b[0]), height: Math.abs(a[1] - b[1]), class: 'svge__marquee' }));
     }
-    const editing = this.host.nodeEdit ? doc.shapes.find((s) => s.id === this.host.nodeEdit) : undefined;
-    if (editing?.kind === 'path') this.nodeHandles(g, editing);
-    else if (sel.length && this.host.tool === 'select') {
+    const sel = doc.shapes.filter((s) => selection.has(s.id));
+    if (this.host.nodeEdit && this.nodes.shape) this.nodes.draw(g);
+    else if (sel.length && tool === 'select') {
       const b = shapesBox(sel)!;
       const [x0, y0] = this.toScreen([b.minX, b.minY]);
       const [x1, y1] = this.toScreen([b.maxX, b.maxY]);
       g.append(el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: 'svge__selbox' }));
-      const mx = (x0 + x1) / 2;
-      const my = (y0 + y1) / 2;
-      const handles: Pt[] = [
-        [x0, y0],
-        [mx, y0],
-        [x1, y0],
-        [x1, my],
-        [x1, y1],
-        [mx, y1],
-        [x0, y1],
-        [x0, my],
-      ];
-      handles.forEach(([hx, hy], i) => g.append(el('rect', { x: hx - 4, y: hy - 4, width: 8, height: 8, class: 'svge__handle', 'data-handle': i })));
-      g.append(el('line', { x1: mx, y1: y0, x2: mx, y2: y0 - 22, class: 'svge__selbox' }));
-      g.append(el('circle', { cx: mx, cy: y0 - 26, r: 5, class: 'svge__handle svge__rot', 'data-handle': 'rot' }));
+      // A locked shape shows its box but no handles.
+      if (!sel.some((s) => s.locked)) {
+        const mx = (x0 + x1) / 2;
+        const my = (y0 + y1) / 2;
+        const handles: Pt[] = [
+          [x0, y0],
+          [mx, y0],
+          [x1, y0],
+          [x1, my],
+          [x1, y1],
+          [mx, y1],
+          [x0, y1],
+          [x0, my],
+        ];
+        handles.forEach(([hx, hy], i) => g.append(el('rect', { x: hx - 4, y: hy - 4, width: 8, height: 8, class: 'svge__handle', 'data-handle': i })));
+        g.append(el('line', { x1: mx, y1: y0, x2: mx, y2: y0 - 22, class: 'svge__selbox' }));
+        g.append(el('circle', { cx: mx, cy: y0 - 26, r: 5, class: 'svge__handle svge__rot', 'data-handle': 'rot' }));
+      }
     }
-    if (this.snapMark && this.op) {
-      const [sx, sy] = this.toScreen(this.snapMark);
-      g.append(el('path', { d: `M${sx - 6} ${sy}H${sx + 6}M${sx} ${sy - 6}V${sy + 6}`, class: 'svge__snap' }));
+    if (tool === 'measure') this.measure.draw(g);
+    if (this.marker) {
+      const [x, y] = this.toScreen(this.marker);
+      g.append(el('path', { d: `M${x - 9} ${y}H${x + 9}M${x} ${y - 9}V${y + 9}M${x - 4} ${y}a4 4 0 1 0 8 0a4 4 0 1 0 -8 0`, class: 'svge__pin' }));
     }
+    if (this.op || this.drawing.drafting || this.picking || tool === 'measure' || this.nodes.busy) this.snapper.draw(g, (p) => this.toScreen(p));
+    this.rulers.drawRulers(g);
     return g;
   }
 
   private drawPreview(g: SVGGElement, p0: Pt, p1: Pt): void {
-    const shape = this.shapeFromDrag(p0, p1, false);
+    const shape = this.drawing.shapeFromDrag(p0, p1, false);
     if (!shape) return;
     const spec = elementOf(shape, this.paint);
     const node = el(spec.tag, spec.attrs);
@@ -300,28 +280,12 @@ export class SvgCanvas {
     g.append(w);
   }
 
-  private nodeHandles(g: SVGGElement, s: Extract<SvgShape, { kind: 'path' }>): void {
-    s.subs.forEach((sp, si) =>
-      sp.nodes.forEach((n, ni) => {
-        const p = this.toScreen([n.x, n.y]);
-        for (const part of ['in', 'out'] as const) {
-          const h = n[part];
-          if (!h) continue;
-          const q = this.toScreen(h);
-          g.append(el('line', { x1: p[0], y1: p[1], x2: q[0], y2: q[1], class: 'svge__hline' }));
-          g.append(el('circle', { cx: q[0], cy: q[1], r: 4, class: 'svge__ctrl', 'data-node': `${si},${ni},${part}` }));
-        }
-        const on = this.nodeSel?.sub === si && this.nodeSel.index === ni;
-        g.append(el('rect', { x: p[0] - 4, y: p[1] - 4, width: 8, height: 8, class: `svge__node${on ? ' svge__node--on' : ''}`, 'data-node': `${si},${ni},node` }));
-      }),
-    );
-  }
-
   // ── Pointer ──────────────────────────────────────────────────────────
 
   private down(e: PointerEvent): void {
     this.el.focus();
-    this.shift = e.shiftKey;
+    this.drawing.shift = e.shiftKey;
+    this.snapper.reset();
     const p = this.toDoc(e);
     if (e.button === 1 || (e.button === 0 && this.spaceDown)) {
       this.op = { kind: 'pan', x: e.clientX, y: e.clientY, ox: this.ox, oy: this.oy };
@@ -332,25 +296,18 @@ export class SvgCanvas {
     this.svg.setPointerCapture(e.pointerId);
     const target = e.target as Element;
     const host = this.host;
-    const tool = host.tool;
-    const nodeAttr = target.getAttribute('data-node');
-    if (host.nodeEdit && nodeAttr) {
-      const [si, ni, part] = nodeAttr.split(',');
-      const shape = host.doc.shapes.find((s) => s.id === host.nodeEdit);
-      if (shape?.kind !== 'path') return;
-      const node = shape.subs[+si].nodes[+ni];
-      this.nodeSel = { sub: +si, index: +ni };
-      host.begin();
-      this.op = { kind: 'node', sub: +si, index: +ni, part: part as 'node' | 'in' | 'out', p0: p, orig: structuredClone(shape.subs), smooth: isSmooth(node) };
+    if (this.picking) {
+      const pick = this.picking;
+      this.picking = null;
+      pick.done(this.snap(p));
+      this.snapper.hit = null;
       this.render();
       return;
     }
-    if (host.nodeEdit) {
-      const id = target.closest('[data-id]')?.getAttribute('data-id');
-      if (id === host.nodeEdit) return this.insertNode(p);
-      host.editNodes(null);
-      this.nodeSel = null;
-    }
+    if (this.rulers.down(p, target)) return;
+    const tool = host.tool;
+    if (tool === 'measure') return this.measure.down(p);
+    if (host.nodeEdit && tool === 'node' && this.nodes.down(e, p, target)) return;
     const handle = target.getAttribute('data-handle');
     if (tool === 'select' && handle !== null) {
       const sel = host.doc.shapes.filter((s) => host.selection.has(s.id));
@@ -365,8 +322,10 @@ export class SvgCanvas {
       case 'select':
       case 'node': {
         const id = target.closest('[data-id]')?.getAttribute('data-id');
-        if (id) {
-          const members = this.groupOf(id);
+        const shape = id ? host.doc.shapes.find((s) => s.id === id) : undefined;
+        if (shape && !shape.locked) {
+          if (tool === 'node' && shape.kind === 'path') return host.editNodes(shape.id);
+          const members = this.groupOf(shape.id);
           if (e.shiftKey) {
             const next = new Set(host.selection);
             const on = members.every((m) => next.has(m));
@@ -374,10 +333,14 @@ export class SvgCanvas {
             host.select([...next]);
             return;
           }
-          if (!host.selection.has(id)) host.select(members);
+          // A click (no drag) on one of several chosen shapes chooses only it on release (Inkscape's way).
+          const narrow = host.selection.has(shape.id) && host.selection.size > members.length ? members : null;
+          if (!host.selection.has(shape.id)) host.select(members);
           const sel = host.doc.shapes.filter((s) => host.selection.has(s.id));
+          if (sel.some((s) => s.locked)) return;
           host.begin();
-          this.op = { kind: 'move', p0: p, orig: new Map(sel.map((s) => [s.id, structuredClone(s)])), box: shapesBox(sel)! };
+          const box = shapesBox(sel)!;
+          this.op = { kind: 'move', p0: p, orig: new Map(sel.map((s) => [s.id, structuredClone(s)])), box, sources: moveSources(sel, box), narrow };
         } else {
           this.op = { kind: 'marquee', p0: p, p1: p, add: e.shiftKey };
           if (!e.shiftKey) host.select([]);
@@ -394,10 +357,8 @@ export class SvgCanvas {
       }
       case 'line':
       case 'pen': {
-        const q = this.snap(p);
-        const first = this.draft[0];
-        if (first && this.draft.length > 2 && Math.hypot(first.x - q[0], first.y - q[1]) < 8 / this.zoom) return this.finishDraft(true);
-        this.draft.push({ x: q[0], y: q[1] });
+        const q = this.snap(p, { from: this.drawing.last });
+        if (this.drawing.click(q) === 'closed') return;
         this.op = tool === 'pen' ? { kind: 'draw', p0: q, p1: q } : null;
         this.render();
         return;
@@ -406,13 +367,17 @@ export class SvgCanvas {
   }
 
   private move(e: PointerEvent): void {
-    this.shift = e.shiftKey;
+    this.drawing.shift = e.shiftKey;
     const p = this.toDoc(e);
     const op = this.op;
     const host = this.host;
+    if (this.rulers.move(e, p)) return;
+    if (host.tool === 'measure' && !op) return this.measure.move(p, e.target as Element);
+    if (host.nodeEdit && host.tool === 'node' && !op && this.nodes.move(e, p)) return;
     if (!op) {
-      if (this.draft.length) {
-        this.cursor = this.snap(p);
+      if (this.drawing.drafting) this.drawing.hover(this.snap(p, { from: this.drawing.last }));
+      else if (this.picking) {
+        this.snap(p);
         this.render();
       }
       return;
@@ -425,25 +390,12 @@ export class SvgCanvas {
         return;
       case 'move': {
         const d: Pt = [p[0] - op.p0[0], p[1] - op.p0[1]];
-        // The selection's corner snaps (to the grid or a shape); its centre may land on a shape instead.
-        const ids = new Set(op.orig.keys());
-        const cx = (op.box.minX + op.box.maxX) / 2;
-        const cy = (op.box.minY + op.box.maxY) / 2;
-        const corner = this.snap([op.box.minX + d[0], op.box.minY + d[1]], ids);
-        const cornerHit = this.snapMark;
-        const centre = this.snap([cx + d[0], cy + d[1]], ids);
-        const centreHit = this.snapMark;
-        let dd: Pt;
-        if (centreHit && !cornerHit) dd = [centre[0] - cx, centre[1] - cy];
-        else {
-          dd = [corner[0] - op.box.minX, corner[1] - op.box.minY];
-          this.snapMark = cornerHit;
-        }
+        const dd = this.moveSnap(op, d);
         this.replace(op.orig, (s) => transformShape(s, translate(dd[0], dd[1])));
         return;
       }
       case 'scale': {
-        const q = this.snap(p, new Set(op.orig.keys()));
+        const q = this.snap(p, { exclude: new Set(op.orig.keys()) });
         const b = { ...op.box };
         const h = op.handle;
         if (h === 0 || h === 6 || h === 7) b.minX = q[0];
@@ -479,63 +431,61 @@ export class SvgCanvas {
         this.render();
         return;
       case 'draw': {
-        const q = this.snap(p);
+        const q = this.snap(p, { from: op.p0 });
         op.p1 = q;
-        if (host.tool === 'pen' && this.draft.length) {
-          // Dragging out of a new node gives it symmetric handles.
-          const n = this.draft[this.draft.length - 1];
-          if (Math.hypot(q[0] - n.x, q[1] - n.y) > 2 / this.zoom) {
-            n.out = q;
-            n.in = [2 * n.x - q[0], 2 * n.y - q[1]];
-          }
-        }
+        if (host.tool === 'pen') this.drawing.penDrag(q);
         this.render();
-        return;
-      }
-      case 'node': {
-        const shape = host.doc.shapes.find((s) => s.id === host.nodeEdit);
-        if (shape?.kind !== 'path') return;
-        const q = op.part === 'node' ? this.snap(p, new Set([shape.id])) : p;
-        const subs = structuredClone(op.orig);
-        const n = subs[op.sub].nodes[op.index];
-        const o = op.orig[op.sub].nodes[op.index];
-        if (op.part === 'node') {
-          const dx = q[0] - o.x;
-          const dy = q[1] - o.y;
-          n.x = q[0];
-          n.y = q[1];
-          if (o.in) n.in = [o.in[0] + dx, o.in[1] + dy];
-          if (o.out) n.out = [o.out[0] + dx, o.out[1] + dy];
-        } else {
-          n[op.part] = q;
-          const other = op.part === 'in' ? 'out' : 'in';
-          const oh = o[other];
-          // A smooth node keeps its handles in line (Alt breaks them apart).
-          if (op.smooth && oh && !e.altKey) {
-            const len = Math.hypot(oh[0] - o.x, oh[1] - o.y);
-            const dx = q[0] - n.x;
-            const dy = q[1] - n.y;
-            const l = Math.hypot(dx, dy) || 1;
-            n[other] = [n.x - (dx / l) * len, n.y - (dy / l) * len];
-          }
-        }
-        shape.subs = subs;
-        host.changed();
         return;
       }
     }
   }
 
+  /**
+   * The move's snapped offset: every snap source of the moving shapes (box
+   * corners and centre, path nodes) is tried at its new place; the one
+   * nearest a target wins. With none near, the box corner goes to the grid.
+   */
+  private moveSnap(op: Extract<Op, { kind: 'move' }>, d: Pt): Pt {
+    const exclude = new Set(op.orig.keys());
+    let best: { d: Pt; dist: number; hit: Snapper['hit'] } | null = null;
+    for (const s of op.sources) {
+      const at: Pt = [s[0] + d[0], s[1] + d[1]];
+      const q = this.snap(at, { exclude, noGrid: true });
+      const hit = this.snapper.hit;
+      if (!hit) continue;
+      if (!best || hit.d < best.dist) best = { d: [q[0] - s[0], q[1] - s[1]], dist: hit.d, hit };
+    }
+    if (best) {
+      this.snapper.hit = best.hit;
+      return best.d;
+    }
+    const corner = this.snap([op.box.minX + d[0], op.box.minY + d[1]], { exclude });
+    return [corner[0] - op.box.minX, corner[1] - op.box.minY];
+  }
+
   private up(e: PointerEvent): void {
     const op = this.op;
     this.op = null;
-    this.snapMark = null;
     const host = this.host;
+    if (this.rulers.up()) return this.snapper.reset();
+    if (host.tool === 'measure') {
+      this.measure.up();
+      return;
+    }
+    if (!op && host.nodeEdit && host.tool === 'node') {
+      this.nodes.up();
+      this.snapper.hit = null;
+      this.render();
+      return;
+    }
+    this.snapper.hit = null;
     if (!op) return;
     switch (op.kind) {
       case 'move':
-        if (sameShapes(op.orig, host.doc)) host.commit('');
-        else host.commit('Taşı');
+        if (sameShapes(op.orig, host.doc)) {
+          host.commit('');
+          if (op.narrow) host.select(op.narrow);
+        } else host.commit('Taşı');
         break;
       case 'scale':
         host.commit('Boyutlandır');
@@ -544,14 +494,11 @@ export class SvgCanvas {
         host.commit('Döndür');
         host.status('');
         break;
-      case 'node':
-        host.commit('Düğümü taşı');
-        break;
       case 'marquee': {
         const b: Box = { minX: Math.min(op.p0[0], op.p1[0]), minY: Math.min(op.p0[1], op.p1[1]), maxX: Math.max(op.p0[0], op.p1[0]), maxY: Math.max(op.p0[1], op.p1[1]) };
         if (b.maxX - b.minX > 1e-6 || b.maxY - b.minY > 1e-6) {
           const inside = host.doc.shapes.filter((s) => {
-            if (s.hidden) return false;
+            if (s.hidden || s.locked) return false;
             const sb = shapeBox(s);
             return sb.minX >= b.minX && sb.maxX <= b.maxX && sb.minY >= b.minY && sb.maxY <= b.maxY;
           });
@@ -567,14 +514,7 @@ export class SvgCanvas {
           this.render();
           break;
         }
-        const shape = this.shapeFromDrag(op.p0, op.p1, e.altKey);
-        if (shape) {
-          host.begin();
-          host.doc.shapes.push(shape);
-          host.commit(TOOL_LABEL[host.tool]);
-          host.select([shape.id]);
-          if (host.tool !== 'text') host.setTool('select');
-        }
+        this.drawing.place(op.p0, op.p1, e.altKey);
         this.render();
         break;
       }
@@ -585,18 +525,19 @@ export class SvgCanvas {
 
   private dbl(e: MouseEvent): void {
     const host = this.host;
+    const target = e.target as Element;
+    if (this.rulers.dbl(e, target)) return;
     if (host.tool === 'line' || host.tool === 'pen') {
-      // The double click's second press added a node on the last one: drop it.
-      if (this.draft.length > 1) this.draft.pop();
-      return this.finishDraft(false);
+      this.drawing.dropLast();
+      return this.drawing.finish(false);
     }
-    if (host.nodeEdit && (e.target as Element).getAttribute('data-node')?.endsWith(',node')) return this.toggleSmooth();
-    const id = (e.target as Element).closest('[data-id]')?.getAttribute('data-id');
+    if (host.nodeEdit && host.tool === 'node' && this.nodes.dbl(this.toDoc(e), target)) return;
+    const id = target.closest('[data-id]')?.getAttribute('data-id');
     const shape = id ? host.doc.shapes.find((s) => s.id === id) : undefined;
-    if (shape?.kind === 'path') {
+    if (shape?.kind === 'path' && !shape.locked) {
       host.select([shape.id]);
       host.editNodes(shape.id);
-      host.status('Düğüm düzenleme: düğümü ya da kolunu sürükleyin; parçaya tıklayınca düğüm eklenir, Sil düğümü kaldırır, çift tık köşe/yumuşak yapar, Esc bitirir.');
+      host.status('Düğüm düzenleme: düğüme tık seçer (Shift ekler), boşlukta sürükleyince kutu içindekiler seçilir; parçaya çift tık düğüm ekler, düğüme çift tık köşe/yumuşak yapar. İşlemler sağda, Esc bitirir.');
     }
   }
 
@@ -608,128 +549,34 @@ export class SvgCanvas {
 
   // ── Tools ────────────────────────────────────────────────────────────
 
-  private shapeFromDrag(p0: Pt, p1: Pt, fromCentre: boolean): SvgShape | null {
-    const host = this.host;
-    const tool = host.tool;
-    const base = { id: shapeId(), fill: 'fill' as Paint, stroke: 'none' as Paint, strokeWidth: Math.max(1, host.doc.width / 50) };
-    if (tool === 'text') return { ...base, kind: 'text', x: p0[0], y: p0[1], text: 'Aa', size: host.doc.height / 5, weight: 700, font: 'sans', anchor: 'start' };
-    let dx = p1[0] - p0[0];
-    let dy = p1[1] - p0[1];
-    if (Math.hypot(dx, dy) < 0.5) return null;
-    if (tool === 'polygon') {
-      const r = Math.hypot(dx, dy);
-      const sp = regularPolygon(p0[0], p0[1], r, Math.max(3, host.options.sides), host.options.star ? r * 0.45 : undefined);
-      // The first corner points at the pointer.
-      const turn = Math.atan2(dy, dx) + Math.PI / 2;
-      const rotated = transformShape({ ...base, kind: 'path', subs: [sp] }, rotation((turn * 180) / Math.PI, p0[0], p0[1]));
-      return rotated;
-    }
-    if (this.shift) {
-      const k = Math.max(Math.abs(dx), Math.abs(dy));
-      dx = Math.sign(dx || 1) * k;
-      dy = Math.sign(dy || 1) * k;
-    }
-    const x0 = fromCentre ? p0[0] - Math.abs(dx) : Math.min(p0[0], p0[0] + dx);
-    const y0 = fromCentre ? p0[1] - Math.abs(dy) : Math.min(p0[1], p0[1] + dy);
-    const w = fromCentre ? 2 * Math.abs(dx) : Math.abs(dx);
-    const h = fromCentre ? 2 * Math.abs(dy) : Math.abs(dy);
-    if (tool === 'rect') return { ...base, kind: 'rect', x: x0, y: y0, w, h };
-    return { ...base, kind: 'ellipse', cx: x0 + w / 2, cy: y0 + h / 2, rx: w / 2, ry: h / 2 };
+  /** Ends the polyline or pen path being drawn (Enter). */
+  finishDraft(closed: boolean): void {
+    this.drawing.finish(closed);
   }
 
-  /** Ends the polyline or pen path being drawn (Enter, double click, a click on its first node). */
-  finishDraft(closed: boolean): void {
-    const host = this.host;
-    const nodes = this.draft;
-    this.draft = [];
-    this.cursor = null;
-    if (nodes.length >= 2) {
-      const shape: SvgShape = { id: shapeId(), kind: 'path', subs: [{ nodes, closed }], fill: closed ? 'fill' : 'none', stroke: closed ? 'none' : 'fill', strokeWidth: Math.max(1, host.doc.width / 25) };
-      host.begin();
-      host.doc.shapes.push(shape);
-      host.commit(host.tool === 'pen' ? 'Kalem' : 'Çizgi');
-      host.select([shape.id]);
+  /** Esc on the canvas: whatever is half done goes first. */
+  cancel(): boolean {
+    if (this.picking) {
+      this.picking = null;
+      this.host.status('Nokta seçmekten vazgeçildi.');
+      this.render();
+      return true;
     }
-    this.render();
+    this.rulers.closePopup();
+    if (this.host.tool === 'measure' && this.measure.cancel()) return true;
+    if (this.host.nodeEdit && this.nodes.cancel()) return true;
+    return this.cancelDraft();
   }
 
   cancelDraft(): boolean {
-    if (!this.draft.length) return false;
-    this.draft = [];
-    this.cursor = null;
-    this.render();
-    return true;
+    return this.drawing.cancel();
   }
 
-  private insertNode(p: Pt): void {
-    const host = this.host;
-    const shape = host.doc.shapes.find((s) => s.id === host.nodeEdit);
-    if (shape?.kind !== 'path') return;
-    let best: { sub: number; seg: number; t: number; d: number } | null = null;
-    shape.subs.forEach((sp, si) => {
-      const n = sp.nodes.length;
-      for (let i = 0; i < (sp.closed ? n : n - 1); i++) {
-        const a = sp.nodes[i];
-        const b = sp.nodes[(i + 1) % n];
-        for (let k = 0; k <= 40; k++) {
-          const t = k / 40;
-          const q = pointAt(a, b, t);
-          const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
-          if (!best || d < best.d) best = { sub: si, seg: i, t, d };
-        }
-      }
-    });
-    const hit = best as { sub: number; seg: number; t: number; d: number } | null;
-    if (!hit || hit.d > 10 / this.zoom || hit.t <= 0 || hit.t >= 1) return;
-    host.begin();
-    const sp = shape.subs[hit.sub];
-    const n = sp.nodes.length;
-    const a = sp.nodes[hit.seg];
-    const b = sp.nodes[(hit.seg + 1) % n];
-    const [left, mid, right] = split(a, b, hit.t);
-    sp.nodes[hit.seg] = left;
-    sp.nodes[(hit.seg + 1) % n] = right;
-    sp.nodes.splice(hit.seg + 1, 0, mid);
-    this.nodeSel = { sub: hit.sub, index: hit.seg + 1 };
-    host.commit('Düğüm ekle');
-  }
-
-  /** Removes the chosen node of the edited path (a subpath keeps at least two). */
-  deleteNode(): boolean {
-    const host = this.host;
-    const shape = host.doc.shapes.find((s) => s.id === host.nodeEdit);
-    if (shape?.kind !== 'path' || !this.nodeSel) return false;
-    const sp = shape.subs[this.nodeSel.sub];
-    if (!sp || sp.nodes.length <= 2) return false;
-    host.begin();
-    sp.nodes.splice(this.nodeSel.index, 1);
-    this.nodeSel = null;
-    host.commit('Düğümü sil');
-    return true;
-  }
-
-  private toggleSmooth(): void {
-    const host = this.host;
-    const shape = host.doc.shapes.find((s) => s.id === host.nodeEdit);
-    if (shape?.kind !== 'path' || !this.nodeSel) return;
-    const sp = shape.subs[this.nodeSel.sub];
-    const i = this.nodeSel.index;
-    const n = sp.nodes[i];
-    host.begin();
-    if (n.in || n.out) {
-      delete n.in;
-      delete n.out;
-    } else {
-      // Handles along the line through the neighbours, a third of the way.
-      const len = sp.nodes.length;
-      const prev = sp.nodes[(i - 1 + len) % len];
-      const next = sp.nodes[(i + 1) % len];
-      const dx = (next.x - prev.x) / 6;
-      const dy = (next.y - prev.y) / 6;
-      n.in = [n.x - dx, n.y - dy];
-      n.out = [n.x + dx, n.y + dy];
-    }
-    host.commit('Düğüm türü');
+  /** The tool changed: its half-done work goes. */
+  toolChanged(): void {
+    this.cancelDraft();
+    this.measure.reset();
+    if (this.nodes.mode) this.nodes.setMode(null);
   }
 
   private replace(orig: Map<string, SvgShape>, fn: (s: SvgShape) => SvgShape): void {
@@ -741,79 +588,21 @@ export class SvgCanvas {
   private groupOf(id: string): string[] {
     const s = this.host.doc.shapes.find((x) => x.id === id);
     if (!s?.group) return [id];
-    return this.host.doc.shapes.filter((x) => x.group === s.group).map((x) => x.id);
+    return this.host.doc.shapes.filter((x) => x.group === s.group && !x.locked).map((x) => x.id);
   }
 }
 
-const TOOL_LABEL: Record<ToolId, string> = { select: 'Seç', node: 'Düğüm', rect: 'Dikdörtgen', ellipse: 'Elips', polygon: 'Çokgen', line: 'Çizgi', pen: 'Kalem', text: 'Yazı' };
-
-function keyPoints(s: SvgShape): Pt[] {
-  const b = shapeBox(s);
-  const pts: Pt[] = [
+/** Where a moving selection snaps from: its box corners and centre, and the nodes of its paths (at most 64). */
+function moveSources(sel: readonly SvgShape[], b: Box): Pt[] {
+  const out: Pt[] = [
     [b.minX, b.minY],
     [b.maxX, b.minY],
     [b.minX, b.maxY],
     [b.maxX, b.maxY],
     [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2],
-    [(b.minX + b.maxX) / 2, b.minY],
-    [(b.minX + b.maxX) / 2, b.maxY],
-    [b.minX, (b.minY + b.maxY) / 2],
-    [b.maxX, (b.minY + b.maxY) / 2],
   ];
-  if (s.kind === 'path') for (const sp of s.subs) for (const n of sp.nodes) pts.push([n.x, n.y]);
-  return pts;
-}
-
-function isSmooth(n: PathNode): boolean {
-  if (!n.in || !n.out) return false;
-  const a = Math.atan2(n.y - n.in[1], n.x - n.in[0]);
-  const b = Math.atan2(n.out[1] - n.y, n.out[0] - n.x);
-  return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.05;
-}
-
-function pointAt(a: PathNode, b: PathNode, t: number): Pt {
-  if (!a.out && !b.in) return [a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t];
-  const c1 = a.out ?? [a.x, a.y];
-  const c2 = b.in ?? [b.x, b.y];
-  const u = 1 - t;
-  return [u * u * u * a.x + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * b.x, u * u * u * a.y + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * b.y];
-}
-
-/** Splits segment a→b at t (de Casteljau): the new a, the middle node, the new b. */
-function split(a: PathNode, b: PathNode, t: number): [PathNode, PathNode, PathNode] {
-  if (!a.out && !b.in) {
-    const m = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    return [a, m, b];
-  }
-  const p0: Pt = [a.x, a.y];
-  const p1: Pt = a.out ?? p0;
-  const p3: Pt = [b.x, b.y];
-  const p2: Pt = b.in ?? p3;
-  const lerp = (u: Pt, v: Pt): Pt => [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t];
-  const q0 = lerp(p0, p1);
-  const q1 = lerp(p1, p2);
-  const q2 = lerp(p2, p3);
-  const r0 = lerp(q0, q1);
-  const r1 = lerp(q1, q2);
-  const s = lerp(r0, r1);
-  return [
-    { ...a, out: q0 },
-    { x: s[0], y: s[1], in: r0, out: r1 },
-    { ...b, in: q2 },
-  ];
-}
-
-/** Path data in screen space for a node list (drafts). */
-function pathD(nodes: PathNode[], closed: boolean, t: (p: Pt) => Pt): string {
-  if (!nodes.length) return '';
-  const f = (p: Pt) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
-  let d = `M${f(t([nodes[0].x, nodes[0].y]))}`;
-  for (let i = 1; i < nodes.length + (closed ? 1 : 0); i++) {
-    const a = nodes[i - 1];
-    const b = nodes[i % nodes.length];
-    d += a.out || b.in ? `C${f(t(a.out ?? [a.x, a.y]))} ${f(t(b.in ?? [b.x, b.y]))} ${f(t([b.x, b.y]))}` : `L${f(t([b.x, b.y]))}`;
-  }
-  return d;
+  for (const s of sel) if (s.kind === 'path') for (const sp of s.subs) for (const n of sp.nodes) if (out.length < 69) out.push([n.x, n.y]);
+  return out;
 }
 
 function sameShapes(orig: Map<string, SvgShape>, doc: SvgDoc): boolean {

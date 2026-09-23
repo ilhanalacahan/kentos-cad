@@ -15,6 +15,12 @@ export interface PathNode {
   in?: Pt;
   /** Outgoing handle (control point after this node), absolute. */
   out?: Pt;
+  /**
+   * How the node editor keeps its handles: cusp (free), smooth (in line),
+   * symmetric (in line, equal), auto (from the neighbours). Absent: read
+   * from the handles. Editing state only; the file does not keep it.
+   */
+  type?: 'cusp' | 'smooth' | 'symmetric' | 'auto';
 }
 
 export interface SubPath {
@@ -292,7 +298,7 @@ export function transformSubPaths(subs: readonly SubPath[], m: Matrix): SubPath[
     closed: sp.closed,
     nodes: sp.nodes.map((n) => {
       const [x, y] = apply(m, n.x, n.y);
-      return { x, y, ...(n.in ? { in: t(n.in) } : {}), ...(n.out ? { out: t(n.out) } : {}) };
+      return { x, y, ...(n.in ? { in: t(n.in) } : {}), ...(n.out ? { out: t(n.out) } : {}), ...(n.type ? { type: n.type } : {}) };
     }),
   }));
 }

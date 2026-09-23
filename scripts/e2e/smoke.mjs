@@ -727,6 +727,86 @@ try {
     check('SVG editor applies an edited source as one step', (await svgShapes())[0].w === '30');
     await closeEditor();
     check('SVG editor closes without saving when asked', !(await b.eval(`!!document.querySelector('.dialog--svge')`)));
+
+    // SVG editor editing: a union of two overlapping rectangles from the Yol menu, fillets on corner nodes
+    // (dragged and typed), align left in the Hizala tab, a polar array from the Dizi tab as one undo step.
+    await b.eval(`window.kentos.commands.execute('style.svgEditor')`);
+    await sleep(600);
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    const byLabel = async (label) => {
+      const p = await center(`[aria-label="${label}"]`);
+      if (!p) throw new Error(`bulunamadı: ${label}`);
+      await b.click(...p);
+      await sleep(150);
+    };
+    const pathD = async () => (await svgShapes()).find((x) => x.tag === 'path')?.d ?? '';
+    const nodeCount = (d) => (d.match(/[MLC]/g) ?? []).length;
+    await b.key('r');
+    await b.drag(...(await docPt(10, 10)), ...(await docPt(50, 50)));
+    await b.key('r');
+    await b.drag(...(await docPt(30, 30)), ...(await docPt(70, 70)));
+    await b.key('a', { ctrl: true });
+    await press('.svge__pbar .btn', 'Yol');
+    await press('.menu__item', 'Birleşim');
+    sh = await svgShapes();
+    const union = await pathD();
+    check('SVG editor unites two overlapping rectangles into one eight-node path', sh.length === 1 && sh[0].tag === 'path' && nodeCount(union) === 8 && /M?10 10/.test(union) && /70 70/.test(union), union);
+    check('SVG editor gives the keys back to the canvas after a menu choice', await b.eval(`document.activeElement === document.querySelector('.svge__stage')`));
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    await b.key('a');
+    await byLabel('Köşe yuvarla: köşeye basıp çekin');
+    await b.drag(...(await docPt(10, 10)), ...(await docPt(16, 10)));
+    const filleted = await pathD();
+    check('SVG editor rounds a corner node by dragging along its side', nodeCount(filleted) === 9 && /C/.test(filleted) && !/M10 10|L10 10/.test(filleted), filleted);
+    await byLabel('Köşe yuvarla: köşeye basıp çekin');
+    await b.click(...(await docPt(70, 70)));
+    await b.eval(`(() => { const i = document.querySelector('[aria-label="Yarıçap ya da pah boyu"]'); i.focus(); i.select(); })()`);
+    await b.type('5');
+    await byLabel('Seçili köşeleri bu yarıçapla yuvarla');
+    const typed = await pathD();
+    check('SVG editor rounds a chosen corner by a typed radius', nodeCount(typed) === 10 && /65 70/.test(typed) && /70 65/.test(typed), typed);
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    await b.key('Escape');
+    await b.key('Escape');
+    await b.key('r');
+    await b.drag(...(await docPt(40, 75)), ...(await docPt(60, 90)));
+    await b.key('a', { ctrl: true });
+    await press('.svgp__tab', 'Hizala');
+    await byLabel('Sol kenarlar');
+    const aligned = (await svgShapes()).find((x) => x.tag === 'rect');
+    check('SVG editor aligns left edges to the selection', aligned?.x === '10', JSON.stringify(aligned));
+    await b.click(...(await docPt(20, 82)));
+    await press('.svgp__tab', 'Dizi');
+    await press('.seg__opt', 'Dairesel');
+    await press('.svgp__foot .btn', 'Uygula');
+    const arrayed = await b.eval(`[...document.querySelectorAll('.svge__svg > g:first-child [data-id]')].map((e) => e.getAttribute('transform') ?? '')`);
+    const turns = arrayed.filter((t) => /^rotate\((60|120|180|240|300) 50 50\)$|^rotate\(-?\d+(\.\d+)? /.test(t));
+    check('SVG editor makes a polar array round the canvas centre', arrayed.length === 7 && turns.length === 5, JSON.stringify(arrayed));
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    await b.key('z', { ctrl: true });
+    check('SVG editor takes the array back in one undo step', (await svgShapes()).length === 2);
+    // The editor in both themes and at the "Büyük" size, a path's nodes on show; the preview ink follows the theme.
+    const theme0 = await b.eval('window.kentos.ui.theme.value');
+    await b.click(...(await docPt(12, 30)));
+    await b.key('a');
+    const rectFill = () => b.eval(`document.querySelector('.svge__svg > g:first-child rect[data-id]')?.getAttribute('fill') ?? ''`);
+    await b.eval(`window.kentos.commands.execute('view.theme.dark')`);
+    await sleep(200);
+    const inkDark = await rectFill();
+    await b.shot('smoke-svg-edit-dark');
+    await b.eval(`window.kentos.commands.execute('view.theme.light')`);
+    await sleep(200);
+    const inkLight = await rectFill();
+    await b.shot('smoke-svg-edit-light');
+    await b.eval(`document.documentElement.style.setProperty('--ui-scale', '1.08')`);
+    await sleep(200);
+    await b.shot('smoke-svg-edit-large');
+    await b.eval(`document.documentElement.style.setProperty('--ui-scale', '1'); window.kentos.commands.execute(${JSON.stringify(`view.theme.${theme0}`)})`);
+    check('SVG editor preview ink follows the theme', !!inkDark && !!inkLight && inkDark !== inkLight, `${inkDark} → ${inkLight}`);
+    await b.eval(`document.querySelector('.svge__stage').focus()`);
+    await b.key('Escape');
+    await b.key('Escape');
+    await closeEditor();
   }
 
   // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step

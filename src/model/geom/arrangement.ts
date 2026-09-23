@@ -1,6 +1,6 @@
 import type { Vec2 } from '../geometry';
 import { TAU } from './arc';
-import { closestOnEdge, intersectEdges, pointAt, type Edge } from './intersect';
+import { closestOnEdge, intersectEdges, onEdgeArc, pointAt, type Edge } from './intersect';
 
 /**
  * Planar arrangement of straight and circular edges: steps 1–3 of the
@@ -118,6 +118,25 @@ export function edgeBox(e: Edge): Box {
   return { minX: e.c.x - e.r, minY: e.c.y - e.r, maxX: e.c.x + e.r, maxY: e.c.y + e.r };
 }
 
+/** The box of the edge itself: an arc's ends and the extreme points it passes (edgeBox takes the whole circle). */
+export function tightBox(e: Edge): Box {
+  if (e.kind === 'seg' || Math.abs(e.sweep) >= TAU - 1e-12) return edgeBox(e);
+  const a = pointAt(e, 0);
+  const b = pointAt(e, 1);
+  const box = { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
+  for (let k = 0; k < 4; k++) {
+    const theta = (k * Math.PI) / 2;
+    if (!onEdgeArc(e, theta)) continue;
+    const x = e.c.x + e.r * Math.cos(theta);
+    const y = e.c.y + e.r * Math.sin(theta);
+    box.minX = Math.min(box.minX, x);
+    box.maxX = Math.max(box.maxX, x);
+    box.minY = Math.min(box.minY, y);
+    box.maxY = Math.max(box.maxY, y);
+  }
+  return box;
+}
+
 /** Unit direction leaving `e` at its start (or arriving back along it from its end), bent by curvature. */
 export function leaveAngle(e: Edge, atEnd: boolean): number {
   const from = pointAt(e, atEnd ? 1 : 0);
@@ -154,6 +173,99 @@ export function winding(edges: readonly Edge[], p: Vec2): number {
   }
   return Math.round(total / TAU);
 }
+
+/**
+ * Winding numbers of many points against one closed edge set, counted as
+ * signed crossings of a ray from the point. The ray runs in a fixed,
+ * generic direction (not along an axis, so it practically never passes
+ * exactly through a vertex of drawn data), and the edges are bucketed in
+ * bands across it, so a query looks only at the edges in its band. Same
+ * result as `winding` for points off the edges, without visiting them all.
+ */
+export class WindingIndex {
+  private readonly edges: readonly Edge[];
+  private readonly bands = new Map<number, number[]>();
+  private readonly u0: number;
+  private readonly h: number;
+
+  constructor(edges: readonly Edge[]) {
+    this.edges = edges;
+    const ranges = edges.map((e) => {
+      const b = edgeBox(e);
+      const us = [uOf(b.minX, b.minY), uOf(b.maxX, b.minY), uOf(b.minX, b.maxY), uOf(b.maxX, b.maxY)];
+      return [Math.min(...us), Math.max(...us)];
+    });
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const [a, b] of ranges) {
+      lo = Math.min(lo, a);
+      hi = Math.max(hi, b);
+    }
+    this.u0 = Number.isFinite(lo) ? lo : 0;
+    const count = Math.max(1, Math.min(4096, Math.ceil(edges.length / 4)));
+    this.h = Math.max((hi - lo) / count, 1e-12);
+    ranges.forEach(([a, b], i) => {
+      for (let k = Math.floor((a - this.u0) / this.h); k <= Math.floor((b - this.u0) / this.h); k++) {
+        const list = this.bands.get(k);
+        if (list) list.push(i);
+        else this.bands.set(k, [i]);
+      }
+    });
+  }
+
+  winding(p: Vec2): number {
+    const uq = uOf(p.x, p.y);
+    const list = this.bands.get(Math.floor((uq - this.u0) / this.h));
+    if (!list) return 0;
+    let w = 0;
+    // Segments share ends safely (half-open in u); an arc's end on the ray could be counted twice
+    // with its neighbour, so that rare case falls back to the exact angle sum (§23.3: robust decisions).
+    let degenerate = false;
+    for (const i of list) {
+      const e = this.edges[i];
+      if (e.kind === 'seg') {
+        const ua = uOf(e.a.x, e.a.y);
+        const ub = uOf(e.b.x, e.b.y);
+        // Half-open in u, so a ray through a shared end counts once.
+        const up = ua <= uq && uq < ub;
+        if (!up && !(ub <= uq && uq < ua)) continue;
+        const s = (uq - ua) / (ub - ua);
+        const x = e.a.x + (e.b.x - e.a.x) * s;
+        const y = e.a.y + (e.b.y - e.a.y) * s;
+        if ((x - p.x) * RAY_X + (y - p.y) * RAY_Y > 0) w += up ? 1 : -1;
+        continue;
+      }
+      const dx = p.x - e.c.x;
+      const dy = p.y - e.c.y;
+      const b = dx * RAY_X + dy * RAY_Y;
+      const disc = b * b - (dx * dx + dy * dy - e.r * e.r);
+      if (disc <= 0) continue;
+      const sq = Math.sqrt(disc);
+      const full = Math.abs(e.sweep) >= TAU - 1e-12;
+      for (const t of [-b - sq, -b + sq]) {
+        if (t <= 0) continue;
+        const theta = Math.atan2(dy + t * RAY_Y, dx + t * RAY_X);
+        if (!full && !onEdgeArc(e, theta)) continue;
+        if (!full) {
+          const hit = { x: p.x + t * RAY_X, y: p.y + t * RAY_Y };
+          const tol = 1e-9 * Math.max(1, e.r);
+          const a0 = pointAt(e, 0);
+          const a1 = pointAt(e, 1);
+          if (Math.hypot(hit.x - a0.x, hit.y - a0.y) < tol || Math.hypot(hit.x - a1.x, hit.y - a1.y) < tol) degenerate = true;
+        }
+        // Travel direction at θ, across the ray (its u component).
+        const du = (-Math.sin(theta) * -RAY_Y + Math.cos(theta) * RAY_X) * Math.sign(e.sweep);
+        w += du > 0 ? 1 : -1;
+      }
+    }
+    return degenerate ? winding(this.edges, p) : w;
+  }
+}
+
+// The ray of WindingIndex: a direction no drawing lines up with; u runs across it.
+const RAY_X = Math.cos(0.4712389 + 0.0123);
+const RAY_Y = Math.sin(0.4712389 + 0.0123);
+const uOf = (x: number, y: number) => -RAY_Y * x + RAY_X * y;
 
 function subtended(a: Vec2, b: Vec2, p: Vec2): number {
   const ax = a.x - p.x;
@@ -292,6 +404,10 @@ export function classify(sources: readonly Source[], built: Built, rule: (inside
     if (rule(sources.map(() => false))) pieces.forEach((p, i) => out.push(dir(p, i, true), dir(p, i, false)));
     return out;
   }
+  // Spatial helpers: the pieces in cells (nearest neighbour), each area source banded for winding numbers.
+  const boxes = pieces.map((p) => tightBox(p.edge));
+  const grid = new PieceGrid(boxes);
+  const windings = sources.map((src) => (src.cut ? null : new WindingIndex(src.edges)));
   pieces.forEach((piece, index) => {
     const e = piece.edge;
     const len = edgeLen(e);
@@ -310,13 +426,12 @@ export function classify(sources: readonly Source[], built: Built, rule: (inside
     }
     // Step off the piece by less than the distance to anything else.
     let near = len;
-    for (let k = 0; k < pieces.length; k++) {
-      if (k === index) continue;
-      const b = pieces[k].edge;
-      const box = edgeBox(b);
-      if (box.minX > m.x + near || box.maxX < m.x - near || box.minY > m.y + near || box.maxY < m.y - near) continue;
-      near = Math.min(near, closestOnEdge(b, m).d);
-    }
+    grid.near(m, len, (k) => {
+      if (k === index) return;
+      const box = boxes[k];
+      if (box.minX > m.x + near || box.maxX < m.x - near || box.minY > m.y + near || box.maxY < m.y - near) return;
+      near = Math.min(near, closestOnEdge(pieces[k].edge, m).d);
+    });
     const eps = Math.max(near * 0.25, 1e-9);
     const q = { x: m.x - ty * eps, y: m.y + tx * eps };
     const left: boolean[] = [];
@@ -327,7 +442,7 @@ export function classify(sources: readonly Source[], built: Built, rule: (inside
         right.push(false);
         return;
       }
-      const w = winding(src.edges, q);
+      const w = windings[k]!.winding(q);
       left.push(w !== 0);
       right.push(w - (piece.delta.get(k) ?? 0) !== 0);
     });
@@ -338,6 +453,49 @@ export function classify(sources: readonly Source[], built: Built, rule: (inside
     else if (L && R && piece.cut) out.push(dir(piece, index, true), dir(piece, index, false));
   });
   return out;
+}
+
+/** Boxes in square cells, for "what is near this point" without looking at every piece. */
+class PieceGrid {
+  private readonly cells = new Map<string, number[]>();
+  private readonly size: number;
+  private readonly count: number;
+
+  constructor(boxes: readonly Box[]) {
+    this.count = boxes.length;
+    let sum = 0;
+    for (const b of boxes) sum += Math.max(b.maxX - b.minX, b.maxY - b.minY);
+    this.size = Math.max((sum / Math.max(1, boxes.length)) * 2, 1e-9);
+    boxes.forEach((b, i) => {
+      const x0 = Math.floor(b.minX / this.size);
+      const x1 = Math.floor(b.maxX / this.size);
+      const y0 = Math.floor(b.minY / this.size);
+      const y1 = Math.floor(b.maxY / this.size);
+      // A huge box (a big circle) goes into the overflow list instead of thousands of cells.
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > 256) return void this.add('big', i);
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) this.add(`${x},${y}`, i);
+    });
+  }
+
+  private add(key: string, i: number): void {
+    const list = this.cells.get(key);
+    if (list) list.push(i);
+    else this.cells.set(key, [i]);
+  }
+
+  /** Calls `fn` with every piece whose cells meet the square of radius r around p (some more than once). */
+  near(p: Vec2, r: number, fn: (i: number) => void): void {
+    const x0 = Math.floor((p.x - r) / this.size);
+    const x1 = Math.floor((p.x + r) / this.size);
+    const y0 = Math.floor((p.y - r) / this.size);
+    const y1 = Math.floor((p.y + r) / this.size);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > this.count) {
+      for (let i = 0; i < this.count; i++) fn(i);
+      return;
+    }
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (const i of this.cells.get(`${x},${y}`) ?? []) fn(i);
+    for (const i of this.cells.get('big') ?? []) fn(i);
+  }
 }
 
 function dir(p: Piece, index: number, fwd: boolean): DirPiece {

@@ -4,14 +4,18 @@ import { resolveColor } from '../../render/color';
 import { sanitizeSvg, svgAsset } from '../../style/file';
 import { svgText } from '../../style/svg/exportSvg';
 import { importSummary } from '../../style/svg/importSvg';
-import { newDoc, shapeId, transformShape, translate, type SvgDoc, type SvgShape } from '../../style/svg/svgModel';
+import { newDoc, shapeId, transformShape, translate, type SvgDoc } from '../../style/svg/svgModel';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
 import { Dialog } from '../widgets/Dialog';
 import { readSvg } from './readSvg';
+import { EditActions, type ActionsHost, type Tab } from './svgActions';
 import { SvgCanvas, type CanvasHost, type CanvasOptions, type ToolId } from './svgCanvas';
 import { SvgFiles, type FileHost } from './svgFile';
+import { editMenus, viewSwitches, type MenuHost } from './svgMenus';
+import { objectRows, type ListHost } from './svgObjects';
 import { actionMatrix, renderProps, type ActionName, type PropsHost } from './svgProps';
+import { defaultOptions } from './svgView';
 
 /**
  * KentOS's own SVG editor (docs/STYLE.md §7) for the drawings symbols use:
@@ -37,9 +41,8 @@ const TOOLS: { id: ToolId; label: string; key: string; icon: string; hint: strin
   { id: 'line', label: 'Kırık çizgi', key: 'L', icon: 'polyline', hint: 'Tıklayarak noktalar; çift tık ya da Enter bitirir, ilk noktaya tık kapatır' },
   { id: 'pen', label: 'Kalem', key: 'B', icon: 'spline', hint: 'Tık köşe, sürükle eğri düğümü; ilk düğüme tık kapatır, Enter bitirir' },
   { id: 'text', label: 'Yazı', key: 'T', icon: 'text', hint: 'Tıklayın, metni sağdan yazın' },
+  { id: 'measure', label: 'Ölç', key: 'M', icon: 'measure', hint: 'İki noktayı kenetleyerek ölçer (sürükleyin ya da iki tık); yolun üstünde parça boyları' },
 ];
-
-const KIND: Record<SvgShape['kind'], string> = { rect: 'Dikdörtgen', ellipse: 'Elips', path: 'Yol', text: 'Yazı' };
 
 export function openSvgEditor(ctx: AppContext, opts: SvgEditorOptions = {}): void {
   const lib = ctx.styles.library;
@@ -62,7 +65,7 @@ export function openSvgEditor(ctx: AppContext, opts: SvgEditorOptions = {}): voi
   new SvgEditor(ctx, doc, asset?.kind === 'asset' ? asset : null, opts, skipped);
 }
 
-class SvgEditor implements CanvasHost, PropsHost, FileHost {
+class SvgEditor implements CanvasHost, PropsHost, FileHost, ActionsHost, MenuHost, ListHost {
   readonly ctx: AppContext;
   doc: SvgDoc;
   selection = new Set<string>();
@@ -75,6 +78,8 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
   private readonly dialog: Dialog;
   readonly canvas: SvgCanvas;
   private readonly files: SvgFiles;
+  readonly edit: EditActions;
+  private readonly switches: { els: HTMLElement[]; update: () => void };
   private readonly toolsEl: HTMLElement;
   private readonly listEl: HTMLElement;
   private readonly propsEl: HTMLElement;
@@ -95,11 +100,13 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
     this.opts = opts;
     this.editable = !!original && ctx.styles.library.canEdit(original.id);
     const pal = ctx.view.palette;
-    this.options = { grid: Math.max(1, Math.round(doc.width / 20)), snapGrid: true, snapObjects: true, tile: false, sides: 6, star: false, ink: resolveColor('ink', pal), second: '#2B83BA', paper: resolveColor('paper', pal) };
+    this.options = defaultOptions(doc, resolveColor('ink', pal), resolveColor('paper', pal));
     this.savedJson = original ? JSON.stringify(doc) : '';
     this.canvas = new SvgCanvas(this);
     this.canvas.el.dataset.escape = 'local';
     this.files = new SvgFiles(this);
+    this.edit = new EditActions(this);
+    this.switches = viewSwitches(this);
     this.toolsEl = h('div', { class: 'svge__tools' });
     this.listEl = h('div', { class: 'svge__list' });
     this.propsEl = h('div', { class: 'svge__props' });
@@ -124,7 +131,7 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
       h(
         'section',
         { class: 'svge__center' },
-        h('div', { class: 'sdes__pbar svge__pbar' }, ...this.files.buttons, h('div', { class: 'dialog__foot-spacer' }), bar('Uzaklaş', '−', () => this.canvas.zoomBy(1 / 1.25)), this.zoomEl, bar('Yakınlaş', '+', () => this.canvas.zoomBy(1.25)), bar('Tuvale sığdır (0)', '⤢', () => this.canvas.fit())),
+        h('div', { class: 'sdes__pbar svge__pbar' }, ...this.files.buttons, h('span', { class: 'svge__barsep' }), ...editMenus(this), h('div', { class: 'dialog__foot-spacer' }), ...this.switches.els, bar('Uzaklaş', '−', () => this.canvas.zoomBy(1 / 1.25)), this.zoomEl, bar('Yakınlaş', '+', () => this.canvas.zoomBy(1.25)), bar('Tuvale sığdır (0)', '⤢', () => this.canvas.fit())),
         this.files.reference.bar,
         this.canvas.el,
         this.files.source.el,
@@ -140,8 +147,11 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
       content: [root],
       footer: [h('label', { class: 'sdes__flabel' }, 'Ad', this.nameInput), h('label', { class: 'sdes__flabel sdes__flabel--path' }, 'Kategori', this.pathInput), this.statusEl, h('div', { class: 'dialog__foot-spacer' }), cancel, this.files.saveAsButton, save],
       beforeClose: () => this.confirmClose(),
+      // The preview colours follow a theme switch while the window is open.
+      onClose: () => themeSub(),
       stack: true,
     });
+    const themeSub = ctx.ui.theme.subscribe(() => this.refresh());
     if (skipped.length) this.status(`Açılırken: ${skipped.join(', ')}.`, 'warn');
     else if (original && !this.editable) this.status('Sistem çizimi: kaydedince Kitaplığım\'a kopyası yazılır.');
     this.refresh();
@@ -179,6 +189,7 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
     }
     this.lastKey = { key, at: now };
     fn();
+    this.canvas.invalidate();
     this.canvas.render();
     this.renderList();
     this.renderTitle();
@@ -195,21 +206,25 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
     this.selection = new Set(ids);
     if (this.nodeEdit && !this.selection.has(this.nodeEdit)) this.nodeEdit = null;
     this.refresh();
+    this.edit.previewArray();
   }
 
   setTool(t: ToolId): void {
-    this.canvas.cancelDraft();
+    this.canvas.toolChanged();
     this.tool = t;
     if (t !== 'node') this.nodeEdit = null;
     else if (!this.nodeEdit) {
       const path = this.doc.shapes.find((s) => this.selection.has(s.id) && s.kind === 'path');
       this.nodeEdit = path?.id ?? null;
-      if (!path) this.status('Düğüm düzenlemek için bir yol seçin ya da yola çift tıklayın.');
+      const shape = this.doc.shapes.find((s) => this.selection.has(s.id) && (s.kind === 'rect' || s.kind === 'ellipse'));
+      if (!path) this.status(shape ? 'Dikdörtgen ve elips düğümle düzenlenmez: önce Yol → Nesneyi yola çevir (Ctrl+Shift+C).' : 'Düğüm düzenlemek için bir yol seçin ya da yola çift tıklayın.', shape ? 'warn' : 'ok');
     }
+    if (t === 'measure') this.status('Ölç: iki noktayı tıklayın ya da sürükleyin (kenetlenir); bir yolun üstünde durunca parça boyları görünür.');
     this.refresh();
   }
 
   editNodes(id: string | null): void {
+    if (this.canvas.nodes.mode && !id) this.canvas.nodes.setMode(null);
     this.nodeEdit = id;
     this.tool = id ? 'node' : 'select';
     if (id) this.selection = new Set([id]);
@@ -229,7 +244,8 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
     this.change(`act:${name}`, () => {
       switch (name) {
         case 'delete':
-          this.doc.shapes = shapes.filter((s) => !ids.has(s.id));
+          // A locked shape stays (unlock it in the list first).
+          this.doc.shapes = shapes.filter((s) => !ids.has(s.id) || s.locked);
           this.selection = new Set();
           this.nodeEdit = null;
           return;
@@ -277,7 +293,7 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
         default: {
           const matrix = actionMatrix(name, sel, this.doc);
           this.doc.shapes = shapes.map((s) => {
-            if (!ids.has(s.id)) return s;
+            if (!ids.has(s.id) || s.locked) return s;
             const m = matrix(s);
             return m ? transformShape(s, m) : s;
           });
@@ -289,7 +305,14 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
 
   // ── Rendering ────────────────────────────────────────────────────────
 
-  private refresh(): void {
+  refresh(): void {
+    // The symbol colour follows the theme until one is picked (the paper follows it in files.refresh).
+    if (this.options.inkAuto) {
+      const ink = resolveColor('ink', this.ctx.view.palette);
+      if (ink !== this.options.ink) this.options = { ...this.options, ink };
+    }
+    this.canvas.invalidate();
+    this.switches?.update();
     this.canvas.render();
     this.renderTools();
     this.renderList();
@@ -315,23 +338,23 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
   }
 
   private renderList(): void {
-    const rows = [...this.doc.shapes].reverse().map((s) => {
-      const eye = h('button', { class: 'ibtn', type: 'button', 'aria-label': s.hidden ? 'Göster' : 'Gizle', title: s.hidden ? 'Göster' : 'Gizle' }, icon(s.hidden ? 'eyeOff' : 'eye', 14));
-      eye.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.change('hide', () => (this.doc.shapes = this.doc.shapes.map((x) => (x.id === s.id ? { ...x, hidden: !x.hidden || undefined } : x))));
-      });
-      const r = h('div', { class: 'svge__row', 'aria-selected': String(this.selection.has(s.id)) }, eye, h('span', null, s.name ?? (s.kind === 'text' ? `Yazı “${s.text}”` : KIND[s.kind])), s.group ? h('span', { class: 'svge__grp', title: 'Grupta' }, '▣') : null);
-      r.addEventListener('click', (e) => {
-        if ((e as MouseEvent).shiftKey) {
-          const next = new Set(this.selection);
-          next.has(s.id) ? next.delete(s.id) : next.add(s.id);
-          this.select([...next]);
-        } else this.select([s.id]);
-      });
-      return r;
-    });
+    const rows = objectRows(this, this.listEl);
     replaceChildren(this.listEl, rows.length ? rows : h('p', { class: 'sdes__note' }, 'Henüz şekil yok: soldaki araçlarla çizin ya da bir SVG dosyası ekleyin.'));
+  }
+
+  /** The chosen nodes changed: the node box follows. */
+  nodesChanged(): void {
+    replaceChildren(this.propsEl, renderProps(this));
+  }
+
+  focusCanvas(): void {
+    this.canvas.el.focus();
+  }
+
+  showTab(tab: Tab): void {
+    this.edit.ui.tab = tab;
+    this.edit.previewArray();
+    this.refresh();
   }
 
   // ── Keys, history, files ─────────────────────────────────────────────
@@ -340,39 +363,83 @@ class SvgEditor implements CanvasHost, PropsHost, FileHost {
     const inField = !!(e.target as HTMLElement).closest('input, textarea, select');
     const k = e.key;
     const ctrl = e.ctrlKey || e.metaKey;
+    const run = (fn: () => void) => {
+      e.preventDefault();
+      fn();
+    };
     if (k === 'Escape' && !inField) {
       e.preventDefault();
-      if (this.canvas.cancelDraft()) return;
+      if (this.canvas.cancel()) return;
       if (this.nodeEdit) return this.editNodes(null);
       if (this.selection.size) return this.select([]);
       this.dialog.request();
       return;
     }
     if (inField) return;
-    if (ctrl && k.toLowerCase() === 'z') {
-      e.preventDefault();
-      return e.shiftKey ? this.redo() : this.undo();
+    const nodes = this.nodeEdit && this.tool === 'node' ? this.canvas.nodes : null;
+    if (ctrl && k.toLowerCase() === 'z') return run(() => (e.shiftKey ? this.redo() : this.undo()));
+    if (ctrl && k.toLowerCase() === 'y') return run(() => this.redo());
+    if (ctrl && k.toLowerCase() === 'd') return run(() => this.action('duplicate'));
+    if (ctrl && k.toLowerCase() === 'g') return run(() => this.action(e.shiftKey ? 'ungroup' : 'group'));
+    if (ctrl && !e.shiftKey && k.toLowerCase() === 'a') return run(() => (nodes ? this.edit.selectAllNodes() : this.edit.selectAll()));
+    if (ctrl) {
+      // Path operations and panels (Inkscape's keys).
+      const low = k.toLowerCase();
+      if ((k === '+' || k === '=') && !e.altKey) return run(() => this.edit.path('union'));
+      if (k === '-' && !e.altKey) return run(() => this.edit.path('difference'));
+      if (k === '*') return run(() => this.edit.path('intersection'));
+      if (k === '^') return run(() => this.edit.path('exclusion'));
+      if (k === '/') return run(() => this.edit.path(e.altKey ? 'cut' : 'division'));
+      if (k === '(') return run(() => this.edit.path('inset'));
+      if (k === ')') return run(() => this.edit.path('outset'));
+      if (low === 'k') return run(() => this.edit.path(e.shiftKey ? 'breakApart' : 'combine'));
+      if (low === 'c' && e.shiftKey) return run(() => this.edit.path('toPath'));
+      if (low === 'c' && e.altKey) return run(() => this.edit.path('strokeToPath'));
+      if (low === 'l' && !e.shiftKey) return run(() => this.edit.path('simplify'));
+      if (low === 'a' && e.shiftKey) return run(() => this.showTab('align'));
+      if (low === 'm' && e.shiftKey) return run(() => this.showTab('transform'));
+      if (nodes && (k === 'Delete' || k === 'Backspace')) return run(() => this.edit.nodeDelete(false));
+      return;
     }
-    if (ctrl && k.toLowerCase() === 'y') return (e.preventDefault(), this.redo());
-    if (ctrl && k.toLowerCase() === 'd') return (e.preventDefault(), this.action('duplicate'));
-    if (ctrl && k.toLowerCase() === 'g') return (e.preventDefault(), this.action(e.shiftKey ? 'ungroup' : 'group'));
-    if (ctrl && k.toLowerCase() === 'a') return (e.preventDefault(), this.select(this.doc.shapes.filter((s) => !s.hidden).map((s) => s.id)));
-    if (ctrl) return;
-    if (k === 'Delete' || k === 'Backspace') {
-      e.preventDefault();
-      if (this.nodeEdit && this.canvas.deleteNode()) return;
-      return this.action('delete');
+    if (nodes) {
+      // The node tool's keys come before the tools' letters.
+      const up = k.toUpperCase();
+      if (e.shiftKey && !e.altKey) {
+        const typed = { C: 'cusp', S: 'smooth', Y: 'symmetric', A: 'auto' } as const;
+        if (up in typed) return run(() => this.edit.nodeType(typed[up as keyof typeof typed]));
+        if (up === 'J') return run(() => this.edit.nodeJoin(true));
+        if (up === 'K') return run(() => this.edit.nodeJoin(false));
+        if (up === 'B') return run(() => this.edit.nodeBreak());
+        if (up === 'L') return run(() => this.edit.nodeSegments('line'));
+        if (up === 'U') return run(() => this.edit.nodeSegments('curve'));
+      }
+      if (k === 'Insert') return run(() => this.edit.nodeInsert());
+      if ((k === 'Delete' || k === 'Backspace') && nodes.selected.length) return run(() => (e.altKey ? this.edit.nodeDeleteSegment() : this.edit.nodeDelete(true)));
+      if (k.startsWith('Arrow') && nodes.selected.length) {
+        const step = (this.options.grid || 1) * (e.shiftKey ? 5 : 1);
+        const d: [number, number] = k === 'ArrowLeft' ? [-step, 0] : k === 'ArrowRight' ? [step, 0] : k === 'ArrowUp' ? [0, -step] : [0, step];
+        return run(() => this.edit.nodeNudge(d[0], d[1]));
+      }
     }
-    if (k === 'Enter') return (e.preventDefault(), this.canvas.finishDraft(false));
+    if (k === 'Delete' || k === 'Backspace') return run(() => this.action('delete'));
+    if (k === 'Enter') return run(() => this.canvas.finishDraft(false));
+    if (k === 'PageUp') return run(() => this.edit.restack('raise'));
+    if (k === 'PageDown') return run(() => this.edit.restack('lower'));
+    if (k === 'Home') return run(() => this.edit.restack('top'));
+    if (k === 'End') return run(() => this.edit.restack('bottom'));
+    if (k === '!') return run(() => this.edit.invertSelection());
+    if (k === '%') return run(() => this.setOption({ snapObjects: !this.options.snapObjects }));
     if (k.startsWith('Arrow') && this.selection.size) {
       e.preventDefault();
       const step = (this.options.grid || 1) * (e.shiftKey ? 5 : 1);
       const d: [number, number] = k === 'ArrowLeft' ? [-step, 0] : k === 'ArrowRight' ? [step, 0] : k === 'ArrowUp' ? [0, -step] : [0, step];
-      return this.change('nudge', () => (this.doc.shapes = this.doc.shapes.map((s) => (this.selection.has(s.id) ? transformShape(s, translate(d[0], d[1])) : s))));
+      return this.change('nudge', () => (this.doc.shapes = this.doc.shapes.map((s) => (this.selection.has(s.id) && !s.locked ? transformShape(s, translate(d[0], d[1])) : s))));
     }
     if (k === '0') return this.canvas.fit();
     if (k === '+' || k === '=') return this.canvas.zoomBy(1.25);
     if (k === '-') return this.canvas.zoomBy(1 / 1.25);
+    if (!e.altKey && (k === 'h' || k === 'H')) return run(() => this.action(e.shiftKey ? 'flipV' : 'flipH'));
+    if (e.shiftKey || e.altKey) return;
     const tool = TOOLS.find((t) => t.key === k.toLocaleUpperCase('tr').replace('İ', 'I'));
     if (tool) this.setTool(tool.id);
   }

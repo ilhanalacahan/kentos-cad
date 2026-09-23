@@ -8,6 +8,7 @@ import './styles/processing.css';
 import './styles/model.css';
 import './styles/style.css';
 import './styles/svgfile.css';
+import './styles/svgedit.css';
 import { createApp } from './app/createApp';
 
 createApp(document.getElementById('app')!)
