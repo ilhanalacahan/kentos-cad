@@ -199,6 +199,8 @@ uniform vec2 u_anchor;
 uniform int u_fit;       // 0 w and h given, 1 width (h from aspect), 2 height (w from aspect)
 uniform float u_aspect;  // image height / width
 uniform float u_strokeW;
+uniform int u_kind;
+uniform int u_shape;
 ${CORNERS}
 out vec2 v_local;
 flat out vec2 v_half;
@@ -213,7 +215,10 @@ void main() {
   float sw = u_strokeW > 0.0 ? max(u_strokeW * k, 1.0) : 0.0;
   float pad = sw * 0.5 + 1.5;
   vec2 c = CORNER[gl_VertexID] - 0.5;
-  vec2 local = c * (vec2(w, h) + 2.0 * pad);
+  // A triangle sits on its centroid: its apex rises 2/√3 of the half size, above a square box.
+  vec2 box = vec2(w, h);
+  if (u_kind == 0 && u_shape == 5) box.y = max(h, min(w, h) * 1.1547005);
+  vec2 local = c * (box + 2.0 * pad);
   vec2 q = local - u_anchor * vec2(w, h) + u_offset * k;
   float ca = cos(a_i0.z);
   float sa = sin(a_i0.z);
@@ -225,44 +230,18 @@ void main() {
 
 /** Distance fields of the marker shapes (px, centred, y up); open shapes return an unsigned line distance. */
 const SHAPES = /* glsl */ `
-float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+// Convex shapes use mitered fields, the largest distance to an edge line: exact inside, and a
+// thick outline keeps pointed outer corners as the plan legends draw them.
+float mBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return max(d.x, d.y); }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
-float sdRhombus(vec2 p, vec2 b) {
-  p = abs(p);
-  float h = clamp((b.x * (b.x - 2.0 * p.x) - b.y * (b.y - 2.0 * p.y)) / dot(b, b), -1.0, 1.0);
-  float d = length(p - 0.5 * b * vec2(1.0 - h, 1.0 + h));
-  return d * sign(p.x * b.y + p.y * b.x - b.x * b.y);
-}
-float sdTri(vec2 p, float r) {
-  const float k = 1.7320508;
-  p.x = abs(p.x) - r;
-  p.y = p.y + r / k;
-  if (p.x + k * p.y > 0.0) p = vec2(p.x - k * p.y, -k * p.x - p.y) / 2.0;
-  p.x -= clamp(p.x, -2.0 * r, 0.0);
-  return -length(p) * sign(p.y);
-}
-float sdPentagon(vec2 p, float r) {
-  const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528);
-  p.x = abs(p.x);
-  p -= 2.0 * min(dot(vec2(-k.x, k.y), p), 0.0) * vec2(-k.x, k.y);
-  p -= 2.0 * min(dot(vec2(k.x, k.y), p), 0.0) * vec2(k.x, k.y);
-  p -= vec2(clamp(p.x, -r * k.z, r * k.z), r);
-  return length(p) * sign(p.y);
-}
-float sdHexagon(vec2 p, float r) {
-  const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
-  p = abs(p.yx);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-float sdOctagon(vec2 p, float r) {
-  const vec3 k = vec3(-0.9238795325, 0.3826834323, 0.4142135623);
-  p = abs(p);
-  p -= 2.0 * min(dot(vec2(k.x, k.y), p), 0.0) * vec2(k.x, k.y);
-  p -= 2.0 * min(dot(vec2(-k.x, k.y), p), 0.0) * vec2(-k.x, k.y);
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
+float mRhombus(vec2 p, vec2 b) { p = abs(p); return (p.x * b.y + p.y * b.x - b.x * b.y) / length(b); }
+/** Regular n-gon with apothem a and one edge normal at angle a0. */
+float mNgon(vec2 p, float a, float n, float a0) {
+  if (dot(p, p) < 1e-12) return -a;
+  float s = 6.2831853 / n;
+  float t = atan(p.y, p.x) - a0;
+  t -= s * floor(t / s + 0.5);
+  return length(p) * cos(t) - a;
 }
 float sdStar(vec2 p, float r, float rf) {
   const vec2 k1 = vec2(0.809016994375, -0.587785252292);
@@ -281,13 +260,13 @@ float sdStar(vec2 p, float r, float rf) {
 float shapeDist(int s, vec2 p, vec2 hs) {
   float r = min(hs.x, hs.y);
   if (s == 0 || s == 1) return length(p) - r;
-  if (s == 2) return sdBox(p, vec2(r));
-  if (s == 3) return sdBox(p, hs);
-  if (s == 4) return sdRhombus(p, hs);
-  if (s == 5) return sdTri(p, r);
-  if (s == 6) return sdPentagon(p, r);
-  if (s == 7) return sdHexagon(p, r);
-  if (s == 8) return sdOctagon(p, r);
+  if (s == 2) return mBox(p, vec2(r));
+  if (s == 3) return mBox(p, hs);
+  if (s == 4) return mRhombus(p, hs);
+  if (s == 5) return mNgon(p, r * 0.57735027, 3.0, -1.5707963); // side 2r, centroid at the centre, apex up
+  if (s == 6) return mNgon(p, r, 5.0, -1.5707963); // apex up
+  if (s == 7) return mNgon(p, r, 6.0, 0.0);        // pointed top, flat sides
+  if (s == 8) return mNgon(p, r, 8.0, 0.0);        // flat top
   if (s == 9) return sdStar(p, r, 0.4);
   if (s == 10) return min(sdSeg(p, vec2(-r, 0.0), vec2(r, 0.0)), sdSeg(p, vec2(0.0, -r), vec2(0.0, r)));
   if (s == 11) { float d = r * 0.7071068; return min(sdSeg(p, vec2(-d), vec2(d)), sdSeg(p, vec2(-d, d), vec2(d, -d))); }

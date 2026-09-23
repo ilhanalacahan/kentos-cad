@@ -55,7 +55,7 @@ export function shapePath(shape: ShapeId, hw: number, hh: number): Path2D {
       poly(polygon(5, r / Math.cos(Math.PI / 5)));
       break;
     case 'hexagon':
-      poly(polygon(6, r / Math.cos(Math.PI / 6), 0));
+      poly(polygon(6, r / Math.cos(Math.PI / 6))); // pointed top, flat sides
       break;
     case 'octagon':
       poly(polygon(8, r / Math.cos(Math.PI / 8), Math.PI / 8));

@@ -80,7 +80,7 @@ export function summary(l: AnyLayer): string {
     case 'centroidMarker':
       return l.position === 'centroid' ? 'ağırlık merkezinde' : 'alanın içinde';
     case 'simpleLine':
-      return `${num(l.width)} ${u}${l.dash?.length ? ', kesikli' : ''}${l.offset ? `, ${num(l.offset)} ${u} kaydırılmış` : ''}${l.wave ? ', dalgalı' : ''}`;
+      return `${num(l.width)} ${u}${l.dash?.length ? ', kesikli' : ''}${l.offset ? (typeof l.offset === 'number' ? `, ${num(l.offset)} ${u} kaydırılmış` : ', ifadeyle kaydırılmış') : ''}${l.wave ? ', dalgalı' : ''}`;
     case 'markerLine':
       return l.placement === 'interval' ? `her ${num(l.interval)} ${u}${l.group && l.group.count > 1 ? `, ${l.group.count}'li` : ''}` : (PLACEMENTS.find((p) => p.value === l.placement)?.label ?? '');
     case 'shape':
@@ -253,7 +253,7 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
         l.dash?.length ? n('Kesik kaydırma', l.dashOffset ?? 0, 'dashOffset') : null,
         pair(
           row('Uç', select(l.cap ?? 'butt', [{ value: 'butt', label: 'Düz' }, { value: 'round', label: 'Yuvarlak' }, { value: 'square', label: 'Kare' }], (v) => set({ cap: v }), 'Uç')),
-          n('Kaydırma', l.offset ?? 0, 'offset'),
+          ddNum('Kaydırma', l.offset, 'offset', 0),
         ),
         h('div', { class: 'sdf__hint' }, env.context === 'fill' ? 'Artı kaydırma çizgiyi alanın içine alır.' : 'Artı kaydırma çizim yönünün soluna alır.'),
         env.context === 'fill' ? row('Halkalar', select(l.rings ?? 'all', [{ value: 'all', label: 'Hepsi' }, { value: 'exterior', label: 'Yalnızca dış sınır' }, { value: 'interior', label: 'Yalnızca adalar' }], (v) => set({ rings: v }), 'Halkalar')) : null,
@@ -264,7 +264,7 @@ export function layerForm(l: AnyLayer, set: (patch: Patch) => void, env: FormEnv
       specific.push(
         row('Yerleşim', select(l.placement, PLACEMENTS, (v) => set({ placement: v }), 'Yerleşim')),
         l.placement === 'interval' ? pair(n('Aralık', l.interval ?? 6, 'interval', { min: 0.01 }), n('İlk uzaklık', l.offsetAlong ?? 0, 'offsetAlong')) : null,
-        pair(n('Kaydırma', l.offset ?? 0, 'offset'), row('Döndür', checkbox(l.rotate !== false, (v) => set({ rotate: v }), 'Çizgiyle dönsün'))),
+        pair(ddNum('Kaydırma', l.offset, 'offset', 0), row('Döndür', checkbox(l.rotate !== false, (v) => set({ rotate: v }), 'Çizgiyle dönsün'))),
         pair(n('Grup', l.group?.count ?? 1, 'groupCount', { unit: 'adet', min: 1, max: 20, step: 1 }), n('Grup aralığı', l.group?.spacing ?? 1, 'groupSpacing', { min: 0 })),
         env.context === 'fill' ? row('Halkalar', select(l.rings ?? 'all', [{ value: 'all', label: 'Hepsi' }, { value: 'exterior', label: 'Yalnızca dış sınır' }, { value: 'interior', label: 'Yalnızca adalar' }], (v) => set({ rings: v }), 'Halkalar')) : null,
       );

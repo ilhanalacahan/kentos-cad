@@ -120,9 +120,10 @@ export interface SimpleLine extends LayerBase {
   readonly join?: 'miter' | 'round' | 'bevel';
   /**
    * Parallel shift. On lines: positive to the left of the drawing direction.
-   * On area edges: positive into the area.
+   * On area edges: positive into the area. Data-defined for road edges set
+   * from a width field ([Genişlik] / 2 in metres, or with $ölçek in mm).
    */
-  readonly offset?: number;
+  readonly offset?: DataDefined<number>;
   /** Area edges only: which rings. */
   readonly rings?: 'all' | 'exterior' | 'interior';
   /** Draw the line as waves (sulak alan, enerji nakil hattı …) instead of straight. */
@@ -154,8 +155,8 @@ export interface MarkerLine extends LayerBase {
   /** Distance of the first marker from the start ("interval"). */
   readonly offsetAlong?: number;
   /** Perpendicular shift (same sign rule as SimpleLine.offset). */
-  readonly offset?: number;
-  /** Turn markers with the line's direction. */
+  readonly offset?: DataDefined<number>;
+  /** Turn markers with the line's direction; text is kept upright (turned half a turn where it would read backwards). */
   readonly rotate?: boolean;
   readonly rings?: 'all' | 'exterior' | 'interior';
   /** Several markers at each place, `spacing` apart along the line (dots in a dash gap). */

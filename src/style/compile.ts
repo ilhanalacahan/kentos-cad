@@ -5,7 +5,7 @@ import { offsetPath } from '../model/geom/offset';
 import type { Vec2 } from '../model/geometry';
 import { interiorPoint, placeAlong, wavePaths, type StyledGeometry } from './geometry';
 import type { FillPaint, MarkerCommon, MarkerStyle, PrimitiveSink, PrimUnit, ShapeMarkStyle, StrokeStyle } from './primitives';
-import type { DataDefined, FillLayer, LineLayer, MarkerLayer, MarkerSymbol, SizeUnit, Symbol } from '../model/style';
+import type { Anchor, DataDefined, FillLayer, LineLayer, MarkerLayer, MarkerSymbol, SizeUnit, Symbol } from '../model/style';
 
 /**
  * Symbol × geometry × object → drawing primitives. Pure and CPU-side:
@@ -54,7 +54,7 @@ export interface CompileTarget {
 function evaluate(v: { expr: string }, t: CompileTarget, env: CompileEnv): ExprValue {
   const e = env.exprs.get(v.expr);
   if (!e) return null;
-  const scope: ExprScope = { entity: t.entity, index: t.index, layerName: env.layerName };
+  const scope: ExprScope = { entity: t.entity, index: t.index, layerName: env.layerName, plotScale: env.plotScale };
   return e.evaluate(scope);
 }
 
@@ -158,7 +158,43 @@ export function markerStyle(layer: MarkerLayer, level: number, t: CompileTarget,
 }
 
 function emitMarkerSymbol(symbol: MarkerSymbol, at: Vec2, angle: number, level: number, t: CompileTarget, env: CompileEnv, sink: PrimitiveSink): void {
-  for (const layer of symbol.layers) emitMarker(layer, at, angle, level, t, env, sink);
+  symbol.layers.forEach((layer, j) => emitMarker(layer, at, angle, subLevel(level, j), t, env, sink));
+}
+
+/**
+ * The drawing level of layer `j` of a marker symbol nested in a line or fill
+ * layer. The sink merges look-alike marks of every object on a CAD layer into
+ * one batch, so without its own level a paper-filled frame of one object
+ * could cover the mark another object draws over its frame.
+ */
+const subLevel = (level: number, j: number) => level + Math.min(j, 255) / 256;
+
+/** Text following a line turns half a turn where it would read upside down (leftwards, or downwards). */
+function readsBackwards(angle: number): boolean {
+  const c = Math.cos(angle);
+  return c < -1e-9 || (Math.abs(c) <= 1e-9 && Math.sin(angle) < 0);
+}
+
+const MIRRORED_ANCHOR: Record<Anchor, Anchor> = {
+  center: 'center',
+  top: 'bottom',
+  bottom: 'top',
+  left: 'right',
+  right: 'left',
+  'top-left': 'bottom-right',
+  'top-right': 'bottom-left',
+  'bottom-left': 'top-right',
+  'bottom-right': 'top-left',
+};
+
+/**
+ * A text style turned half a turn in place: the offset and the anchor are
+ * mirrored, so the text keeps the same box on the same side of the line and
+ * only its letters turn.
+ */
+function turnedText(st: MarkerStyle): MarkerStyle {
+  const c = st.common;
+  return { ...st, common: { ...c, offset: [-c.offset[0], -c.offset[1]], anchor: MIRRORED_ANCHOR[c.anchor] ?? c.anchor } };
 }
 
 // ── Lines ──────────────────────────────────────────────────────────────
@@ -184,7 +220,8 @@ function strokeStyle(layer: Extract<LineLayer, { type: 'simpleLine' }>, level: n
 /** A line layer on one path (a line, or an area ring when `ring` says which). */
 function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, level: number, t: CompileTarget, env: CompileEnv, sink: PrimitiveSink): void {
   if (!ddBool(layer.enabled, t, env)) return;
-  const d = layer.offset ? toWorld(layer.offset, layer.unit, env) : 0;
+  const off = ddNumber(layer.offset, t, env, 0);
+  const d = off ? toWorld(off, layer.unit, env) : 0;
   const path = d ? offsetPath(pts, d, closed) : pts;
   if (path.length < 2) return;
   if (layer.type === 'simpleLine') {
@@ -202,9 +239,17 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
   const along = layer.offsetAlong !== undefined ? toWorld(layer.offsetAlong, layer.unit, env) : 0;
   const group = layer.group && layer.group.count > 1 ? { count: layer.group.count, spacing: toWorld(layer.group.spacing, layer.unit, env) } : undefined;
   // One style object per marker layer for the whole path: the sink keys batches by identity.
-  const styles = layer.marker.layers.flatMap((m) => markerStyle(m, level, t, env) ?? []);
+  const styles = layer.marker.layers.flatMap((m, j) => markerStyle(m, subLevel(level, j), t, env) ?? []);
   if (!styles.length) return;
-  for (const p of placeAlong(path, closed, layer.placement, interval, along, group)) for (const st of styles) sink.marker(st, p.at, layer.rotate === false ? 0 : p.angle);
+  const follow = layer.rotate !== false;
+  const turned = styles.map((st) => (follow && st.kind === 'text' ? turnedText(st) : null));
+  for (const p of placeAlong(path, closed, layer.placement, interval, along, group))
+    styles.forEach((st, i) => {
+      if (!follow) return sink.marker(st, p.at, 0);
+      const alt = turned[i];
+      if (alt && readsBackwards(p.angle + st.common.rotation)) sink.marker(alt, p.at, p.angle + Math.PI);
+      else sink.marker(st, p.at, p.angle);
+    });
 }
 
 // ── Fills ──────────────────────────────────────────────────────────────

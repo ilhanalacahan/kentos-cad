@@ -1,5 +1,5 @@
 import { assetsOfSymbol, newItemId, type EditableSource, type StyleLibrary } from './library';
-import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySymbol, Symbol } from '../model/style';
+import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySymbol, ShapeName, Symbol } from '../model/style';
 
 /**
  * The .kstil file: styles to export, import and share. Versioned JSON with
@@ -36,7 +36,12 @@ export function exportStyles(lib: StyleLibrary, ids: readonly string[]): StyleFi
 // ── Validation ─────────────────────────────────────────────────────────
 
 const UNITS = ['mm', 'px', 'm'];
-const SHAPES = ['circle', 'ring', 'square', 'rectangle', 'diamond', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'cross', 'x', 'line', 'arrow', 'arrowhead', 'semicircle', 'quartercircle'];
+// A record, so a shape added to the model cannot be left out of the check.
+const SHAPE_NAMES: Record<ShapeName, true> = {
+  circle: true, ring: true, square: true, rectangle: true, diamond: true, triangle: true, pentagon: true, hexagon: true, octagon: true,
+  star: true, cross: true, x: true, line: true, arrow: true, arrowhead: true, chevron: true, semicircle: true, quartercircle: true,
+};
+const SHAPES = Object.keys(SHAPE_NAMES);
 const PLACEMENTS = ['interval', 'vertex', 'innerVertex', 'first', 'last', 'center', 'segmentCenter'];
 const LAYER_TYPES: Record<Symbol['type'], string[]> = {
   marker: ['shape', 'svg', 'text', 'raster'],
@@ -101,13 +106,13 @@ export function validateSymbol(sym: unknown, where = 'sembol'): string[] {
             if (!Array.isArray(l.dash) || l.dash.some((d) => typeof d !== 'number' || !Number.isFinite(d) || d < 0)) bad(lw, 'kesik deseni sıfır ya da pozitif sayılar olmalı');
             else if (l.dash.length && l.dash.every((d) => d === 0)) bad(lw, 'kesik deseninin toplamı sıfır olamaz');
           }
-          num(lw, l.offset, 'kaydırma');
+          num(lw, l.offset, 'kaydırma', { dd: true });
           break;
         case 'markerLine':
           if (!PLACEMENTS.includes(String(l.placement))) bad(lw, `bilinmeyen yerleşim “${String(l.placement)}”`);
           if (l.placement === 'interval') num(lw, l.interval, 'aralık', { min: 0.0001, optional: false });
           num(lw, l.offsetAlong, 'başlangıç uzaklığı');
-          num(lw, l.offset, 'kaydırma');
+          num(lw, l.offset, 'kaydırma', { dd: true });
           walk(l.marker, `${lw} › işaret`);
           break;
         case 'simpleFill':

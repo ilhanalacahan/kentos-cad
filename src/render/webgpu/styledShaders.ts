@@ -183,7 +183,10 @@ struct MarkerOut {
   if (st.b.y > 0.0) { sw = max(st.b.y * k, 1.0); }
   let pad = sw * 0.5 + 1.5;
   let c = corner(vi) - vec2f(0.5);
-  let local = c * (vec2f(w, h) + 2.0 * pad);
+  // A triangle sits on its centroid: its apex rises above a square box (see the GLSL twin).
+  var box = vec2f(w, h);
+  if (st.flags.y == 0u && st.flags.z == 5u) { box.y = max(h, min(w, h) * 1.1547005); }
+  let local = c * (box + 2.0 * pad);
   let q = local - st.a.zw * vec2f(w, h) + st.a.xy * k;
   let ca = cos(i0.z);
   let sa = sin(i0.z);
@@ -195,45 +198,16 @@ struct MarkerOut {
   return o;
 }
 
-fn sdBox(p: vec2f, b: vec2f) -> f32 { let d = abs(p) - b; return length(max(d, vec2f(0.0))) + min(max(d.x, d.y), 0.0); }
+// Convex shapes use mitered fields (see the GLSL twin).
+fn mBox(p: vec2f, b: vec2f) -> f32 { let d = abs(p) - b; return max(d.x, d.y); }
 fn sdSeg(p: vec2f, a: vec2f, b: vec2f) -> f32 { let pa = p - a; let ba = b - a; let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
-fn sdRhombus(q: vec2f, b: vec2f) -> f32 {
-  let p = abs(q);
-  let h = clamp((b.x * (b.x - 2.0 * p.x) - b.y * (b.y - 2.0 * p.y)) / dot(b, b), -1.0, 1.0);
-  let d = length(p - 0.5 * b * vec2f(1.0 - h, 1.0 + h));
-  return d * sign(p.x * b.y + p.y * b.x - b.x * b.y);
-}
-fn sdTri(q: vec2f, r: f32) -> f32 {
-  let k = 1.7320508;
-  var p = q;
-  p.x = abs(p.x) - r;
-  p.y = p.y + r / k;
-  if (p.x + k * p.y > 0.0) { p = vec2f(p.x - k * p.y, -k * p.x - p.y) / 2.0; }
-  p.x = p.x - clamp(p.x, -2.0 * r, 0.0);
-  return -length(p) * sign(p.y);
-}
-fn sdPentagon(q: vec2f, r: f32) -> f32 {
-  let k = vec3f(0.809016994, 0.587785252, 0.726542528);
-  var p = vec2f(abs(q.x), q.y);
-  p -= 2.0 * min(dot(vec2f(-k.x, k.y), p), 0.0) * vec2f(-k.x, k.y);
-  p -= 2.0 * min(dot(vec2f(k.x, k.y), p), 0.0) * vec2f(k.x, k.y);
-  p -= vec2f(clamp(p.x, -r * k.z, r * k.z), r);
-  return length(p) * sign(p.y);
-}
-fn sdHexagon(q: vec2f, r: f32) -> f32 {
-  let k = vec3f(-0.866025404, 0.5, 0.577350269);
-  var p = abs(q.yx);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2f(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-fn sdOctagon(q: vec2f, r: f32) -> f32 {
-  let k = vec3f(-0.9238795325, 0.3826834323, 0.4142135623);
-  var p = abs(q);
-  p -= 2.0 * min(dot(vec2f(k.x, k.y), p), 0.0) * vec2f(k.x, k.y);
-  p -= 2.0 * min(dot(vec2f(-k.x, k.y), p), 0.0) * vec2f(-k.x, k.y);
-  p -= vec2f(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
+fn mRhombus(q: vec2f, b: vec2f) -> f32 { let p = abs(q); return (p.x * b.y + p.y * b.x - b.x * b.y) / length(b); }
+fn mNgon(p: vec2f, a: f32, n: f32, a0: f32) -> f32 {
+  if (dot(p, p) < 1e-12) { return -a; }
+  let s = 6.2831853 / n;
+  var t = atan2(p.y, p.x) - a0;
+  t -= s * floor(t / s + 0.5);
+  return length(p) * cos(t) - a;
 }
 fn sdStar(q: vec2f, r: f32, rf: f32) -> f32 {
   let k1 = vec2f(0.809016994375, -0.587785252292);
@@ -251,13 +225,13 @@ fn shapeDist(s: u32, p: vec2f, hs: vec2f) -> f32 {
   let r = min(hs.x, hs.y);
   switch s {
     case 0u, 1u: { return length(p) - r; }
-    case 2u: { return sdBox(p, vec2f(r)); }
-    case 3u: { return sdBox(p, hs); }
-    case 4u: { return sdRhombus(p, hs); }
-    case 5u: { return sdTri(p, r); }
-    case 6u: { return sdPentagon(p, r); }
-    case 7u: { return sdHexagon(p, r); }
-    case 8u: { return sdOctagon(p, r); }
+    case 2u: { return mBox(p, vec2f(r)); }
+    case 3u: { return mBox(p, hs); }
+    case 4u: { return mRhombus(p, hs); }
+    case 5u: { return mNgon(p, r * 0.57735027, 3.0, -1.5707963); }
+    case 6u: { return mNgon(p, r, 5.0, -1.5707963); }
+    case 7u: { return mNgon(p, r, 6.0, 0.0); }
+    case 8u: { return mNgon(p, r, 8.0, 0.0); }
     case 9u: { return sdStar(p, r, 0.4); }
     case 10u: { return min(sdSeg(p, vec2f(-r, 0.0), vec2f(r, 0.0)), sdSeg(p, vec2f(0.0, -r), vec2f(0.0, r))); }
     case 11u: { let d = r * 0.7071068; return min(sdSeg(p, vec2f(-d), vec2f(d)), sdSeg(p, vec2f(-d, d), vec2f(d, -d))); }

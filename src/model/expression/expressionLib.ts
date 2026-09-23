@@ -17,6 +17,8 @@ export interface ExprScope {
   /** 1-based position of the object in the run ($sira). */
   readonly index: number;
   layerName(id: string): string;
+  /** Denominator of the plot scale while drawing a symbol ($ölçek); absent elsewhere. */
+  readonly plotScale?: number;
 }
 
 const NUMERIC = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
@@ -105,6 +107,7 @@ export const EXPR_VARIABLES: readonly ExprVariable[] = [
   { name: 'x', description: 'X (yukarı): nesnenin yer noktası', get: (s) => entityAnchor(s.entity).y },
   { name: 'sıra', aliases: ['row_number'], description: 'Bu çalıştırmadaki sırası: 1, 2, 3 …', get: (s) => s.index },
   { name: 'id', description: 'Nesne numarası', get: (s) => s.entity.id },
+  { name: 'ölçek', aliases: ['scale'], description: 'Çizim ölçeğinin paydası (1/1000 için 1000); yalnızca sembol çizilirken. Metreyi kâğıt mm’sine çevirir: m × 1000 / $ölçek', get: (s) => s.plotScale ?? null },
 ];
 
 // ── Functions ──────────────────────────────────────────────────────────

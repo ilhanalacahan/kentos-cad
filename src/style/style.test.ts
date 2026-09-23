@@ -107,6 +107,64 @@ describe('compiling symbols', () => {
     ]);
     expect(out.markers.every((m) => m.style.common.level === (m.style.kind === 'shape' && m.style.fill ? 2 : 1))).toBe(true);
   });
+  it('shifts road edges by a width field, in metres or in paper mm with $ölçek', () => {
+    const edges = (unit: 'm' | 'mm', expr: string, scale: number) => {
+      const sym: LineSymbol = { type: 'line', layers: [{ id: 'l', type: 'simpleLine', color: 'ink', width: 0.3, unit, offset: { expr, fallback: 1 } }] };
+      const e = line([v(0, 0), v(10, 0)], { Genişlik: '12' });
+      const out = new PrimitiveList();
+      compileSymbol(sym, styledGeometry(e)!, { entity: e, index: 1 }, env(scale), out);
+      return out.strokes[0].path[0].y;
+    };
+    expect(edges('m', '[Genişlik] / 2', 1000)).toBeCloseTo(6, 9);
+    // Paper mm at any plot scale lands on the same ground distance.
+    expect(edges('mm', '[Genişlik] / 2 * 1000 / $ölçek', 500)).toBeCloseTo(6, 9);
+    expect(edges('mm', '[Genişlik] / 2 * 1000 / $ölçek', 2000)).toBeCloseTo(6, 9);
+    expect(edges('m', '[Yok] / 2', 1000)).toBeCloseTo(1, 9);
+  });
+  it('keeps text along a line upright, in the same box on the same side', () => {
+    const sym: LineSymbol = {
+      type: 'line',
+      layers: [{ id: 't', type: 'markerLine', placement: 'center', marker: { type: 'marker', layers: [{ id: 'x', type: 'text', text: 'SEG', size: 2, offset: [0, 3], anchor: 'left' }] } }],
+    };
+    const along = (pts: Vec2[]) => {
+      const out = new PrimitiveList();
+      compileSymbol(sym, styledGeometry(line(pts))!, { entity: line([]), index: 1 }, env(1000), out);
+      return out.markers[0];
+    };
+    const ltr = along([v(0, 0), v(10, 0)]);
+    expect([ltr.angle, ltr.style.common.offset, ltr.style.common.anchor]).toEqual([0, [0, 3], 'left']);
+    // Drawn right to left: turned half a turn, offset and anchor mirrored (same box, above the line).
+    const rtl = along([v(10, 0), v(0, 0)]);
+    expect(Math.cos(rtl.angle)).toBeCloseTo(1, 9);
+    expect([rtl.style.common.offset, rtl.style.common.anchor]).toEqual([[-0, -3], 'right']);
+    // Straight down reads upwards instead.
+    expect(Math.sin(along([v(0, 10), v(0, 0)]).angle)).toBeCloseTo(1, 9);
+  });
+  it('gives each mark of a nested marker symbol its own level, in order', () => {
+    const sym: FillSymbol = {
+      type: 'fill',
+      layers: [
+        {
+          id: 'c',
+          type: 'centroidMarker',
+          marker: {
+            type: 'marker',
+            layers: [
+              { id: 'frame', type: 'shape', shape: 'square', size: 10, fill: 'paper', stroke: 'ink', strokeWidth: 0.3 },
+              { id: 'cross', type: 'shape', shape: 'cross', size: 6, stroke: 'ink', strokeWidth: 0.3 },
+            ],
+          },
+        },
+      ],
+    };
+    const e = polygon(square(20));
+    const out = new PrimitiveList();
+    compileSymbol(sym, styledGeometry(e)!, { entity: e, index: 1 }, env(1000), out, 2000);
+    const [frame, cross] = out.markers.map((m) => m.style.common.level);
+    expect(frame).toBe(2000);
+    expect(cross).toBeGreaterThan(frame);
+    expect(cross).toBeLessThan(2001);
+  });
   it('draws area edges into the area, fills, hatches and a text from attributes', () => {
     const sym: FillSymbol = {
       type: 'fill',
@@ -349,6 +407,9 @@ describe('style files', () => {
     expect(copy?.kind === 'symbol' && copy.symbol.layers[0].type === 'svg' && copy.symbol.layers[0].asset).toBe(newAsset);
     expect(importStyles(target, parsed.file!, 'user', 'skip')).toMatchObject({ added: 0, skipped: 2 });
     expect(importStyles(target, parsed.file!, 'user', 'replace')).toMatchObject({ replaced: 2 });
+  });
+  it('accepts every marker shape of the model', () => {
+    for (const shape of ['chevron', 'arrowhead', 'quartercircle'] as const) expect(validateSymbol({ type: 'marker', layers: [{ id: 'a', type: 'shape', shape, size: 2 }] })).toEqual([]);
   });
   it('rejects broken files with reasons and cleans SVG drawings', () => {
     expect(parseStyleFile('{').issues[0]).toContain('JSON değil');
