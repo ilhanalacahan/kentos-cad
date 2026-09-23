@@ -531,6 +531,29 @@ try {
   check('çoklu çizgi: Uzunluk and a Yarıçap arc', pw.kind === 'polyline' && pw.pts[2].x === AX + 115 && Math.abs(pw.bulges[2] - Math.tan(Math.PI / 8)) < 1e-9);
   await key('Escape');
 
+  // Daire TTT (incircle of a 12-9-15 triangle) and Döndür with Referans.
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${AX + 95}, minY: ${N - 95}, maxX: ${AX + 125}, maxY: ${N - 70} }, 20)`);
+  await sleep(100);
+  for (const [x1, y1, x2, y2] of [[100, -90, 112, -90], [112, -90, 100, -81], [100, -81, 100, -90]]) await addGeom({ kind: 'line', a: { x: AX + x1, y: N + y1 }, b: { x: AX + x2, y: N + y2 } });
+  await key('c');
+  await cmd('TTT');
+  await b.click(...(await toScreen(AX + 106, N - 90)));
+  await b.click(...(await toScreen(AX + 106, N - 85.5)));
+  await b.click(...(await toScreen(AX + 100, N - 85.5)));
+  const inc = await newest();
+  check('daire TTT: the incircle, r = 3', inc.kind === 'circle' && Math.abs(inc.r - 3) < 1e-9 && Math.abs(inc.c.x - (AX + 103)) < 1e-9);
+  await key('Escape');
+  const slanted = await addGeom({ kind: 'line', a: { x: AX + 115, y: N - 90 }, b: { x: AX + 118, y: N - 86 } });
+  await b.eval(`window.kentos.selection.set([${slanted}])`);
+  await key('r', { shift: true });
+  await cmd(`${AX + 115},${N - 90}`);
+  await key('r');
+  await cmd(`${AX + 115},${N - 90}`);
+  await cmd(`${AX + 118},${N - 86}`);
+  await cmd('90');
+  const turned = await b.eval(`window.kentos.doc.get(${slanted})`);
+  check('döndür Referans: the line turns onto north', Math.abs(turned.b.x - (AX + 115)) < 1e-9 && Math.abs(turned.b.y - (N - 85)) < 1e-9);
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');

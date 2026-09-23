@@ -246,29 +246,52 @@ export class MoveTool extends SelectionFirstTool {
   }
 }
 
+/**
+ * Rotate about a centre by a typed or shown angle. Referans (R): show the
+ * current direction with two points (or type its angle), then the new
+ * direction; the selection turns by the difference (align a building to
+ * a road). Kopya (K) keeps the original.
+ */
 export class RotateTool extends SelectionFirstTool {
   readonly id = 'rotate';
   protected readonly label = 'Döndür';
   private base: Vec2 | null = null;
   private copy = false;
+  /** Reference: its first point, then its angle (radians) once known. */
+  private refFrom: Vec2 | null = null;
+  private refAngle: number | null = null;
+  private refMode = false;
 
   protected begin(): void {
     this.base = null;
+    this.refMode = false;
+    this.refFrom = null;
+    this.refAngle = null;
   }
   protected override anchor(): Vec2 | null {
-    return this.base;
+    return this.refMode && this.refAngle === null ? this.refFrom : this.base;
   }
   protected stagePrompt(): string {
     if (!this.base) return 'dönme merkezini belirtin';
-    return `açıyı yazın (derece, saat yönü tersine) ya da bir nokta gösterin [Kopya (K): ${this.copy ? 'açık' : 'kapalı'}]`;
+    const copy = `Kopya (K): ${this.copy ? 'açık' : 'kapalı'}`;
+    if (this.refMode && this.refAngle === null) {
+      return this.refFrom ? 'referans doğrultunun ikinci noktasını gösterin' : 'referans doğrultunun ilk noktasını gösterin ya da referans açıyı yazın';
+    }
+    if (this.refMode) return `yeni doğrultuyu gösterin ya da yeni açıyı yazın [${copy}]`;
+    return `açıyı yazın (derece, saat yönü tersine) ya da bir nokta gösterin [Referans (R) / ${copy}]`;
   }
   protected point(p: Vec2): void {
     if (!this.base) {
       this.base = p;
       return;
     }
+    if (this.refMode && this.refAngle === null) {
+      if (!this.refFrom) this.refFrom = p;
+      else if (dist(this.refFrom, p) > 1e-9) this.refAngle = angleTo(this.refFrom, p);
+      return;
+    }
     if (dist(this.base, p) < 1e-9) return;
-    this.rotate(angleTo(this.base, p));
+    this.rotate(angleTo(this.base, p) - (this.refAngle ?? 0));
   }
   override input(text: string): boolean {
     const t = text.trim().toLocaleUpperCase('tr-TR');
@@ -277,9 +300,19 @@ export class RotateTool extends SelectionFirstTool {
       this.refresh();
       return true;
     }
+    if (this.base && t === 'R' && !this.refMode) {
+      this.refMode = true;
+      this.refresh();
+      return true;
+    }
     const n = parseNumber(text);
     if (this.base && n !== null && !/[,;@<]/.test(text)) {
-      this.rotate((n * Math.PI) / 180);
+      const rad = (n * Math.PI) / 180;
+      if (this.refMode && this.refAngle === null) {
+        this.refAngle = rad;
+        this.refFrom = null;
+        this.refresh();
+      } else this.rotate(rad - (this.refAngle ?? 0));
       return true;
     }
     return super.input(text);
@@ -289,34 +322,64 @@ export class RotateTool extends SelectionFirstTool {
     this.ctx.log.success(`${n} nesne ${deg(angle).toFixed(4)}° döndürüldü${this.copy ? ' (kopya)' : ''}.`);
     this.ctx.tools.exit();
   }
+  private turn(): number | null {
+    if (!this.base || !this.hover || dist(this.base, this.hover) < 1e-9) return null;
+    if (this.refMode && this.refAngle === null) return null;
+    return angleTo(this.base, this.hover) - (this.refAngle ?? 0);
+  }
   protected override previewTransforms(): Affine[] {
-    return this.base && this.hover && dist(this.base, this.hover) > 1e-9 ? [rotation(angleTo(this.base, this.hover), this.base)] : [];
+    const a = this.turn();
+    return a === null ? [] : [rotation(a, this.base!)];
   }
   protected override previewTag(): string[] {
-    return this.base && this.hover ? [`Açı ${deg(angleTo(this.base, this.hover)).toFixed(2)}°`] : [];
+    const a = this.turn();
+    return a === null ? [] : [`Açı ${deg(a).toFixed(2)}°`];
   }
 }
 
+/**
+ * Scale about a base point by a typed factor, or by lengths: a point
+ * shows the reference length from the base, the next the new length.
+ * Referans (R): the reference length between two points (or typed), then
+ * the new length shown from the base or typed. Kopya (K) keeps the original.
+ */
 export class ScaleTool extends SelectionFirstTool {
   readonly id = 'scale';
   protected readonly label = 'Ölçekle';
   private base: Vec2 | null = null;
   private ref: Vec2 | null = null;
+  private copy = false;
+  private refMode = false;
+  private refFrom: Vec2 | null = null;
+  private refLength: number | null = null;
 
   protected begin(): void {
-    this.base = this.ref = null;
+    this.base = this.ref = this.refFrom = null;
+    this.refMode = false;
+    this.refLength = null;
   }
   protected override anchor(): Vec2 | null {
-    return this.base;
+    return this.refMode && this.refLength === null ? this.refFrom : this.base;
   }
   protected stagePrompt(): string {
     if (!this.base) return 'temel noktayı belirtin';
-    if (!this.ref) return 'ölçek faktörünü yazın ya da referans uzunluk için bir nokta gösterin';
-    return 'yeni uzunluğu gösterin ya da faktör yazın';
+    const copy = `Kopya (K): ${this.copy ? 'açık' : 'kapalı'}`;
+    if (this.refMode && this.refLength === null) {
+      return this.refFrom ? 'referans uzunluğun ikinci ucunu gösterin' : 'referans uzunluğun ilk ucunu gösterin ya da uzunluğu yazın';
+    }
+    if (this.refMode) return `yeni uzunluğu temel noktadan gösterin ya da yazın [${copy}]`;
+    if (!this.ref) return `ölçek faktörünü yazın ya da referans uzunluk için bir nokta gösterin [Referans (R) / ${copy}]`;
+    return `yeni uzunluğu gösterin ya da faktör yazın [${copy}]`;
   }
   protected point(p: Vec2): void {
     if (!this.base) {
       this.base = p;
+      return;
+    }
+    if (this.refMode) {
+      if (this.refLength !== null) return this.scale(dist(this.base, p) / this.refLength);
+      if (!this.refFrom) this.refFrom = p;
+      else if (dist(this.refFrom, p) > 1e-9) this.refLength = dist(this.refFrom, p);
       return;
     }
     if (!this.ref) {
@@ -326,25 +389,42 @@ export class ScaleTool extends SelectionFirstTool {
     this.scale(dist(this.base, p) / dist(this.base, this.ref));
   }
   override input(text: string): boolean {
+    const t = text.trim().toLocaleUpperCase('tr-TR');
+    if (this.base && t === 'K') {
+      this.copy = !this.copy;
+      this.refresh();
+      return true;
+    }
+    if (this.base && t === 'R' && !this.refMode && !this.ref) {
+      this.refMode = true;
+      this.refresh();
+      return true;
+    }
     const n = parseNumber(text);
     if (this.base && n !== null && !/[,;@<]/.test(text)) {
       if (n <= 0) {
-        this.ctx.log.warn('Ölçek faktörü sıfırdan büyük olmalı.');
+        this.ctx.log.warn(this.refMode ? 'Uzunluk sıfırdan büyük olmalı.' : 'Ölçek faktörü sıfırdan büyük olmalı.');
         return true;
       }
-      this.scale(n);
+      if (this.refMode && this.refLength === null) {
+        this.refLength = n;
+        this.refFrom = null;
+        this.refresh();
+      } else this.scale(this.refMode ? n / this.refLength! : n);
       return true;
     }
     return super.input(text);
   }
   private scale(f: number): void {
     if (!(f > 0) || !Number.isFinite(f)) return;
-    const n = this.applyTransforms(this.label, [scaling(f, this.base!)], false);
-    this.ctx.log.success(`${n} nesne ${f.toFixed(4)} faktörüyle ölçeklendi.`);
+    const n = this.applyTransforms(this.label, [scaling(f, this.base!)], this.copy);
+    this.ctx.log.success(`${n} nesne ${f.toFixed(4)} faktörüyle ölçeklendi${this.copy ? ' (kopya)' : ''}.`);
     this.ctx.tools.exit();
   }
   private factor(): number | null {
-    return this.base && this.ref && this.hover ? dist(this.base, this.hover) / dist(this.base, this.ref) : null;
+    if (!this.base || !this.hover) return null;
+    if (this.refMode) return this.refLength ? dist(this.base, this.hover) / this.refLength : null;
+    return this.ref ? dist(this.base, this.hover) / dist(this.base, this.ref) : null;
   }
   protected override previewTransforms(): Affine[] {
     const f = this.factor();

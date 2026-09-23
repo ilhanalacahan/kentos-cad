@@ -13,7 +13,7 @@ import {
 } from '../model/geom/shapes';
 import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { catmullRom } from '../model/geom/spline';
-import { tangentTangentRadius } from '../model/geom/tangentCircle';
+import { tangentTangentRadius, tangentTangentTangent } from '../model/geom/tangentCircle';
 import { entityEdges } from '../model/ops/edges';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
@@ -223,7 +223,7 @@ export class ArcTool extends PointInputTool {
 
 // ── Daire ──────────────────────────────────────────────────────────────
 
-type CircleMode = 'center' | 'two' | 'three' | 'ttr';
+type CircleMode = 'center' | 'two' | 'three' | 'ttr' | 'ttt';
 interface TangentPick {
   edge: Edge;
   pick: Vec2;
@@ -231,7 +231,8 @@ interface TangentPick {
 
 /**
  * Circle by centre and radius (default), 2N (diameter ends), 3N (three
- * points on it) or TTY (tangent to two objects with a radius).
+ * points on it), TTY (tangent to two objects with a radius) or TTT
+ * (tangent to three objects).
  */
 export class CircleTool extends PointInputTool {
   readonly id = 'circle';
@@ -252,14 +253,16 @@ export class CircleTool extends PointInputTool {
         const r = CircleTool.lastRadius > 0 ? ` (Enter: ${this.ctx.format.length(CircleTool.lastRadius)})` : '';
         return ['ilk teğet çizgi, yay ya da daireyi seçin', 'ikinci teğet nesneyi seçin', `yarıçapı yazın${r}`][this.tangents.length];
       }
+      case 'ttt':
+        return ['birinci teğet çizgi, yay ya da daireyi seçin', 'ikinci teğet nesneyi seçin', 'üçüncü teğet nesneyi seçin'][this.tangents.length] ?? '';
       default:
-        if (n === 0) return 'merkez noktasını belirtin [2 nokta (2N) / 3 nokta (3N) / Teğet-teğet-yarıçap (TTY)]';
+        if (n === 0) return 'merkez noktasını belirtin [2 nokta (2N) / 3 nokta (3N) / Teğet-teğet-yarıçap (TTY) / Teğet-teğet-teğet (TTT)]';
         return this.diameter ? 'çapı gösterin ya da yazın [Yarıçap (R)]' : 'yarıçapı gösterin ya da yazın [Çap (Ç)]';
     }
   }
 
   override get snaps(): boolean {
-    return this.mode !== 'ttr';
+    return this.mode !== 'ttr' && this.mode !== 'ttt';
   }
 
   protected override option(key: string): boolean {
@@ -269,7 +272,7 @@ export class CircleTool extends PointInputTool {
       this.ctx.view.requestOverlay();
       return true;
     }
-    const modes: Record<string, CircleMode> = { '2N': 'two', '3N': 'three', TTY: 'ttr', M: 'center' };
+    const modes: Record<string, CircleMode> = { '2N': 'two', '3N': 'three', TTY: 'ttr', TTT: 'ttt', M: 'center' };
     if (!modes[key] || this.pts.length) return false;
     this.mode = modes[key];
     this.tangents = [];
@@ -279,13 +282,20 @@ export class CircleTool extends PointInputTool {
   }
 
   override pointerDown(p: ToolPointer): void {
-    if (this.mode !== 'ttr') return super.pointerDown(p);
-    if (p.button !== 0 || this.tangents.length >= 2) return;
+    if (this.mode !== 'ttr' && this.mode !== 'ttt') return super.pointerDown(p);
+    if (p.button !== 0 || this.tangents.length >= (this.mode === 'ttt' ? 3 : 2)) return;
     const e = this.ctx.view.pickEdge(p.screen, (x) => ['line', 'polyline', 'polygon', 'arc', 'circle', 'xline', 'ray'].includes(x.kind));
     if (!e) return this.ctx.log.warn('Teğet olunacak bir çizgi, çoklu çizgi, yay ya da daireye tıklayın.');
     const edge = nearestEdge(e, p.raw);
     if (!edge) return;
     this.tangents.push({ edge, pick: p.raw });
+    if (this.mode === 'ttt' && this.tangents.length === 3) {
+      const [t1, t2, t3] = this.tangents;
+      const c = tangentTangentTangent([t1.edge, t2.edge, t3.edge], [t1.pick, t2.pick, t3.pick]);
+      this.tangents = [];
+      if (c) this.commit(c.c, c.r);
+      else this.ctx.log.warn('Üç nesneye birden teğet bir daire bulunamadı; nesnelere teğet noktalarının yakınından tıklayın.');
+    }
     this.refreshPrompt();
     this.ctx.view.requestOverlay();
   }
@@ -326,7 +336,7 @@ export class CircleTool extends PointInputTool {
 
   override confirm(): void {
     if (this.mode === 'ttr' && this.tangents.length === 2 && CircleTool.lastRadius > 0) return this.commitTangent(CircleTool.lastRadius);
-    if (this.mode === 'ttr' && this.tangents.length) {
+    if ((this.mode === 'ttr' || this.mode === 'ttt') && this.tangents.length) {
       this.tangents = [];
       return this.refreshPrompt();
     }
@@ -360,7 +370,7 @@ export class CircleTool extends PointInputTool {
 
   override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     const pal = this.ctx.view.palette;
-    if (this.mode === 'ttr') {
+    if (this.mode === 'ttr' || this.mode === 'ttt') {
       for (const t of this.tangents) {
         const s = view.worldToScreen(t.pick);
         g.save();
