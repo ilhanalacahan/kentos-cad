@@ -111,6 +111,11 @@ export class Keymap {
   private readonly commands: CommandRegistry;
   /** Called for keys no binding handled (used by the command line). */
   fallback: ((e: KeyboardEvent) => void) | null = null;
+  /**
+   * Consulted before any binding; returning true consumes the key. The UI
+   * uses it for a running command's option letters, which beat tool shortcuts.
+   */
+  intercept: ((e: KeyboardEvent) => boolean) | null = null;
 
   constructor(commands: CommandRegistry) {
     this.commands = commands;
@@ -155,6 +160,10 @@ export class Keymap {
   attach(target: Window): Disposable {
     return listen<KeyboardEvent>(target, 'keydown', (e) => {
       if (e.defaultPrevented || e.isComposing) return;
+      if (this.intercept?.(e)) {
+        e.preventDefault();
+        return;
+      }
       const b = this.resolve(e);
       if (b) {
         e.preventDefault();

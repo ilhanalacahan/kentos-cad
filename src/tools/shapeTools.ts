@@ -259,7 +259,7 @@ export class RegularPolygonTool extends PointInputTool {
     const circle = RegularPolygonTool.inscribed ? 'köşeler üzerinde' : 'kenarlara teğet';
     if (this.askSides) return 'kenar sayısını yazın (3 ile 1024 arası)';
     if (this.byEdge) return n === 0 ? `kenarın ilk ucunu belirtin [Kenar sayısı (S): ${s} / Merkezden (M)]` : 'kenarın ikinci ucunu belirtin';
-    if (n === 0) return `merkezi belirtin [Kenar sayısı (S): ${s} / Çember (Ç): ${circle} / Kenardan (K)]`;
+    if (n === 0) return `merkezi belirtin ya da kenar sayısını yazın [Kenar sayısı (S): ${s} / Çember (Ç): ${circle} / Kenardan (K)]`;
     return RegularPolygonTool.inscribed ? 'bir köşeyi gösterin ya da çember yarıçapını yazın' : 'bir kenarın ortasını gösterin ya da iç teğet çember yarıçapını yazın';
   }
 

@@ -7,7 +7,7 @@ import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc'
 import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
-import { optionButtons, parsePrompt } from '../promptOptions';
+import { optionButtons, parsePrompt, runPromptOption } from '../promptOptions';
 
 /**
  * AutoCAD/Netcad-style command line. Accepts command aliases (L, PL,
@@ -62,6 +62,22 @@ export class CommandLine extends Component {
       else this.focus();
     };
     this.d.add(() => (ctx.keymap.fallback = null));
+
+    // While a command runs, a plain letter that is one of its options (the
+    // key shown on the option buttons) triggers it at once — one keystroke,
+    // no Space or Enter — and wins over the tool shortcut with that letter.
+    ctx.keymap.intercept = (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.key.length !== 1) return false;
+      if (isTextInput(document.activeElement)) return false;
+      if (ctx.tools.activeId.value === 'select' && !ctx.tools.nested) return false;
+      const letter = e.key.toLocaleUpperCase('tr-TR');
+      if (!/\p{L}/u.test(letter)) return false;
+      const opt = parsePrompt(ctx.tools.prompt.value).options.find((o) => o.key.toLocaleUpperCase('tr-TR') === letter);
+      if (!opt) return false;
+      runPromptOption(ctx, opt.key);
+      return true;
+    };
+    this.d.add(() => (ctx.keymap.intercept = null));
   }
 
   /** Field beside the cursor that takes typed values while the mouse is on the drawing. */

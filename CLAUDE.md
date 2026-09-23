@@ -184,6 +184,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 - **Harfler basılan karaktere göre eşlenir** (`e.key`, ı ve i → I). Böylece Türkçe Q ve F klavyede de tuşun üstünde yazan harf çalışır. Değiştirici tuş karakteri bozarsa fiziksel konuma (`e.code`) düşülür.
 - **Metin kutusunda** yalnızca `allowInInput: true` olan bağlar çalışır. Bunlar F tuşları ve `Ctrl+S`, `Ctrl+O`, `Ctrl+P` gibi global komutlardır.
 - **Odak bir düğme, ağaç satırı ya da menüdeyken** Enter ve Boşluk yerel anlamını korur.
+- **Komut çalışırken seçenek harfleri önceliklidir** (`Keymap.intercept`, `ui/bottom/CommandLine.ts`): Shift'siz ve Ctrl'siz basılan harf istemdeki bir seçeneğin tuşuysa (ör. düzgün çokgende `S`, çoklu çizgide `Y`, çizgide `G`) o seçenek tek tuşla çalışır; Boşluk ya da Enter gerekmez ve aynı harfli araç kısayolu çalışmaz. Eşleşmeyen harf araç kısayolu olarak kalır; Shift'li kısayollar hiç etkilenmez. Seçenek düğmelerindeki tuş etiketi bu yüzden gerçekten o tuşu gösterir.
 - **Hiçbir bağa uymayan** rakam, `@` ya da `.` basılırsa komut satırı odak alır. Böylece koordinat hemen yazılabilir (`Keymap.fallback`).
 - **Açık bir pencere** (Dialog) içindeki tuşlar uygulama kısayollarına ulaşmaz.
 - **Kısayol listesi** (F1) kısayol haritasından üretilir. Elle liste tutulmaz.

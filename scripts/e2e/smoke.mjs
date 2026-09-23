@@ -328,6 +328,17 @@ try {
   const rays = await b.eval(`[...window.kentos.doc.all()].filter((e) => e.kind === 'ray' && e.p.y === ${N + 115}).map((e) => e.dir.x)`);
   check('trimming an xline on one side leaves a ray', !(await b.eval(`!!window.kentos.doc.get(${xl.id})`)) && rays.includes(1), JSON.stringify(rays));
 
+  // Option letters: in a running command a plain letter that is an option triggers it (S: side count).
+  await key('g', { shift: true });
+  await b.key('s');
+  await b.key('7');
+  await b.key('Enter');
+  await b.click(...(await toScreen(X + 75, N + 95)));
+  await b.click(...(await toScreen(X + 82, N + 95)));
+  const hept = await newest();
+  check('option letter beats the tool shortcut (S → kenar sayısı)', hept.kind === 'polygon' && hept.pts.length === 7, `${hept.pts?.length}`);
+  await key('Escape');
+
   // Point calculator (Netcad's koordinat hesap makinası) inside a running line: yan nokta.
   await key('l');
   await cmd(`${X},${N + 100}`);
