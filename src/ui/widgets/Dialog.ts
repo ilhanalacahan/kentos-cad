@@ -3,9 +3,14 @@ import { h, overlayRoot, type Child } from '../dom';
 import { icon } from '../icons';
 import { PopupMenu } from './PopupMenu';
 
-/** Modal dialog with focus trap-lite, Esc to close and restored focus. */
+/**
+ * Modal dialog with focus trap-lite, Esc to close and restored focus. A new
+ * dialog replaces the open one, unless it is opened with `stack` (a symbol
+ * picker over a style window): then it sits on top and only the top dialog
+ * takes keys; closing it returns to the one below.
+ */
 export class Dialog {
-  private static open: Dialog | null = null;
+  private static readonly stack: Dialog[] = [];
   readonly el: HTMLElement;
   readonly body: HTMLElement;
   private readonly d = new DisposableStore();
@@ -17,9 +22,9 @@ export class Dialog {
    * `beforeClose` may refuse a close asked by the user (Esc, ×, backdrop)
    * by returning false, e.g. to ask about unsaved changes first.
    */
-  constructor(opts: { title: string; width?: number; className?: string; content: Child[]; footer?: Child[]; onClose?: () => void; beforeClose?: () => boolean }) {
-    Dialog.open?.close();
-    Dialog.open = this;
+  constructor(opts: { title: string; width?: number; className?: string; content: Child[]; footer?: Child[]; onClose?: () => void; beforeClose?: () => boolean; stack?: boolean }) {
+    if (!opts.stack) for (const d of [...Dialog.stack].reverse()) d.close();
+    Dialog.stack.push(this);
     this.returnFocus = document.activeElement;
     const close = h('button', { class: 'ibtn', type: 'button', 'aria-label': 'Kapat' }, icon('close', 16));
     this.body = h('div', { class: 'dialog__body' }, opts.content);
@@ -48,8 +53,11 @@ export class Dialog {
         window,
         'keydown',
         (e) => {
-          // An open menu (a dropdown in the form) takes its own Esc first.
-          if (e.key === 'Escape' && PopupMenu.isOpen) return;
+          // Only the top dialog listens; the ones below wait.
+          if (Dialog.stack.at(-1) !== this) return;
+          // An open menu (a dropdown in the form) takes its own Esc first, and so
+          // does a field that undoes its own edit with Esc (data-escape="local").
+          if (e.key === 'Escape' && (PopupMenu.isOpen || (document.activeElement as HTMLElement | null)?.dataset?.escape === 'local')) return;
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
@@ -74,7 +82,8 @@ export class Dialog {
     this.onClose?.();
     this.d.dispose();
     this.el.remove();
-    if (Dialog.open === this) Dialog.open = null;
+    const at = Dialog.stack.indexOf(this);
+    if (at >= 0) Dialog.stack.splice(at, 1);
     (this.returnFocus as HTMLElement | null)?.focus?.();
   }
 }

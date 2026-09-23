@@ -120,7 +120,7 @@ export const MAIN_MENU: TopMenu[] = [
   {
     id: 'tools',
     label: 'Araçlar',
-    items: ['commandline.focus', { label: 'Çizim yardımcıları', items: ['draft.snap', 'draft.grid', 'draft.ortho', 'draft.polar', 'draft.tracking'] }, '-', 'help.shortcuts', 'tools.options'],
+    items: ['commandline.focus', { label: 'Çizim yardımcıları', items: ['draft.snap', 'draft.grid', 'draft.ortho', 'draft.polar', 'draft.tracking'] }, '-', 'style.manager', 'style.layerStyle', 'style.assign', 'style.clearSymbol', '-', 'help.shortcuts', 'tools.options'],
   },
   {
     id: 'help',

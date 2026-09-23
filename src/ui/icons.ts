@@ -151,6 +151,10 @@ const ICONS = {
   units: '<path d="M3.5 16.5v-13l13 13z"/><path d="M3.5 12.5h2M3.5 9h2M7.5 16.5v-2M11 16.5v-2"/><path d="M6.5 13.5v-3l3 3z"/>',
   chip: '<rect x="5" y="5" width="10" height="10" rx="1.5"/><rect x="8" y="8" width="4" height="4"/><path d="M8 2.5V5M12 2.5V5M8 15v2.5M12 15v2.5M2.5 8H5M2.5 12H5M15 8h2.5M15 12h2.5"/>',
   appearance: '<circle cx="10" cy="10" r="6.5"/><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" stroke="none"/>',
+  styles: '<path d="M10 3a7 7 0 1 0 0 14c1 0 1.5-.8 1.2-1.6-.4-1 .2-2 1.3-2H14a3.5 3.5 0 0 0 3.5-3.5C17.5 6 14.1 3 10 3z"/><circle cx="6.6" cy="9.2" r=".9"/><circle cx="8.9" cy="6.2" r=".9"/><circle cx="12.6" cy="6.6" r=".9"/>',
+  layerStyle: '<rect x="3" y="3" width="10" height="10" rx="1"/><path d="m3 8.5 5.5-5.5M5 13l8-8"/><circle cx="14.5" cy="14.5" r="3"/>',
+  plus: '<path d="M10 4v12M4 10h12"/>',
+  trash: '<path d="M4 5.5h12M8 5.5v-2h4v2M5.6 5.5l.8 11h7.2l.8-11"/><path d="M8.6 8.5v5M11.4 8.5v5"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

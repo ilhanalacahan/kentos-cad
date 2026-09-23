@@ -334,7 +334,8 @@ export class ViewportController {
       doc.events.on('attrs', ({ ids }) => {
         for (const id of ids) {
           const e = doc.get(id);
-          if (e && doc.layers.get(e.layerId)?.style.renderer) this.dirtyLayers.add(e.layerId);
+          // Symbols may read attributes (an object's own symbol or the layer's renderer).
+          if (e && (e.symbol || doc.layers.get(e.layerId)?.style.renderer)) this.dirtyLayers.add(e.layerId);
         }
         this.requestRender();
       }),

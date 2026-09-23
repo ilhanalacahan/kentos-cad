@@ -1,7 +1,10 @@
+import type { Command } from '../core/commands';
 import type { CadDocument } from '../model/document';
 import type { LibraryCategory, LibraryItem } from '../model/style';
 import { StyleLibrary } from '../style/library';
 import { SYSTEM_LIBRARY } from '../style/system';
+import { geometryClassOf } from '../style/geometry';
+import type { AppContext } from './context';
 import { persistedSignals } from './state';
 
 /**
@@ -33,4 +36,101 @@ export function createStyles(doc: CadDocument): StyleService {
     } else doc.styles.set(d);
   });
   return { library };
+}
+
+/**
+ * Style commands. The windows are loaded when first opened (most sessions
+ * never style anything), so the app's first load stays small.
+ */
+export function registerStyleCommands(ctx: AppContext): void {
+  const cat = 'Stil';
+  const manager = () => import('../ui/style/StyleManager');
+  const activeLayer = () => {
+    const n = ctx.doc.layers.get(ctx.doc.layers.active.value);
+    return n?.type === 'layer' ? n : null;
+  };
+  const withSymbol = () => [...ctx.selection.ids.value].map((id) => ctx.doc.get(id)).filter((e) => !!e?.symbol);
+  const list: Command[] = [
+    {
+      id: 'style.manager',
+      title: 'Stil yöneticisi…',
+      category: cat,
+      icon: 'styles',
+      aliases: ['STIL', 'STILLER', 'STYLE', 'SEMBOLLER'],
+      description: 'Sembol kitaplığı: sistem, kullanıcı ve proje sembolleri; kopyala, düzenle, içe ve dışa aktar.',
+      run: () => void manager().then((m) => m.openStyleManager(ctx)),
+    },
+    {
+      id: 'style.layerStyle',
+      title: 'Katman stili…',
+      category: cat,
+      icon: 'layerStyle',
+      aliases: ['KATMANSTILI', 'LAYERSTYLE'],
+      description: 'Etkin katmanın nesnelerinin nasıl çizileceği: tek sembol, kategorili, aralıklı ya da kurallarla.',
+      isEnabled: () => !!activeLayer(),
+      watch: [ctx.doc.layers.active],
+      run: () => {
+        const n = activeLayer();
+        if (n) void import('../ui/style/LayerStyleDialog').then((m) => m.openLayerStyle(ctx, n.id));
+      },
+    },
+    {
+      id: 'style.assign',
+      title: 'Seçili nesnelere sembol ver…',
+      category: cat,
+      icon: 'styles',
+      aliases: ['SEMBOLVER', 'SEMBOL'],
+      description: 'Kitaplıktan bir sembol seçer ve seçili nesnelere verir; nesnenin sembolü katman stilinin önüne geçer.',
+      isEnabled: () => ctx.selection.ids.value.size > 0,
+      watch: [ctx.selection.ids],
+      run: () => {
+        const first = ctx.doc.get([...ctx.selection.ids.value][0]);
+        const cls = first ? geometryClassOf(first) : null;
+        void manager().then((m) =>
+          m.openStyleManager(ctx, {
+            pick: {
+              kind: cls ?? undefined,
+              title: 'Seçili nesnelere sembol verin',
+              current: first?.symbol,
+              onPick: (id) => assignSymbol(ctx, id),
+            },
+          }),
+        );
+      },
+    },
+    {
+      id: 'style.clearSymbol',
+      title: 'Nesne sembolünü kaldır',
+      category: cat,
+      aliases: ['SEMBOLKALDIR'],
+      description: 'Seçili nesneler yeniden katmanlarının stiliyle çizilir.',
+      isEnabled: () => withSymbol().length > 0,
+      watch: [ctx.selection.ids],
+      run: () => assignSymbol(ctx, undefined),
+    },
+  ];
+  for (const c of list) ctx.commands.register(c);
+}
+
+/** Gives (or takes away) the selected objects' own symbol in one undo step; locked layers are skipped. */
+export function assignSymbol(ctx: AppContext, id: string | undefined): void {
+  const { doc } = ctx;
+  const name = id ? (ctx.styles.library.get(id)?.name ?? id) : '';
+  let done = 0;
+  let locked = 0;
+  doc.transact(id ? `Sembol: ${name}` : 'Sembolü kaldır', () => {
+    for (const eid of ctx.selection.ids.value) {
+      const e = doc.get(eid);
+      if (!e || e.symbol === id) continue;
+      if (doc.layers.isLocked(e.layerId)) {
+        locked++;
+        continue;
+      }
+      doc.update(eid, { symbol: id });
+      done++;
+    }
+  });
+  const skipped = locked ? `; kilitli katmandaki ${locked} nesne atlandı` : '';
+  if (id) ctx.log.info(`${done} nesneye “${name}” verildi${skipped}.`);
+  else ctx.log.info(`${done} nesnenin sembolü kaldırıldı${skipped}.`);
 }

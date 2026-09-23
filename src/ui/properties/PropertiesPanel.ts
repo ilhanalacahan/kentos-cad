@@ -7,6 +7,7 @@ import { sweep } from '../../model/geom/arc';
 import { isFullEllipse } from '../../model/geom/ellipse';
 import { Panel } from '../dock/Panel';
 import { h, replaceChildren } from '../dom';
+import { geometryClassOf } from '../../style/geometry';
 import { colorSwatch, layerSwatch } from '../layers/swatch';
 import { DRAW_COLORS } from '../toolbar/Toolbar';
 import type { MenuItem } from '../widgets/PopupMenu';
@@ -135,6 +136,21 @@ export class PropertiesPanel extends Panel {
     };
   }
 
+  /** An object's own symbol (drawn instead of its layer's style); picked from the library. */
+  private symbolEditor(current: string | undefined | null): PropRow['editor'] {
+    const { commands, styles } = this.ctx;
+    return {
+      type: 'select',
+      display: () => (current === null ? { text: 'Çeşitli' } : current ? { text: styles.library.get(current)?.name ?? 'Kitaplıkta yok' } : { text: 'Katman stiline göre' }),
+      items: () => [
+        { label: 'Katman stiline göre', radio: true, checked: current === undefined, run: () => commands.execute('style.clearSymbol') },
+        { kind: 'separator' },
+        { label: 'Kitaplıktan seç…', icon: 'styles', run: () => commands.execute('style.assign') },
+        { label: 'Katman stili…', icon: 'layerStyle', run: () => commands.execute('style.layerStyle') },
+      ],
+    };
+  }
+
   private entitySections(e: Entity): PropSection[] {
     const { doc } = this.ctx;
     const locked = doc.layers.isLocked(e.layerId);
@@ -145,6 +161,7 @@ export class PropertiesPanel extends Panel {
         { label: 'Tür', value: ENTITY_KIND_LABEL[e.kind] },
         { label: 'Katman', value: '', editor: locked ? undefined : this.layerEditor([e.id], e.layerId) },
         { label: 'Renk', value: e.color ?? 'Katmana göre', editor: locked ? undefined : this.colorEditor([e.id], e.color) },
+        ...(geometryClassOf(e) ? [{ label: 'Sembol', value: e.symbol ? (this.ctx.styles.library.get(e.symbol)?.name ?? e.symbol) : 'Katman stiline göre', editor: locked ? undefined : this.symbolEditor(e.symbol) }] : []),
       ],
     };
     if (locked) general.rows[1].value = doc.layers.path(e.layerId) + ' (kilitli)';
@@ -382,6 +399,7 @@ export class PropertiesPanel extends Panel {
     const rows: PropRow[] = [
       { label: 'Katman', value: 'Kilitli katman içeriyor', editor: anyLocked ? undefined : this.layerEditor(ids, layer) },
       { label: 'Renk', value: '', editor: anyLocked ? undefined : this.colorEditor(ids, color) },
+      { label: 'Sembol', value: '', editor: anyLocked ? undefined : this.symbolEditor(ents.every((e) => e.symbol === ents[0].symbol) ? ents[0].symbol : null) },
     ];
     const totals: PropRow[] = [];
     const f = this.ctx.format;

@@ -346,6 +346,14 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 - **Sağ:** üstte simge kutusu, tür başlığı ve açıklama; bölüm başlıkları ayar grupları gibidir. Satırlarda etiket üstte, denetim altta ve tam genişliktedir. Parametre kaynağı açılır listedir; girdi ya da çıktıya bağlıysa kenarı mavidir. Silme düğmeleri kırmızı yazılı hayalet düğmedir.
 - **Alt çubuk:** solda "Düzenle" (hayalet), ortada durum, sağda Kapat, "Kaydet ve çalıştır…" ve tek birincil "Kaydet". Kaydedilmemiş değişiklikle kapatırken durum yerini soruya bırakır: "Kaydetmeden kapat", "Vazgeç", "Kaydet ve kapat".
 
+### 7.14 Stil pencereleri (stil yöneticisi, sembol tasarımcısı, katman stili)
+
+- **Aile:** model tasarımcısıyla aynı: yan sütunlar `--c-panel-head`, çalışma alanları `--c-field`; semboller çizim alanının "kâğıt" renginde (`--canvas-bg`) çizilir, haritada nasıl görünecekse öyle. Amber yalnızca seçili kart, seçili katman satırı ve odak içindir.
+- **Stil yöneticisi:** 1240 px; üstte arama kutusu (simgeli), tür seçici ve sağda Yeni sembol, İçe aktar, Dışa aktar (küçük düğmeler). Sol ağaçta kaynaklar (Sistem kilit simgesiyle), sağda sayı (üçüncül, tabular). Kartlar 132 px'lik ızgara: resim ve en çok iki satır ad; seçili kart amber çerçeve. Aramada karta kaynak rozeti eklenir (Kitaplığım mavi, Proje yeşil). Sağ sütunda büyük önizleme ve altında geometri seçici, ad, tür ve kaynak rozeti ("Sistem · salt okunur"), alanlar (etiket üstte, üçüncül), eylem düğmeleri. Silme satır içinde kırmızı tonlu bir kutuda sorulur. Seçme kipinde tek birincil düğme "Seç"tir.
+- **Sembol tasarımcısı:** 1320 px, üç sütun (270 / önizleme / 360). Katman satırında kutu, tür (500) ve özet (üçüncül, tek satır); alt katmanlar 18 px içeride. Önizleme alanı kesikli olmayan ince çerçeveli kâğıttır; üst çubukta örnek geometri seçici ve yakınlaştırma ("1 mm = 4.0 px"). Form satırlarında etiket üstte, denetim altta; iki kısa alan yan yana (`sdf__pair`). "ƒ" düğmesi basılıyken amber tonludur; ifade alanı mono yazılır. Alt çubukta Ad ve Kategori alanları, durum, Vazgeç ve birincil Kaydet (satır içi kipte Uygula).
+- **Katman stili:** 980 px; üstte işleyici seçici ve nesne sayıları, altında seçilen türün paneli. Tablolar ince satır çizgili, sayılar sağa dayalı ve tabular. Sembol yuvası 64 × 36 px resim ve altında küçük ad; eksik kitaplık sembolünde kırmızı çerçeve. Kurallar kartlar halindedir, alt kurallar 22 px içeride; ifade hatası kuralın altında kırmızı yazılır. Alt çubukta durum (uygulanmamış değişiklik amber), Vazgeç, Uygula ve birincil Tamam.
+- **Üst üste pencere:** sembol seçici ve tasarımcı, açıldıkları pencerenin üstünde durur (`Dialog` `stack`); yalnızca en üstteki tuşları alır, kapanınca alttaki kaldığı yerden sürer.
+
 ### 7.13 Kontroller (genel)
 
 | Kontrol | Kural |

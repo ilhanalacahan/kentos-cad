@@ -17,7 +17,7 @@ import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
 import { registerDefaultKeybindings } from './keybindings';
 import { createProcessing, registerProcessingCommands } from './processing';
-import { createStyles } from './styles';
+import { createStyles, registerStyleCommands } from './styles';
 import { Formatter } from './format';
 import { applyUiScale } from './commands';
 import { createPreferences, createUiState, DraftingSettings, MessageLog } from './state';
@@ -77,6 +77,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     design: (id) => void import('../ui/processing/model/ModelDesigner').then((m) => m.openModelDesigner(ctx, id)),
     show: (tab) => shell?.showProcessing(tab),
   });
+  registerStyleCommands(ctx);
   registerDefaultKeybindings(ctx);
   commands.events.on('missing', ({ id }) => ctx.log.error(`Komut bulunamadı: ${id}`));
 

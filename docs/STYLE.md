@@ -190,16 +190,36 @@ LayerRenderer + Entity ─► resolve (hangi sembol takımı) ─► compile (se
 
 ## 7. Tasarımcılar
 
-- **Stil yöneticisi:** kitaplık ağacı (Sistem / Kullanıcı / Proje), arama ve etiketler, önizlemeli ızgara, kopyala, yeniden adlandır, taşı, sil (sistem hariç), içe/dışa aktar.
-- **Sembol tasarımcısı:** solda katman yığını (ekle, çoğalt, sırala, gizle), sağda seçilen katmanın özellikleri; ortada örnek geometrilerde (nokta, kırık çizgi, delikli alan) canlı önizleme; ölçek seçici; her özellikte "ifadeye bağla".
-- **Katman stili penceresi:** işleyici türü; kategorileri ve aralıkları veriden üret; kurallar ağacı; sembolleri kitaplıktan seç ya da yerinde düzenle.
-- **SVG editörü (kendi aracımız):** işaret ve desen varlıkları için: dikdörtgen, elips, çokgen, yol (Bezier), yazı, grup; dolgu/çizgi (param renkler), ızgara ve kenetleme, hizalama, döşeme önizlemesi; SVG dosyası içe alma; raster içe alma (desen için).
+Pencereler ilk açılışta yüklenir (`ui/style/`); komutlar Araçlar menüsünde, katman bağlam menüsünde ve öznitelik panelindeki "Sembol" satırındadır.
+
+- **Stil yöneticisi** (`style.manager`, `StyleManager.ts`):
+  - Solda kaynak ağacı: Sistem (kilit simgesi, salt okunur), Kitaplığım, Proje; her düğümde altındaki öğe sayısı. Kategori seçmek onu açar ve altındaki bütün öğeleri gösterir.
+  - Ortada önizlemeli ızgara: kartlar görünür oldukça çizilir (`Thumbs`, IntersectionObserver). Arama bütün kaynaklarda ad, kategori, etiket ve açıklamada yapılır (Türkçe harfler katlanır). Tür süzgeci: Tümü, Alan, Çizgi, İşaret, Çizim.
+  - Sağda seçilenin büyük önizlemesi (alan, adalı alan; düz, kırık, alan kenarı), türü ve kaynağı, düzenlenebilir alanları (ad, kategori yolu "A / B", kaynak, açıklama, etiketler; sistem öğesinde salt okunur) ve eylemler: Düzenle ya da Kopyasını düzenle (Kitaplığım'a kopyalayıp açar), Seçili nesnelere uygula, Kopyala (Kitaplığıma / Projeye), Dışa aktar, Sil (satır içi onayla; bir çizimi kullanan sembol sayısı söylenir).
+  - Üst çubukta Yeni sembol (alan/çizgi/işaret), İçe aktar (hedef kaynak ve çakışma kipi seçilir: kopya olarak al, üzerine yaz, atla) ve listedekileri Dışa aktar (`.kstil`). Kullanıcı ve proje kategorilerinde bağlam menüsü: yeni alt kategori, yeniden adlandır (satır içinde; F2), dışa aktar.
+  - **Seçme kipi:** katman stilinden ya da "Seçili nesnelere sembol ver…" komutundan açılınca pencere üstte durur, geometri türü önden seçilidir ve alttaki "Seç" düğmesi (ya da çift tık) sembolü verir.
+- **Sembol tasarımcısı** (`SymbolDesigner.ts`, `layerForms.ts`, `designerFields.ts`):
+  - Solda katman yığını: satırda görünürlük kutusu, tür ve tek satırlık özet. İşaret yerleştiren katmanların (çizgi boyunca işaret, desen, iç noktada işaret) kendi işaret katmanları altında girintili satırdır. Katman ekle, yukarı/aşağı, çoğalt, sil. Üstteki katman önce çizilir.
+  - Ortada canlı önizleme (örnek geometri seçici, yakınlaştırma, 1:1 = 96 dpi kâğıt boyu). Sağda seçili katmanın formu: türe göre alanlar ve "Genel" (birim, saydamlık, görünürlük). Her değişiklik önizlemeye hemen yansır, form yeniden kurulmaz (odak korunur).
+  - **"ƒ" düğmesi:** veriye bağlanabilen değerleri (renk, kalınlık, boyut, döndürme, metin, görünürlük) ifadeye çevirir; sabit değer ifade boş kalırsa kullanılır.
+  - Renk alanı: sistem renk seçici, hex yazımı (alfa korunur) ve tema jetonları (mürekkep, kâğıt, ön plan); "yok" seçilebilir. SVG çizimi dosyadan alınıp Kitaplığım'a eklenebilir (temizlenerek).
+  - Kendi geri alması vardır (Ctrl+Z / Ctrl+Y; bir alana bir saniye içinde yazılanlar tek adım). Kaydedilmemiş değişiklikle kapatırken alt çubuk sorar. Sistem sembolü doğrudan açılmaz; kopyası açılır.
+  - **Satır içi kip:** katman stilindeki bir sembol ("bu stilde") aynı tasarımcıda düzenlenir; "Uygula" sembolü stile geri verir, kitaplığa yazmaz.
+- **Katman stili** (`style.layerStyle`, `LayerStyleDialog.ts`, `rulesEditor.ts`, `symbolSlot.ts`):
+  - Üstte işleyici: Basit, Tek sembol, Kategorili, Aralıklı, Kurallar; her türün taslağı ayrı tutulur, türler arasında gidip gelmek iş kaybettirmez. Katmandaki alan, çizgi ve nokta sayıları yazar; semboller yalnızca katmanda bulunan geometri türleri için sorulur.
+  - **Sembol yuvası:** küçük resim ve adı ("Basit görünüş", "Bu stilde" ya da kitaplıktaki adı); tıklayınca kitaplıktan seç, burada düzenle (kitaplık sembolünün kopyası), Kitaplığıma kaydet, basit görünüşe dön.
+  - **Kategorili:** değer ifadesi (alan önerileriyle), "Değerlerden sınıfla" farklı değerleri nesne sayılarıyla getirir (var olan kategoriler korunur), düzenlenebilir değer ve etiket, "Diğer değerler".
+  - **Aralıklı:** sayı veren ifade, eşit aralık ya da eşit sayı, sınıf sayısı, renk rampası; alt sınır dahil, son sınıf üst sınırı da içerir.
+  - **Kurallar:** koşul (boş: hepsi), "değilse", ölçek aralığı (1:en yakın – 1:en uzak), alt kurallar; her kuralın koşulu sağlayan nesne sayısı ve ifade hatası canlıdır.
+  - Sınıflama saf ve testlidir (`style/classify.ts`: değerler, benzersiz değerler, eşit aralık/sayı, renk rampaları, geometriye göre basit semboller). Uygula haritada gösterir, Tamam uygulayıp kapatır. Katman stili değişikliği şimdilik geri alma geçmişine girmez.
+- **Nesne sembolü:** öznitelik panelinde "Sembol" satırı (Katman stiline göre / Kitaplıktan seç… / Katman stili…), `style.assign` ve `style.clearSymbol` komutları. Tek geri alma adımıdır; kilitli katmandaki nesneler atlanıp sayılır.
+- **SVG editörü (kendi aracımız, 4. aşama):** işaret ve desen varlıkları için: dikdörtgen, elips, çokgen, yol (Bezier), yazı, grup; dolgu/çizgi (param renkler), ızgara ve kenetleme, hizalama, döşeme önizlemesi; SVG dosyası içe alma; raster içe alma (desen için).
 
 ## 8. Aşamalar
 
 1. **Çekirdek (yapıldı):** sembol ve işleyici türleri, kitaplık (kaynaklar, ağaç, kopyala-silinemez, dışa/içe aktar), çözümleme, derleme (vuruş, dolgu, işaret ilkelleri), testler.
 2. **GPU (yapıldı):** kalın ve kesikli çizgiler, taramalar, işaret örnekleri (SDF), doku atlası (SVG, yazı, raster, desen); katmanlara ve nesnelere bağlama; ölçek aralıkları; iki arka uçta eşit çizim.
-3. **Stil yöneticisi ve sembol tasarımcısı**, katman stili penceresi.
+3. **Stil yöneticisi ve sembol tasarımcısı**, katman stili penceresi, nesneye sembol verme (yapıldı).
 4. **SVG editörü** ve raster desenler.
 5. **MPYY sistem kitaplığı:** EK-1a, 1c, 1ç, 1d'nin bütün gösterimleri; değişken metinli sembollerin öznitelik şablonları; lejant üretimi.
 6. **Paylaşma:** sunucu ile kitaplık paylaşımı ve kurum kitaplıkları.

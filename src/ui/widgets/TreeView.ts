@@ -8,6 +8,8 @@ export interface TreeAdapter<T> {
   setExpanded(node: T, expanded: boolean): void;
   /** Fill the row's content cell. */
   renderRow(node: T, row: HTMLElement): void;
+  /** Click or keyboard focus moved to a row. */
+  onSelect?(node: T): void;
   /** Double click / Enter. */
   onActivate?(node: T): void;
   /** Space. */
@@ -103,10 +105,18 @@ export class TreeView<T> {
   }
 
   focus(id: string, moveDom = true): void {
+    const changed = this.focusedId !== id;
     this.focusedId = id;
     for (const { node, row } of this.flat) row.setAttribute('aria-selected', String(this.adapter.id(node) === id));
     const hit = this.flat.find((f) => this.adapter.id(f.node) === id);
     if (hit && moveDom) hit.row.scrollIntoView({ block: 'nearest' });
+    if (hit && changed) this.adapter.onSelect?.(hit.node);
+  }
+
+  /** Marks a row selected without telling the adapter (the caller already knows). */
+  mark(id: string | null): void {
+    this.focusedId = id;
+    for (const { node, row } of this.flat) row.setAttribute('aria-selected', String(this.adapter.id(node) === id));
   }
 
   private onKey(e: KeyboardEvent): void {

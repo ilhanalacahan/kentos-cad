@@ -143,6 +143,11 @@ export class LayersPanel extends Panel {
           label: 'Kalınlık',
           items: () => LINE_WEIGHTS.map((w) => ({ label: `${w.toFixed(2)} mm`, radio: true, checked: n.style.lineWeight === w, run: () => layers.setStyle(n.id, { lineWeight: w }) })),
         },
+        {
+          label: n.style.renderer ? 'Katman stili… (özel)' : 'Katman stili…',
+          icon: 'layerStyle',
+          run: () => void import('../style/LayerStyleDialog').then((m) => m.openLayerStyle(this.ctx, n.id)),
+        },
         { kind: 'separator' },
       );
     }

@@ -619,6 +619,45 @@ try {
   await b.eval(`window.kentos.settings.grid.set(${gridWasOn})`);
   await b.eval(`(() => { const k = window.kentos; k.doc.layers.setStyle('parsel', { renderer: undefined }); k.doc.update(${axis}, { symbol: undefined }); })()`);
 
+  // Style windows: the manager lists the library, the designer saves an edited
+  // copy of a system symbol, the layer style window classifies and applies.
+  {
+    const center = (sel, text = '') =>
+      b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.trim().includes(${JSON.stringify(text)})); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const press = async (sel, text) => {
+      const p = await center(sel, text);
+      if (!p) throw new Error(`bulunamadı: ${sel} ${text ?? ''}`);
+      await b.click(...p);
+      await sleep(250);
+    };
+    await b.eval(`window.kentos.commands.execute('style.manager')`);
+    await sleep(500);
+    await press('.tree__row', 'Temel');
+    await press('.tree__row', 'Alanlar');
+    await press('.scard', 'Tarama 45');
+    check('style manager: tree, pictures and details', (await b.eval(`document.querySelectorAll('.dialog--styles .scard canvas').length`)) >= 5 && !!(await center('.smgr__actions .btn', 'Kopyasını düzenle')));
+    await press('.smgr__actions .btn', 'Kopyasını düzenle');
+    await sleep(600);
+    await b.eval(`(() => { const lab = [...document.querySelectorAll('.sdf__label')].find((l) => l.textContent === 'Açı'); const inp = lab.parentElement.querySelector('input'); inp.focus(); inp.select(); })()`);
+    await b.type('135');
+    await press('.dialog--sdesign .btn--primary', 'Kaydet');
+    const copy = await b.eval(`window.kentos.styles.library.items('user').find((i) => i.name.startsWith('Tarama 45'))`);
+    check('symbol designer saves an edited copy in the user library', copy?.symbol.layers[0].angle === 135, JSON.stringify(copy?.symbol.layers[0]));
+    await b.key('Escape');
+    await sleep(200);
+    await b.key('Escape');
+    await sleep(200);
+    await b.eval(`window.kentos.doc.layers.setActive('parsel')`);
+    await b.eval(`window.kentos.commands.execute('style.layerStyle')`);
+    await sleep(500);
+    await press('.seg__opt', 'Kategorili');
+    await press('.lsty__panel .btn', 'Değerlerden sınıfla');
+    await press('.dialog--lstyle .btn--primary', 'Tamam');
+    const r = await b.eval(`window.kentos.doc.layers.get('parsel').style.renderer`);
+    check('layer style window classifies by value and applies', r?.type === 'categorized' && r.categories.length > 1, `${r?.type} ${r?.categories?.length}`);
+    await b.eval(`(() => { const k = window.kentos; k.doc.layers.setStyle('parsel', { renderer: undefined }); k.styles.library.remove(${JSON.stringify(copy?.id ?? '')}); k.doc.layers.setActive('taslak'); })()`);
+  }
+
   // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step
   {
     const center = (sel, text = '') =>
