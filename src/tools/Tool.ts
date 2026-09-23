@@ -61,7 +61,7 @@ export interface Tool {
   draw?(g: CanvasRenderingContext2D, view: ViewTransform): void;
 }
 
-export type ToolGroup = 'select' | 'draw' | 'annotate' | 'transform' | 'modify' | 'map';
+export type ToolGroup = 'select' | 'draw' | 'annotate' | 'transform' | 'modify' | 'area' | 'map';
 
 /** Short on purpose: these are the toolbox section headings. */
 export const TOOL_GROUP_LABEL: Record<ToolGroup, string> = {
@@ -70,6 +70,7 @@ export const TOOL_GROUP_LABEL: Record<ToolGroup, string> = {
   annotate: 'Açıklama',
   transform: 'Dönüştür',
   modify: 'Düzenle',
+  area: 'Alan',
   map: 'Harita',
 };
 

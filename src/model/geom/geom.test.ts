@@ -134,6 +134,13 @@ describe('shoelace on survey coordinates', () => {
       { x: E + 20.123, y: N + 30.456 },
       { x: E, y: N + 30.456 },
     ];
-    expect(signedArea(ring)).toBeCloseTo(20.123 * 30.456, 9);
+    // Compared with the sides as stored (E + 20.123 is not exactly 20.123 away from E).
+    const w = ring[1].x - ring[0].x;
+    const h = ring[2].y - ring[1].y;
+    expect(signedArea(ring)).toBeCloseTo(w * h, 9);
+    // Raw shoelace on the absolute values for comparison: visibly off.
+    let raw = 0;
+    for (let i = 0, j = 3; i < 4; j = i++) raw += ring[j].x * ring[i].y - ring[i].x * ring[j].y;
+    expect(Math.abs(raw / 2 - w * h)).toBeGreaterThan(1e-9);
   });
 });

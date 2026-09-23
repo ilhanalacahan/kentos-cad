@@ -12,7 +12,8 @@ const DIRECTION_GRIP = 10;
 
 /**
  * Grip points of an entity, in a stable order that `moveGrip` understands.
- *   line: a, b · path: vertices, then one mid grip per segment
+ *   line: a, b · path: vertices, then one mid grip per segment, then
+ *   the vertices of each hole (polygon)
  *   circle: centre, 4 quadrants · arc: start, mid, end, centre
  *   point/text: insertion point · spline: fit points
  *   dimension: a, b, dimension-line middle · hatch: ring
@@ -29,7 +30,7 @@ export function entityGrips(e: Entity): Vec2[] {
       const n = e.pts.length;
       const mids: Vec2[] = [];
       for (let i = 0; i < (e.kind === 'polygon' ? n : n - 1); i++) mids.push(segmentMid(e.pts[i], e.pts[(i + 1) % n], bulgeAt(e.bulges, i)));
-      return [...e.pts, ...mids];
+      return [...e.pts, ...mids, ...(e.kind === 'polygon' ? (e.holes ?? []).flatMap((h) => h.pts) : [])];
     }
     case 'circle':
       return [e.c, { x: e.c.x + e.r, y: e.c.y }, { x: e.c.x, y: e.c.y + e.r }, { x: e.c.x - e.r, y: e.c.y }, { x: e.c.x, y: e.c.y - e.r }];
@@ -63,6 +64,11 @@ export function moveGrip<E extends Entity>(e: E, index: number, p: Vec2): E | nu
       return index === 0 ? { ...e, a: p } : { ...e, b: p };
     case 'polyline':
     case 'polygon': {
+      const hole = holeGrip(e, index);
+      if (hole) {
+        const holes = (e.holes ?? []).map((h, k) => (k === hole.hole ? { ...h, pts: h.pts.map((q, i) => (i === hole.vertex ? p : q)) } : h));
+        return { ...e, holes };
+      }
       const seg = midGripSegment(e, index);
       if (seg === null) return { ...e, pts: e.pts.map((q, i) => (i === index ? p : q)) };
       const n = e.pts.length;
@@ -126,8 +132,23 @@ export function moveGrip<E extends Entity>(e: E, index: number, p: Vec2): E | nu
   }
 }
 
+const segmentCount = (e: { kind: string; pts: Vec2[] }) => (e.kind === 'polygon' ? e.pts.length : e.pts.length - 1);
+
 /** Segment index of a path's mid grip (grip indices after the vertices), else null. */
 export function midGripSegment(e: Entity, index: number): number | null {
   if (e.kind !== 'polyline' && e.kind !== 'polygon') return null;
-  return index >= e.pts.length ? index - e.pts.length : null;
+  const n = e.pts.length;
+  return index >= n && index < n + segmentCount(e) ? index - n : null;
+}
+
+/** Hole and vertex of a polygon's hole grip (after the outer vertices and mid grips), else null. */
+export function holeGrip(e: Entity, index: number): { hole: number; vertex: number } | null {
+  if (e.kind !== 'polygon' || !e.holes) return null;
+  let i = index - 2 * e.pts.length;
+  if (i < 0) return null;
+  for (let hole = 0; hole < e.holes.length; hole++) {
+    if (i < e.holes[hole].pts.length) return { hole, vertex: i };
+    i -= e.holes[hole].pts.length;
+  }
+  return null;
 }

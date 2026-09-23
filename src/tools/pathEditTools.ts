@@ -1,6 +1,8 @@
-import { entityGeometry, type Entity } from '../model/entities';
+import { entityGeometry, type Entity, type PolylineEntity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
+import { bulgePathEdges } from '../model/geom/bulge';
 import { closestParam, ellipsePoint } from '../model/geom/ellipse';
+import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { breakEntity } from '../model/ops/break';
 import { divisionParams, nearestS, pathOf, pointAtS, type Path } from '../model/ops/path';
 import { insertVertex, nearestSegment, removeVertex } from '../model/ops/vertex';
@@ -42,6 +44,7 @@ export class BreakTool extends EdgePickTool {
       // The object under the cursor; the (snapped) click is the first break point.
       const e = this.ctx.view.pickEdge(p.screen, this.editable) ?? (p.snap ? this.snappedEntity(p.snap.entityId) : null);
       if (!e) return this.ctx.log.warn('Kırılacak düzenlenebilir bir çizgi, çoklu çizgi, yay ya da daireye tıklayın.');
+      if (this.refuseHoled(e, 'kırma')) return;
       this.target = { entity: e, p1: p.world };
       this.ctx.selection.hover.set(null);
       return this.refresh();
@@ -247,6 +250,7 @@ export class VertexTool extends EdgePickTool {
     if (p.button !== 0) return;
     const e = this.ctx.view.pickEdge(p.screen, this.editable);
     if (!e) return this.ctx.log.warn('Düzenlenebilir bir çizgi, çoklu çizgi ya da kapalı alana tıklayın.');
+    if (e.kind === 'polygon' && nearHole(e, p.raw)) return this.ctx.log.warn('İç halkanın köşeleri tutamaçla taşınır; köşe eklemek ya da silmek için alanı Patlat ile halkalarına ayırın.');
     const a = this.plan(e, p);
     const r = a.remove !== null ? removeVertex(e, a.remove) : insertVertex(e, a.seg, a.at);
     if ('error' in r) return this.ctx.log.warn(r.error);
@@ -283,4 +287,11 @@ export class VertexTool extends EdgePickTool {
     g.restore();
     drawTag(g, s, [a.remove !== null ? 'Köşeyi sil' : 'Köşe ekle'], a.remove !== null ? pal.danger : pal.accent, pal.labelHalo);
   }
+}
+
+/** Whether p is nearer to one of a polygon's holes than to its outer ring. */
+function nearHole(e: PolylineEntity, p: Vec2): boolean {
+  if (!e.holes?.length) return false;
+  const d = (edges: Edge[]) => edges.reduce((m, ed) => Math.min(m, closestOnEdge(ed, p).d), Infinity);
+  return d(e.holes.flatMap((h) => bulgePathEdges(h.pts, h.bulges, true))) < d(bulgePathEdges(e.pts, e.bulges, true));
 }

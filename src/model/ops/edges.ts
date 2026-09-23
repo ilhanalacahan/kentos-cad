@@ -13,8 +13,9 @@ export function entityEdges(e: Entity): Edge[] {
     case 'line':
       return [{ kind: 'seg', a: e.a, b: e.b }];
     case 'polyline':
+      return bulgePathEdges(e.pts, e.bulges, false);
     case 'polygon':
-      return bulgePathEdges(e.pts, e.bulges, e.kind === 'polygon');
+      return [...bulgePathEdges(e.pts, e.bulges, true), ...(e.holes ?? []).flatMap((h) => bulgePathEdges(h.pts, h.bulges, true))];
     case 'spline':
       // The tessellated curve already ends on its first point when closed.
       return pathEdges(catmullRom(e.pts, e.closed), false);

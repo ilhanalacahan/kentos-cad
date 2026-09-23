@@ -20,10 +20,14 @@ export function stretchEntity(e: Entity, r: Bounds, dx: number, dy: number): Ent
     case 'line':
       return any([geom.a, geom.b]) ? { ...geom, a: mv(geom.a), b: mv(geom.b) } : null;
     case 'polyline':
-    case 'polygon':
     case 'spline':
       // Arc segments keep their bulge, so they bend with their moved ends.
       return any(geom.pts) ? { ...geom, pts: geom.pts.map(mv) } : null;
+    case 'polygon': {
+      const holes = geom.holes ?? [];
+      if (!any(geom.pts) && !holes.some((h) => any(h.pts))) return null;
+      return { ...geom, pts: geom.pts.map(mv), ...(geom.holes && { holes: holes.map((h) => ({ ...h, pts: h.pts.map(mv) })) }) };
+    }
     case 'hatch':
       return any(geom.ring) ? { ...geom, ring: geom.ring.map(mv) } : null;
     case 'dimension':

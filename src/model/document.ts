@@ -134,6 +134,8 @@ export class CadDocument {
     const before = this.entities.get(id);
     if (!before) return;
     const after = { ...before, ...patch, id } as Entity;
+    // Holes belong to polygons only: trimming or breaking one opens it into a polyline.
+    if (after.kind !== 'polygon' && 'holes' in after) delete (after as { holes?: unknown }).holes;
     this.record({ type: 'update', before, after }, 'Değiştir');
   }
 

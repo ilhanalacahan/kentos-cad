@@ -1,7 +1,7 @@
 import { apply, applyLinear, isReflection, lengthScale, translation, type Affine } from '../geom/affine';
 import { arcEnd, arcStart, normAngle } from '../geom/arc';
 import { isFullEllipse } from '../geom/ellipse';
-import type { Entity } from '../entities';
+import type { Entity, RingGeometry } from '../entities';
 
 const angleOf = (c: { x: number; y: number }, p: { x: number; y: number }) => normAngle(Math.atan2(p.y - c.y, p.x - c.x));
 
@@ -19,8 +19,11 @@ export function transformEntity<E extends Entity>(e: E, m: Affine): E {
       return { ...e, a: apply(m, e.a), b: apply(m, e.b) };
     case 'polyline':
     case 'polygon':
-      // A reflection turns every arc segment the other way.
-      return { ...e, pts: e.pts.map((p) => apply(m, p)), ...(e.bulges && { bulges: isReflection(m) ? e.bulges.map((b) => -b) : [...e.bulges] }) };
+      return {
+        ...e,
+        ...transformRing(e, m),
+        ...(e.kind === 'polygon' && e.holes && { holes: e.holes.map((h) => transformRing(h, m)) }),
+      };
     case 'circle':
       return { ...e, c: apply(m, e.c), r: e.r * s };
     case 'arc': {
@@ -65,6 +68,12 @@ export function transformEntity<E extends Entity>(e: E, m: Affine): E {
       return { ...e, p: apply(m, e.p), rotation: rot, height: e.height * s };
     }
   }
+}
+
+/** A ring's vertices transformed; a reflection turns every arc segment the other way. */
+function transformRing(r: RingGeometry, m: Affine): RingGeometry {
+  const pts = r.pts.map((p) => apply(m, p));
+  return r.bulges ? { pts, bulges: isReflection(m) ? r.bulges.map((b) => -b) : [...r.bulges] } : { pts };
 }
 
 export const translateEntity = <E extends Entity>(e: E, dx: number, dy: number): E => transformEntity(e, translation(dx, dy));

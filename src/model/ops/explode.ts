@@ -1,4 +1,5 @@
 import type { Entity, EntityGeometry } from '../entities';
+import type { Vec2 } from '../geometry';
 import { normAngle } from '../geom/arc';
 import { bulgeArc, bulgeAt } from '../geom/bulge';
 import { layoutDimension } from '../geom/dimension';
@@ -9,7 +10,7 @@ export type ExplodeResult = { pieces: EntityGeometry[] } | { error: string };
 
 /**
  * Breaks a compound entity into simple ones:
- *   polyline / polygon → lines and arcs (one per segment)
+ *   polyline / polygon → lines and arcs (one per segment, holes included)
  *   spline → polyline through its tessellated curve (so it can be trimmed)
  *   dimension → lines and the value text · patterned hatch → lines
  * `valueText` renders a dimension's measured length (project units).
@@ -18,21 +19,9 @@ export function explodeEntity(e: Entity, valueText: (length: number) => string):
   switch (e.kind) {
     case 'polyline':
     case 'polygon': {
-      const pieces: EntityGeometry[] = [];
-      const n = e.pts.length;
-      for (let i = 0; i < (e.kind === 'polygon' ? n : n - 1); i++) {
-        const a = e.pts[i];
-        const b = e.pts[(i + 1) % n];
-        if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-12) continue;
-        const arc = bulgeArc(a, b, bulgeAt(e.bulges, i));
-        if (!arc) pieces.push({ kind: 'line', a, b });
-        else {
-          // Arc entities are counter-clockwise; a clockwise segment swaps its ends.
-          const end = arc.a0 + arc.sweep;
-          const [a0, a1] = arc.sweep > 0 ? [arc.a0, end] : [end, arc.a0];
-          pieces.push({ kind: 'arc', c: arc.c, r: arc.r, a0: normAngle(a0), a1: normAngle(a1) });
-        }
-      }
+      const closed = e.kind === 'polygon';
+      // A polygon's holes come apart too.
+      const pieces = [e, ...(closed ? (e.holes ?? []) : [])].flatMap((r) => segmentPieces(r.pts, r.bulges, closed));
       return pieces.length ? { pieces } : { error: 'Patlatılacak bir kenar yok.' };
     }
     case 'spline': {
@@ -63,4 +52,24 @@ export function explodeEntity(e: Entity, valueText: (length: number) => string):
     default:
       return { error: 'Bu nesne zaten temel bir nesne; patlatılacak bir şey yok.' };
   }
+}
+
+/** Lines and counter-clockwise arcs, one per segment of a bulged path. */
+function segmentPieces(pts: readonly Vec2[], bulges: readonly number[] | undefined, closed: boolean): EntityGeometry[] {
+  const pieces: EntityGeometry[] = [];
+  const n = pts.length;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % n];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-12) continue;
+    const arc = bulgeArc(a, b, bulgeAt(bulges, i));
+    if (!arc) pieces.push({ kind: 'line', a, b });
+    else {
+      // Arc entities are counter-clockwise; a clockwise segment swaps its ends.
+      const end = arc.a0 + arc.sweep;
+      const [a0, a1] = arc.sweep > 0 ? [arc.a0, end] : [end, arc.a0];
+      pieces.push({ kind: 'arc', c: arc.c, r: arc.r, a0: normAngle(a0), a1: normAngle(a1) });
+    }
+  }
+  return pieces;
 }

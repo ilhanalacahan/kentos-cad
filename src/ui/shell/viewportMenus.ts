@@ -3,7 +3,7 @@ import type { AppContext } from '../../app/context';
 import type { Disposable } from '../../core/disposable';
 import type { Entity, EntityGeometry, PolylineEntity } from '../../model/entities';
 import { bulgeAt, bulgeRingArea, isArcBulge, segmentMid } from '../../model/geom/bulge';
-import { midGripSegment } from '../../model/ops/grips';
+import { holeGrip, midGripSegment } from '../../model/ops/grips';
 import { insertVertex, removeVertex } from '../../model/ops/vertex';
 import { SNAP_LABEL, type SnapKind } from '../../viewport/picking';
 import type { Vec2 } from '../../model/geometry';
@@ -106,7 +106,8 @@ function idleItems(ctx: AppContext): MenuItem[] {
 function gripItems(ctx: AppContext, screen: Vec2): MenuItem[] {
   const hit = ctx.view.gripAt(screen);
   const e = hit && ctx.doc.get(hit.id);
-  if (!hit || !e || (e.kind !== 'polyline' && e.kind !== 'polygon')) return [];
+  // Hole vertices only move by dragging; editing a hole's shape needs Patlat.
+  if (!hit || !e || (e.kind !== 'polyline' && e.kind !== 'polygon') || holeGrip(e, hit.index)) return [];
   const seg = midGripSegment(e, hit.index);
   const apply = (label: string, r: { geometry: EntityGeometry } | { error: string }) => {
     if ('error' in r) return ctx.log.warn(r.error);

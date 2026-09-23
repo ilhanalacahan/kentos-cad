@@ -49,6 +49,16 @@ export abstract class EdgePickTool implements Tool {
     this.ctx.view.requestOverlay();
   }
 
+  /**
+   * Cutting open a polygon with holes would lose the holes; such tools say
+   * so instead. Returns true when `e` was refused.
+   */
+  protected refuseHoled(e: Entity, action: string): boolean {
+    if (e.kind !== 'polygon' || !e.holes?.length) return false;
+    this.ctx.log.warn(`Adalı alanda ${action} yapılamaz; iç halkalar kaybolurdu. Önce Patlat ile halkalarına ayırın ya da Alan böl kullanın.`);
+    return true;
+  }
+
   /** Common attributes carried over to pieces of an edited entity. */
   protected inherit(e: Entity, geom: EntityGeometry, keepData: boolean): NewEntity {
     return { ...geom, layerId: e.layerId, color: e.color, attrs: keepData ? { ...e.attrs } : {}, label: keepData ? e.label : undefined } as NewEntity;
@@ -186,6 +196,7 @@ export class TrimTool extends EdgePickTool {
     if (p.button !== 0) return;
     const e = this.ctx.view.pickEdge(p.screen, this.editable);
     if (!e) return this.ctx.log.warn('Budanacak düzenlenebilir bir kenara tıklayın.');
+    if (this.refuseHoled(e, 'budama')) return;
     const r = this.result(e, p.raw);
     if ('error' in r) return this.ctx.log.warn(r.error);
     this.replace('Buda', e, r.pieces);
@@ -193,7 +204,7 @@ export class TrimTool extends EdgePickTool {
   }
 
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (!this.hover) return;
+    if (!this.hover || (this.hover.entity.kind === 'polygon' && this.hover.entity.holes?.length)) return;
     const pal = this.ctx.view.palette;
     const r = this.result(this.hover.entity, this.hover.world);
     if ('error' in r) return;

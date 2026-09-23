@@ -1,4 +1,4 @@
-import { centroid, emptyBounds, extendBounds, pathLength, signedArea, type Bounds, type Vec2 } from './geometry';
+import { centroid, emptyBounds, extendBounds, pathLength, pointInPolygon, signedArea, type Bounds, type Vec2 } from './geometry';
 import { arcEnd, arcLength, arcMid, arcStart, TAU, tessellateArc } from './geom/arc';
 import { bulgePathLength, bulgePathOutline, bulgeRingArea, hasBulges } from './geom/bulge';
 import { ellipseArea, ellipseLength, ellipsePoint, isFullEllipse, quadrantParams, tessellateEllipse } from './geom/ellipse';
@@ -44,6 +44,18 @@ export interface PolylineEntity extends EntityBase {
    * (the closing segment for a polygon), positive counter-clockwise.
    * Absent or all zero means straight segments only (DXF LWPOLYLINE bulge).
    */
+  bulges?: number[];
+  /**
+   * Holes of a polygon ("adalı alan"): closed rings in the same vertex +
+   * bulge form, lying inside the outer ring. Only polygons carry them;
+   * CadDocument drops the field when an edit turns a polygon into
+   * something else. Area, edges, picking and fills all respect them.
+   */
+  holes?: RingGeometry[];
+}
+/** A closed ring of vertices with DXF bulges (outer boundary or hole). */
+export interface RingGeometry {
+  pts: Vec2[];
   bulges?: number[];
 }
 export interface CircleEntity extends EntityBase {
@@ -173,8 +185,9 @@ export function entityVertices(e: EntityGeometry): Vec2[] {
     case 'line':
       return [e.a, e.b];
     case 'polyline':
-    case 'polygon':
       return e.pts;
+    case 'polygon':
+      return e.holes?.length ? [...e.pts, ...e.holes.flatMap((h) => h.pts)] : e.pts;
     case 'circle':
       return [e.c, { x: e.c.x + e.r, y: e.c.y }, { x: e.c.x, y: e.c.y + e.r }, { x: e.c.x - e.r, y: e.c.y }, { x: e.c.x, y: e.c.y - e.r }];
     case 'arc':
@@ -223,7 +236,15 @@ export function entityOutline(e: EntityGeometry, segments = 72): Vec2[] {
 }
 
 /** Closed ring of a polygon, arcs tessellated — for fills, hit tests and hatching. */
-export const polygonRing = (e: { pts: Vec2[]; bulges?: number[] }): Vec2[] => (hasBulges(e.bulges) ? bulgePathOutline(e.pts, e.bulges, true) : e.pts);
+export const polygonRing = (e: RingGeometry): Vec2[] => (hasBulges(e.bulges) ? bulgePathOutline(e.pts, e.bulges, true) : e.pts);
+
+/** Hole rings of a polygon, arcs tessellated (empty for anything else). */
+export const polygonHoles = (e: EntityGeometry): Vec2[][] => (e.kind === 'polygon' && e.holes ? e.holes.map(polygonRing) : []);
+
+/** Whether p is inside a polygon's outer ring but not inside one of its holes (tessellated test). */
+export function insidePolygon(e: Extract<EntityGeometry, { kind: 'polyline' | 'polygon' }>, p: Vec2): boolean {
+  return pointInPolygon(p, polygonRing(e)) && !(e.holes ?? []).some((h) => pointInPolygon(p, polygonRing(h)));
+}
 
 /**
  * Approximate rotated box of a text entity (Barlow averages ~0.55 em per
@@ -298,7 +319,8 @@ export function entityLength(e: Entity): number | null {
       return pathLength([e.a, e.b]);
     case 'polyline':
     case 'polygon':
-      return bulgePathLength(e.pts, e.bulges, e.kind === 'polygon');
+      // A polygon's perimeter includes its holes (as in GIS).
+      return bulgePathLength(e.pts, e.bulges, e.kind === 'polygon') + (e.holes ?? []).reduce((s, h) => s + bulgePathLength(h.pts, h.bulges, true), 0);
     case 'circle':
       return 2 * Math.PI * e.r;
     case 'arc':
@@ -315,7 +337,7 @@ export function entityLength(e: Entity): number | null {
 }
 
 export function entityArea(e: Entity): number | null {
-  if (e.kind === 'polygon') return Math.abs(bulgeRingArea(e.pts, e.bulges));
+  if (e.kind === 'polygon') return Math.abs(bulgeRingArea(e.pts, e.bulges)) - (e.holes ?? []).reduce((s, h) => s + Math.abs(bulgeRingArea(h.pts, h.bulges)), 0);
   if (e.kind === 'circle') return Math.PI * e.r * e.r;
   if (e.kind === 'ellipse' && isFullEllipse(e)) return ellipseArea(e);
   if (e.kind === 'hatch') return Math.abs(signedArea(e.ring));

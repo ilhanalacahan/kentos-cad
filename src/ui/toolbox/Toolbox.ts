@@ -8,7 +8,9 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { tooltip } from '../widgets/tooltip';
 
-const GROUP_ORDER: ToolGroup[] = ['select', 'draw', 'annotate', 'transform', 'modify', 'map'];
+const GROUP_ORDER: ToolGroup[] = ['select', 'draw', 'annotate', 'transform', 'modify', 'area', 'map'];
+/** Widest the toolbox grows before it would rather scroll. */
+const MAX_COLUMNS = 6;
 const EDGE_SNAP = 14;
 const MARGIN = 8;
 
@@ -17,7 +19,8 @@ const MARGIN = 8;
  * that fold away with a click on their title. Drag by the grip, it sticks
  * to viewport edges; it can also be docked into the left column. Every
  * button shows its shortcut on a key cap, and its tooltip explains the
- * mouse steps.
+ * mouse steps. When the chosen column count does not fit the height, the
+ * toolbox widens instead of scrolling, so no tool is ever out of sight.
  */
 export class Toolbox extends Component {
   readonly el: HTMLElement;
@@ -25,6 +28,7 @@ export class Toolbox extends Component {
   private readonly floatHost: HTMLElement;
   private readonly dockHost: HTMLElement;
   private readonly buttons = new Map<string, HTMLButtonElement>();
+  private readonly body: HTMLElement;
 
   constructor(ctx: AppContext, hosts: { float: HTMLElement; dock: HTMLElement }) {
     super();
@@ -36,7 +40,7 @@ export class Toolbox extends Component {
     const grip = h('div', { class: 'toolbox__grip', title: 'Taşımak için sürükleyin' }, icon('grip', 14));
     const colsBtn = h('button', { class: 'toolbox__hbtn', type: 'button', 'aria-label': 'Sütun sayısını değiştir' }, icon('columns', 14));
     const dockBtn = h('button', { class: 'toolbox__hbtn', type: 'button', 'aria-label': 'Kenara sabitle' }, icon('dock', 14));
-    const body = h('div', { class: 'toolbox__body' });
+    const body = (this.body = h('div', { class: 'toolbox__body' }));
 
     const groups = ctx.tools.byGroup();
     for (const g of GROUP_ORDER) {
@@ -64,12 +68,22 @@ export class Toolbox extends Component {
     this.d.add(tooltip(colsBtn, () => ({ title: ui.toolboxColumns.value === 3 ? 'İki sütun' : 'Üç sütun' }), 'right'));
     this.d.add(tooltip(dockBtn, () => ({ title: ui.toolboxDocked.value ? 'Serbest bırak' : 'Kenara sabitle', shortcut: undefined }), 'right'));
     // Older layouts stored 1 or 2 columns; everything below three is two.
-    this.d.add(ui.toolboxColumns.subscribe((c) => (this.el.dataset.columns = c === 3 ? '3' : '2'), true));
+    this.d.add(
+      ui.toolboxColumns.subscribe((c) => {
+        this.el.dataset.columns = c === 3 ? '3' : '2';
+        this.fit();
+      }, true),
+    );
+    this.d.add(ui.toolboxFolded.subscribe(() => this.fit()));
     this.d.add(watchAll([ui.toolboxDocked, ui.toolboxVisible], () => this.place()));
     this.place();
     this.bindDrag(grip);
-    const ro = new ResizeObserver(() => this.clamp());
+    const ro = new ResizeObserver(() => {
+      this.fit();
+      this.clamp();
+    });
     ro.observe(this.floatHost);
+    ro.observe(this.dockHost);
     this.d.add(() => ro.disconnect());
   }
 
@@ -134,6 +148,18 @@ export class Toolbox extends Component {
     return b;
   }
 
+  /** Chosen column count, widened one column at a time until every tool fits the height. */
+  private fit(): void {
+    if (!this.el.isConnected || this.el.hidden) return;
+    const base = this.ctx.ui.toolboxColumns.value === 3 ? 3 : 2;
+    let cols = base;
+    this.el.style.setProperty('--cols', String(cols));
+    while (cols < MAX_COLUMNS && this.body.scrollHeight > this.body.clientHeight + 1) {
+      cols++;
+      this.el.style.setProperty('--cols', String(cols));
+    }
+  }
+
   private place(): void {
     const { ui } = this.ctx;
     this.el.hidden = !ui.toolboxVisible.value;
@@ -145,8 +171,9 @@ export class Toolbox extends Component {
       this.el.style.transform = '';
     } else {
       this.floatHost.append(this.el);
-      this.moveTo(ui.toolboxX.value, ui.toolboxY.value);
     }
+    this.fit();
+    if (!docked) this.moveTo(ui.toolboxX.value, ui.toolboxY.value);
   }
 
   private moveTo(x: number, y: number): void {

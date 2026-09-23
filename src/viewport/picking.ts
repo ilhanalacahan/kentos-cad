@@ -1,5 +1,5 @@
 import type { CadDocument } from '../model/document';
-import { entityBounds, entityOutline, entityVertices, isClosedOutline, polygonRing, textBox, type Entity } from '../model/entities';
+import { entityArea, entityBounds, entityOutline, entityVertices, insidePolygon, isClosedOutline, polygonHoles, polygonRing, textBox, type Entity } from '../model/entities';
 import { pointInPolygon, signedArea, type Bounds, type Vec2 } from '../model/geometry';
 import { arcEnd, arcMid, arcStart } from '../model/geom/arc';
 import { bulgeArc, bulgeAt, segmentMid } from '../model/geom/bulge';
@@ -124,8 +124,9 @@ export class PickIndex {
         // Slightly smaller than its boundary so the hatch wins over the parcel it fills.
         const a = Math.abs(signedArea(e.ring)) * 0.999;
         if (!area || a < area.a) area = { e, a };
-      } else if (e.kind === 'polygon' && pointInPolygon(p, polygonRing(e))) {
-        const a = Math.abs(signedArea(polygonRing(e)));
+      } else if (e.kind === 'polygon' && insidePolygon(e, p)) {
+        // Net area: a parcel with a building hole still loses to the building.
+        const a = entityArea(e) ?? 0;
         if (!area || a < area.a) area = { e, a };
       } else if (e.kind === 'circle' && Math.hypot(p.x - e.c.x, p.y - e.c.y) < e.r) {
         const a = Math.PI * e.r * e.r;
@@ -157,7 +158,7 @@ export class PickIndex {
     let best: { entity: Entity; ring: Vec2[]; a: number } | null = null;
     for (const e of this.near(p, 0)) {
       let ring: Vec2[] | null = null;
-      if (e.kind === 'polygon') ring = polygonRing(e);
+      if (e.kind === 'polygon') ring = insidePolygon(e, p) ? polygonRing(e) : null;
       else if (e.kind === 'circle') ring = entityOutline(e, 96);
       else if (e.kind === 'ellipse' && isFullEllipse(e)) ring = tessellateEllipse(e, 256);
       else if (e.kind === 'spline' && e.closed) ring = entityOutline(e).slice(0, -1);
@@ -359,8 +360,10 @@ function touchesRect(e: Entity, r: Bounds): boolean {
   const pts = entityOutline(e, 32);
   const inR = (q: Vec2) => q.x >= r.minX && q.x <= r.maxX && q.y >= r.minY && q.y <= r.maxY;
   if (pts.some(inR)) return true;
-  const ring = e.kind === 'polygon' ? polygonRing(e) : e.kind === 'hatch' ? e.ring : null;
-  if (ring && pointInPolygon({ x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 }, ring)) return true;
+  const centre = { x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 };
+  if (e.kind === 'polygon' ? insidePolygon(e, centre) : e.kind === 'hatch' && pointInPolygon(centre, e.ring)) return true;
+  // A window crossing a hole's boundary touches the polygon.
+  for (const h of polygonHoles(e)) for (let i = 0; i < h.length; i++) for (let j = 0; j < 4; j++) if (segSeg(h[i], h[(i + 1) % h.length], rectCorner(r, j), rectCorner(r, j + 1))) return true;
   const rect: Vec2[] = [
     { x: r.minX, y: r.minY },
     { x: r.maxX, y: r.minY },
@@ -371,4 +374,9 @@ function touchesRect(e: Entity, r: Bounds): boolean {
   const n = closed ? pts.length : pts.length - 1;
   for (let i = 0; i < n; i++) for (let j = 0; j < 4; j++) if (segSeg(pts[i], pts[(i + 1) % pts.length], rect[j], rect[(j + 1) % 4])) return true;
   return false;
+}
+
+function rectCorner(r: Bounds, i: number): Vec2 {
+  const k = ((i % 4) + 4) % 4;
+  return { x: k === 1 || k === 2 ? r.maxX : r.minX, y: k >= 2 ? r.maxY : r.minY };
 }
