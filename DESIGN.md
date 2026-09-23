@@ -279,7 +279,7 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 
 ### 7.7 Durum çubuğu
 
-- Hücreler: Y/X imleç koordinatı (tabular) │ son mesaj (5–9 sn görünür) │ seçim sayısı (amber) │ çizim yardımcıları │ ekran ölçeği │ koordinat sistemi │ çizim motoru.
+- Hücreler: Y/X imleç koordinatı (tabular) │ son mesaj (5–9 sn görünür) │ seçim sayısı (amber) │ çizim yardımcıları │ ekran ölçeği │ koordinat sistemi │ çizim motoru (en sağda; çip simgesi ve "WebGL2" / "WebGPU"; WebGPU'da simge amber; tıklayınca motor seçme menüsü).
 - **Çizim yardımcısı düğmeleri** bir gösterge lambası taşır: kapalıyken boş kare, açıkken dolu amber kare. Metin kapalıyken üçüncül renktedir.
 
 ### 7.8 İpucu
@@ -314,7 +314,7 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
   - Sağda parametre kartı: tür, datum, elipsoid, projeksiyon, orta meridyen, ölçek faktörü, sağa öteleme, kapsam ve eksen sırası notu.
   - Tam bir SRID yazılınca odak kaybolmadan seçilir. Tanımsız SRID için açık bir mesaj gösterilir.
   - Proje sistemini değiştirmek **"Koordinatlar dönüştürülmez"** uyarı notunu gösterir.
-- **Kontroller:** bölümlü seçici (segmented; seçili dilim kabarık), switch (açıkken amber), adımlayıcı (− değer + birim), tema kartları (etkin temadan bağımsız renkli mini çalışma alanı), motor kartları (radyo, rozet: Etkin / Yakında).
+- **Kontroller:** bölümlü seçici (segmented; seçili dilim kabarık), switch (açıkken amber), adımlayıcı (− değer + birim), tema kartları (etkin temadan bağımsız renkli mini çalışma alanı), motor kartları (radyo, rozet: Varsayılan / Deneysel / Desteklenmiyor).
 - **Birimler bölümünde "Önizleme" kartı** vardır: kesikli kenarlıkla koordinat, kenar, alan ve semt örneklerini canlı gösterir.
 
 ### 7.11 Kontroller (genel)

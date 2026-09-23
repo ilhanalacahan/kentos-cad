@@ -8,7 +8,14 @@ import { join } from 'node:path';
 export const OUT = join(new URL('.', import.meta.url).pathname, 'out');
 const PORT = Number(process.env.CDP_PORT ?? 9333);
 
-export async function launch(url, { width = 1600, height = 900 } = {}) {
+/**
+ * Flags that give headless Chrome a working WebGPU device on SwiftShader.
+ * With --enable-unsafe-webgpu alone an adapter is found but the device is
+ * dropped at the first submit; Vulkan through ANGLE keeps it alive.
+ */
+export const WEBGPU_ARGS = ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader'];
+
+export async function launch(url, { width = 1600, height = 900, args = [] } = {}) {
   mkdirSync(OUT, { recursive: true });
   const profile = mkdtempSync(join(tmpdir(), 'kentos-e2e-'));
   const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', [
@@ -20,6 +27,7 @@ export async function launch(url, { width = 1600, height = 900 } = {}) {
     '--enable-unsafe-swiftshader',
     '--use-angle=swiftshader',
     `--window-size=${width},${height}`,
+    ...args,
     'about:blank',
   ], { stdio: 'ignore' });
   let targets;

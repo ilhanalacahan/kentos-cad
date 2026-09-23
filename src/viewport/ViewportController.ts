@@ -68,6 +68,9 @@ export class ViewportController {
   private readonly ctx: AppContext;
   private readonly picker: PickIndex;
   private backend: RenderBackend | null = null;
+  private glCanvas: HTMLCanvasElement | null = null;
+  /** Backend a live switch is starting (guards against double clicks). */
+  private switching: BackendKind | null = null;
   private overlay!: HTMLCanvasElement;
   private g!: CanvasRenderingContext2D;
   private host!: HTMLElement;
@@ -106,8 +109,9 @@ export class ViewportController {
     const param = new URLSearchParams(location.search).get('renderer');
     const preferred: BackendKind[] = [param === 'webgpu' || param === 'webgl2' ? param : this.ctx.prefs.rendererPreference.value];
     try {
-      const { backend, errors } = await createBackend(host, preferred);
+      const { backend, canvas, errors } = await createBackend(host, preferred);
       this.backend = backend;
+      this.glCanvas = canvas;
       this.backendKind.set(backend.kind);
       this.backendLabel.set(backend.label);
       errors.forEach((e) => this.ctx.log.warn(`Çizim arka ucu atlandı: ${e}`));
@@ -123,6 +127,8 @@ export class ViewportController {
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(host);
     this.d.add(() => ro.disconnect());
+    // The engine preference applies live (settings dialog, status bar, menu).
+    this.d.add(this.ctx.prefs.rendererPreference.subscribe((k) => void this.switchBackend(k)));
     this.resize();
     this.zoomExtents();
     document.fonts?.ready.then(() => this.requestOverlay());
@@ -131,6 +137,51 @@ export class ViewportController {
   dispose(): void {
     this.d.dispose();
     this.backend?.dispose();
+  }
+
+  /**
+   * Replaces the drawing backend without reloading: the new one gets its own
+   * canvas (a canvas cannot change context type), every layer is uploaded
+   * again from the document and drawn before the old canvas is removed, so
+   * the view never shows an empty frame. Falls back to WebGL2 like mount().
+   */
+  async switchBackend(kind: BackendKind): Promise<void> {
+    if (!this.backend) return;
+    if (this.backendKind.value === kind) {
+      this.switching = null; // cancels a switch still initialising
+      return;
+    }
+    if (this.switching === kind) return;
+    this.switching = kind;
+    try {
+      const { backend, canvas, errors } = await createBackend(this.host, [kind]);
+      if (this.switching !== kind) {
+        // A newer switch started while this one initialised.
+        backend.dispose();
+        canvas.remove();
+        return;
+      }
+      const old = this.backend;
+      const oldCanvas = this.glCanvas;
+      this.backend = backend;
+      this.glCanvas = canvas;
+      backend.resize(this.size.w, this.size.h, this.dpr);
+      this.allDirty = true;
+      this.highlightDirty = true;
+      this.gridKey = '';
+      this.glQueued = true;
+      this.frame();
+      old.dispose();
+      oldCanvas?.remove();
+      this.backendKind.set(backend.kind);
+      this.backendLabel.set(backend.label);
+      errors.forEach((e) => this.ctx.log.warn(`Çizim arka ucu atlandı: ${e}`));
+      this.ctx.log.info(`Çizim motoru değişti: ${backend.label}`);
+    } catch (err) {
+      this.ctx.log.error(`Çizim motoru değiştirilemedi: ${(err as Error).message}`);
+    } finally {
+      if (this.switching === kind) this.switching = null;
+    }
   }
 
   // ── Public API used by tools and commands ───────────────────────────

@@ -4,12 +4,12 @@
 //
 //   pnpm e2e            (CHROME_BIN overrides the browser binary)
 import { createServer } from 'vite';
-import { launch, sleep } from './cdp.mjs';
+import { launch, sleep, WEBGPU_ARGS } from './cdp.mjs';
 
 const server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
 await server.listen();
 const url = server.resolvedUrls.local[0];
-const b = await launch(url);
+const b = await launch(url, { args: WEBGPU_ARGS });
 const failures = [];
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`);
@@ -393,6 +393,40 @@ try {
   }
   check('resizing a panel never flashes a black viewport', frames.length > 5 && blackFrames === 0, `${blackFrames}/${frames.length} kare siyah`);
   await b.eval('window.kentos.ui.dockWidth.set(312)');
+
+  // Drawing engines: WebGL2 by default; WebGPU switched live from the status
+  // bar must draw the same scene. Pixels are read straight after a frame.
+  check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
+  const inked = () =>
+    b.eval(`(() => {
+      const v = window.kentos.view; v.glQueued = true; v.frame();
+      const c = document.querySelector('.viewport__gl');
+      const o = document.createElement('canvas'); o.width = c.width; o.height = c.height;
+      const g = o.getContext('2d'); g.drawImage(c, 0, 0);
+      const d = g.getImageData(0, 0, o.width, o.height).data;
+      const bg = v.palette.background.map((c) => c * 255);
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) n++;
+      return n;
+    })()`);
+  await b.eval(`window.kentos.commands.execute('view.zoomExtents')`);
+  await sleep(100);
+  const glInk = await inked();
+  const gpuReady = await b.eval('(async () => !!(await navigator.gpu?.requestAdapter()))()');
+  if (!gpuReady) console.log('– WebGPU denetimleri atlandı: bu tarayıcıda WebGPU bağdaştırıcısı yok.');
+  else {
+    await b.click(...(await b.eval(`(() => { const r = document.querySelector('.status__renderer').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`)));
+    await sleep(150);
+    const gpuItem = await b.eval(`(() => { const t = [...document.querySelectorAll('.menu [role^=menuitem]')].find((e) => e.textContent.includes('WebGPU')); if (!t) return null; const r = t.getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2]; })()`);
+    if (gpuItem) await b.click(...gpuItem);
+    await b.waitFor(`window.kentos.view.backendKind.value === 'webgpu'`, 10000).catch(() => {});
+    check('status bar switches to WebGPU live', (await b.eval(`window.kentos.view.backendKind.value + '|' + document.querySelector('.status__renderer').textContent`)) === 'webgpu|WebGPU');
+    const gpuInk = await inked();
+    check('WebGPU draws the same scene as WebGL2', gpuInk > 0.85 * glInk && gpuInk < 1.15 * glInk, `${gpuInk} / ${glInk} px`);
+    await b.eval(`window.kentos.commands.execute('view.renderer.webgl2')`);
+    await b.waitFor(`window.kentos.view.backendKind.value === 'webgl2'`, 10000).catch(() => {});
+    check('switching back to WebGL2 keeps one canvas', (await b.eval(`window.kentos.view.backendKind.value + '|' + document.querySelectorAll('.viewport__gl').length`)) === 'webgl2|1');
+  }
 
   // Undo / redo round trip
   const before = await b.eval('window.kentos.doc.size');

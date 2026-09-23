@@ -1,30 +1,228 @@
-import type { FrameState, RenderBackend, SceneLayer } from '../types';
+import type { FrameState, RenderBackend, RGBA, SceneLayer } from '../types';
+import { WGSL } from './shaders';
+
+/** One uploaded batch: its vertex buffer(s), vertex/instance count and style. */
+interface GpuBatch {
+  buffers: GPUBuffer[];
+  count: number;
+  style: GPUBuffer;
+  bind: GPUBindGroup;
+}
+
+interface GpuLayer {
+  lines: GpuBatch[];
+  fills: GpuBatch[];
+  points: GpuBatch[];
+}
+
+const SHAPES = { ring: 0, cross: 1, triangle: 2 } as const;
+const SAMPLES = 4;
+/** Frame uniform: offset, scale, pxPerUnit, dpr, viewport (8 floats). */
+const FRAME_BYTES = 32;
+/** Style uniform: color, dash, size, shape, pad (12 × 4 bytes). */
+const STYLE_BYTES = 48;
+/**
+ * WebGPU flag constants (spec values). lib.dom declares only the flag
+ * types, not the GPUBufferUsage / GPUShaderStage / GPUTextureUsage globals.
+ */
+const BUFFER = { VERTEX: 0x20, UNIFORM: 0x40, COPY_DST: 0x08 } as const;
+const STAGE = { VERTEX: 0x1, FRAGMENT: 0x2 } as const;
+const RENDER_ATTACHMENT = 0x10;
 
 /**
- * WebGPU backend placeholder. It implements the same RenderBackend contract
- * as WebGL2Backend so it can be swapped in without touching the viewport,
- * tools or UI. The scene format (origin-relative float32 batches, per-batch
- * colour and dash pattern) maps 1:1 onto WGSL pipelines:
- *   - lines  → line-list pipeline, vertex {pos: vec2f, dist: f32}
- *   - fills  → triangle-list pipeline
- *   - points → instanced quads (WebGPU has no point size)
- * Until those pipelines land, init() rejects and createBackend() falls back.
+ * WebGPU implementation of the RenderBackend contract. It mirrors
+ * WebGL2Backend step by step — same scene data, same draw order (per pass:
+ * fills, lines, points), same shaders in WGSL — so switching backends does
+ * not change a pixel's meaning:
+ *   lines  → line-list, vertex {pos, dist}, dash tested per fragment
+ *   fills  → triangle-list
+ *   points → instanced quads with the symbol drawn by distance functions
+ * Anti-aliasing is 4× MSAA like the WebGL2 context.
  */
 export class WebGPUBackend implements RenderBackend {
   readonly kind = 'webgpu' as const;
-  readonly label = 'WebGPU';
+  label = 'WebGPU';
+  private device!: GPUDevice;
+  private context!: GPUCanvasContext;
+  private canvas!: HTMLCanvasElement;
+  private format!: GPUTextureFormat;
+  private dpr = 1;
+  private frameBuffer!: GPUBuffer;
+  private frameBind!: GPUBindGroup;
+  private styleLayout!: GPUBindGroupLayout;
+  private linePipe!: GPURenderPipeline;
+  private fillPipe!: GPURenderPipeline;
+  private pointPipe!: GPURenderPipeline;
+  private msaa: GPUTexture | null = null;
+  private layers = new Map<string, GpuLayer>();
 
   static isSupported(): boolean {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
   }
 
-  async init(_canvas: HTMLCanvasElement): Promise<void> {
-    throw new Error('WebGPU arka ucu henüz etkin değil');
+  async init(canvas: HTMLCanvasElement): Promise<void> {
+    if (!WebGPUBackend.isSupported()) throw new Error('Tarayıcı WebGPU sunmuyor');
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) throw new Error('WebGPU bağdaştırıcısı bulunamadı');
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext('webgpu') as GPUCanvasContext | null;
+    if (!context) throw new Error('WebGPU tuval bağlamı alınamadı');
+    this.device = device;
+    this.context = context;
+    this.canvas = canvas;
+    this.format = navigator.gpu.getPreferredCanvasFormat();
+    context.configure({ device, format: this.format, alphaMode: 'opaque' });
+    device.addEventListener('uncapturederror', (e) => console.error(`WebGPU: ${(e as GPUUncapturedErrorEvent).error.message}`));
+    void device.lost.then((info) => {
+      if (info.reason !== 'destroyed') console.error(`WebGPU aygıtı kayboldu: ${info.message}`);
+    });
+    const info = adapter.info;
+    const name = info?.description || [info?.vendor, info?.architecture].filter(Boolean).join(' ');
+    this.label = name ? `WebGPU · ${name}` : 'WebGPU';
+    this.createPipelines();
   }
 
-  resize(_width: number, _height: number, _dpr: number): void {}
-  upload(_layer: SceneLayer): void {}
-  remove(_id: string): void {}
-  render(_frame: FrameState): void {}
-  dispose(): void {}
+  private createPipelines(): void {
+    const device = this.device;
+    const module = device.createShaderModule({ code: WGSL });
+    const uniformEntry = (binding: number): GPUBindGroupLayoutEntry => ({ binding, visibility: STAGE.VERTEX | STAGE.FRAGMENT, buffer: { type: 'uniform' } });
+    const frameLayout = device.createBindGroupLayout({ entries: [uniformEntry(0)] });
+    this.styleLayout = device.createBindGroupLayout({ entries: [uniformEntry(0)] });
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [frameLayout, this.styleLayout] });
+    this.frameBuffer = device.createBuffer({ size: FRAME_BYTES, usage: BUFFER.UNIFORM | BUFFER.COPY_DST });
+    this.frameBind = device.createBindGroup({ layout: frameLayout, entries: [{ binding: 0, resource: { buffer: this.frameBuffer } }] });
+
+    // Same blending as WebGL2: straight alpha for colour, "over" for alpha.
+    const target: GPUColorTargetState = {
+      format: this.format,
+      blend: {
+        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+      },
+    };
+    const pipeline = (vs: string, fs: string, buffers: GPUVertexBufferLayout[], topology: GPUPrimitiveTopology) =>
+      device.createRenderPipeline({
+        layout,
+        vertex: { module, entryPoint: vs, buffers },
+        fragment: { module, entryPoint: fs, targets: [target] },
+        primitive: { topology },
+        multisample: { count: SAMPLES },
+      });
+    const vec2 = (location: number, stepMode: GPUVertexStepMode = 'vertex'): GPUVertexBufferLayout => ({ arrayStride: 8, stepMode, attributes: [{ shaderLocation: location, offset: 0, format: 'float32x2' }] });
+    this.linePipe = pipeline('lineVs', 'lineFs', [vec2(0), { arrayStride: 4, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32' }] }], 'line-list');
+    this.fillPipe = pipeline('fillVs', 'fillFs', [vec2(0)], 'triangle-list');
+    this.pointPipe = pipeline('pointVs', 'pointFs', [vec2(0, 'instance')], 'triangle-list');
+  }
+
+  resize(width: number, height: number, dpr: number): void {
+    this.dpr = dpr;
+    this.canvas.width = Math.max(1, Math.round(width * dpr));
+    this.canvas.height = Math.max(1, Math.round(height * dpr));
+  }
+
+  private vertexBuffer(data: Float32Array): GPUBuffer {
+    const buf = this.device.createBuffer({ size: Math.max(4, data.byteLength), usage: BUFFER.VERTEX | BUFFER.COPY_DST });
+    this.device.queue.writeBuffer(buf, 0, data.buffer, data.byteOffset, data.byteLength);
+    return buf;
+  }
+
+  private styleBind(color: RGBA, dash: readonly number[] | null, size = 0, shape = 0): { style: GPUBuffer; bind: GPUBindGroup } {
+    const data = new ArrayBuffer(STYLE_BYTES);
+    const f = new Float32Array(data);
+    f.set(color, 0);
+    f.set([dash?.[0] ?? 0, dash?.[1] ?? 0, dash?.[2] ?? 0, dash?.[3] ?? 0], 4);
+    f[8] = size;
+    new Uint32Array(data)[9] = shape;
+    const style = this.device.createBuffer({ size: STYLE_BYTES, usage: BUFFER.UNIFORM | BUFFER.COPY_DST });
+    this.device.queue.writeBuffer(style, 0, data);
+    const bind = this.device.createBindGroup({ layout: this.styleLayout, entries: [{ binding: 0, resource: { buffer: style } }] });
+    return { style, bind };
+  }
+
+  upload(layer: SceneLayer): void {
+    this.remove(layer.id);
+    const g: GpuLayer = { lines: [], fills: [], points: [] };
+    for (const b of layer.lines) {
+      if (!b.positions.length) continue;
+      g.lines.push({ buffers: [this.vertexBuffer(b.positions), this.vertexBuffer(b.distances)], count: b.positions.length / 2, ...this.styleBind(b.color, b.dash) });
+    }
+    for (const f of layer.fills) {
+      if (!f.positions.length) continue;
+      g.fills.push({ buffers: [this.vertexBuffer(f.positions)], count: f.positions.length / 2, ...this.styleBind(f.color, null) });
+    }
+    for (const p of layer.points) {
+      if (!p.positions.length) continue;
+      g.points.push({ buffers: [this.vertexBuffer(p.positions)], count: p.positions.length / 2, ...this.styleBind(p.color, null, p.size, SHAPES[p.shape]) });
+    }
+    this.layers.set(layer.id, g);
+  }
+
+  remove(id: string): void {
+    const g = this.layers.get(id);
+    if (!g) return;
+    for (const b of [...g.lines, ...g.fills, ...g.points]) {
+      b.buffers.forEach((buf) => buf.destroy());
+      b.style.destroy();
+    }
+    this.layers.delete(id);
+  }
+
+  render(frame: FrameState): void {
+    const { device } = this;
+    const { view } = frame;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    if (!this.msaa || this.msaa.width !== w || this.msaa.height !== h) {
+      this.msaa?.destroy();
+      this.msaa = device.createTexture({ size: [w, h], sampleCount: SAMPLES, format: this.format, usage: RENDER_ATTACHMENT });
+    }
+    device.queue.writeBuffer(
+      this.frameBuffer,
+      0,
+      new Float32Array([view.center.x, view.center.y, (2 * view.scale) / view.width, (2 * view.scale) / view.height, view.scale * this.dpr, this.dpr, w, h]),
+    );
+    const [r, g, b] = frame.clearColor;
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{ view: this.msaa.createView(), resolveTarget: this.context.getCurrentTexture().createView(), clearValue: { r, g, b, a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
+    });
+    pass.setBindGroup(0, this.frameBind);
+    const drawPass = (ids: readonly string[]) => {
+      const layers = ids.map((id) => this.layers.get(id)).filter((l): l is GpuLayer => !!l);
+      pass.setPipeline(this.fillPipe);
+      for (const l of layers)
+        for (const f of l.fills) {
+          pass.setBindGroup(1, f.bind);
+          pass.setVertexBuffer(0, f.buffers[0]);
+          pass.draw(f.count);
+        }
+      pass.setPipeline(this.linePipe);
+      for (const l of layers)
+        for (const ln of l.lines) {
+          pass.setBindGroup(1, ln.bind);
+          pass.setVertexBuffer(0, ln.buffers[0]);
+          pass.setVertexBuffer(1, ln.buffers[1]);
+          pass.draw(ln.count);
+        }
+      pass.setPipeline(this.pointPipe);
+      for (const l of layers)
+        for (const p of l.points) {
+          pass.setBindGroup(1, p.bind);
+          pass.setVertexBuffer(0, p.buffers[0]);
+          pass.draw(6, p.count);
+        }
+    };
+    drawPass(frame.underlays);
+    drawPass(frame.order);
+    drawPass(frame.overlays);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  }
+
+  dispose(): void {
+    for (const id of [...this.layers.keys()]) this.remove(id);
+    this.msaa?.destroy();
+    this.frameBuffer?.destroy();
+    this.device?.destroy();
+  }
 }

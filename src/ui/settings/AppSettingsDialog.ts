@@ -93,7 +93,6 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
         const c = crsBySrid(draft.defaultSrid)!;
         ctx.log.info(`Yeni projeler ${c.name} (EPSG:${c.srid}) ile oluşturulacak. Açık projenin sistemi değişmedi.`);
       }
-      if (draft.rendererPreference !== init.rendererPreference) ctx.log.info('Çizim motoru tercihi bir sonraki açılışta uygulanacak.');
       ctx.log.success('Uygulama ayarları kaydedildi.');
     },
   });
@@ -233,10 +232,16 @@ function engine(api: DraftApi<AppDraft>, ctx: AppContext) {
       h(
         'div',
         { class: 'engine-cards', role: 'radiogroup', 'aria-label': 'Çizim arka ucu' },
-        card('webgl2', 'WebGL2', 'Tüm güncel tarayıcılarda çalışır. Varsayılan ve önerilen.', 'Etkin', false),
-        card('webgpu', 'WebGPU', gpu ? 'Bu tarayıcı WebGPU destekliyor. Arka uç henüz geliştirme aşamasında.' : 'Bu tarayıcı WebGPU desteklemiyor.', 'Yakında', true),
+        card('webgl2', 'WebGL2', 'Tüm güncel tarayıcılarda çalışır. Varsayılan ve önerilen.', 'Varsayılan', false),
+        card(
+          'webgpu',
+          'WebGPU',
+          gpu ? 'Yeni nesil grafik arayüzü. Aynı çizimi üretir; büyük veride daha verimli olması hedeflenir.' : 'Bu tarayıcı WebGPU sunmuyor. Chrome ya da Edge’in güncel sürümünü kullanın.',
+          gpu ? 'Deneysel' : 'Desteklenmiyor',
+          !gpu,
+        ),
       ),
-      note('info', `Şu an çalışan: ${ctx.view.backendLabel.value}`),
+      note('info', `Şu an çalışan: ${ctx.view.backendLabel.value}. Seçim Kaydet ile hemen uygulanır; motor başlatılamazsa WebGL2’ye dönülür.`),
     ),
     group(
       'Çözünürlük',

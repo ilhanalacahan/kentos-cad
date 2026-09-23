@@ -1,4 +1,6 @@
 import type { Command } from '../core/commands';
+import type { BackendKind } from '../render/types';
+import { WebGPUBackend } from '../render/webgpu/WebGPUBackend';
 import type { Entity } from '../model/entities';
 import { pasteEntities, PasteTool } from '../tools/editTools';
 import { edgeLabels } from '../model/ops/edgeLabels';
@@ -20,6 +22,24 @@ function pending(ctx: AppContext, id: string, title: string, category: string, i
 
 function toggle(id: string, title: string, s: Signal<boolean>, opts: Partial<Command> = {}): Command {
   return { id, title, run: () => s.set(!s.value), isChecked: () => s.value, watch: [s], ...opts };
+}
+
+/** Drawing engine choice: remembered in preferences, applied live by the viewport. */
+function renderer(ctx: AppContext, kind: BackendKind, title: string, description: string): Command {
+  return {
+    id: `view.renderer.${kind}`,
+    title,
+    category: 'Görünüm',
+    description,
+    aliases: [kind.toUpperCase()],
+    run: () => {
+      ctx.prefs.rendererPreference.set(kind);
+      void ctx.view.switchBackend(kind);
+    },
+    isEnabled: () => kind !== 'webgpu' || WebGPUBackend.isSupported(),
+    isChecked: () => ctx.view.backendKind.value === kind,
+    watch: [ctx.view.backendKind],
+  };
 }
 
 export function applyTheme(ctx: AppContext, theme: Theme): void {
@@ -211,6 +231,8 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       isChecked: () => ui.theme.value === 'light',
       watch: [ui.theme],
     },
+    renderer(ctx, 'webgl2', 'WebGL2', 'Tüm güncel tarayıcılarda çalışır. Varsayılan çizim motoru.'),
+    renderer(ctx, 'webgpu', 'WebGPU', 'Yeni nesil grafik arayüzü. Tarayıcı ve ekran kartı desteklemelidir.'),
     { id: 'view.theme.toggle', title: 'Temayı değiştir', category: V, run: () => applyTheme(ctx, ui.theme.value === 'dark' ? 'light' : 'dark') },
     {
       id: 'view.coords',

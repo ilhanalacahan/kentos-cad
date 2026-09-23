@@ -1,9 +1,12 @@
 import type { AppContext } from '../../app/context';
+import { commandItem } from '../../app/menus';
 import type { LogEntry } from '../../app/state';
 import { watchAll } from '../../core/signal';
 import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
+import { WebGPUBackend } from '../../render/webgpu/WebGPUBackend';
+import { PopupMenu } from '../widgets/PopupMenu';
 import { tooltip } from '../widgets/tooltip';
 
 /** Screen metres per CSS pixel → map-like scale at 96 dpi. */
@@ -44,7 +47,21 @@ export class StatusBar extends Component {
     const crs = h('button', { class: 'status__cell status__btn', type: 'button' }, icon('crs', 14), h('span'));
     crs.addEventListener('click', () => ctx.commands.execute('crs.set'));
     const zoom = h('span', { class: 'status__cell num' });
-    const renderer = h('span', { class: 'status__cell status__renderer' });
+    const rendererName = h('span');
+    const renderer = h('button', { class: 'status__cell status__btn status__renderer', type: 'button', 'aria-haspopup': 'menu' }, icon('chip', 14), rendererName);
+    renderer.addEventListener('click', () =>
+      PopupMenu.open(
+        [
+          { kind: 'header', label: 'Çizim motoru' },
+          commandItem(ctx, 'view.renderer.webgl2', { hint: 'varsayılan' }),
+          commandItem(ctx, 'view.renderer.webgpu', { hint: WebGPUBackend.isSupported() ? undefined : 'desteklenmiyor' }),
+          { kind: 'separator' },
+          commandItem(ctx, 'tools.options'),
+        ],
+        renderer.getBoundingClientRect(),
+        { placement: 'below', owner: renderer },
+      ),
+    );
 
     this.el = h('footer', { class: 'status' }, coords, flash, selCount, toggles, zoom, crs, renderer);
 
@@ -58,15 +75,17 @@ export class StatusBar extends Component {
     this.d.add(tooltip(zoom, () => ({ title: 'Ekran ölçeği', description: 'Görünümün 96 dpi ekrandaki yaklaşık ölçeği. Çizim ölçeği araç çubuğundan seçilir.' }), 'top'));
     this.d.add(ctx.doc.crs.subscribe((c) => (crs.querySelector('span')!.textContent = c.name), true));
     this.d.add(tooltip(crs, () => ({ title: 'Koordinat sistemi', description: `EPSG:${ctx.doc.crs.value.srid}. Y sağa, X yukarı değerdir. Değiştirmek için tıklayın.` }), 'top'));
+    const syncRenderer = () => {
+      const k = ctx.view.backendKind.value;
+      rendererName.textContent = k === 'webgpu' ? 'WebGPU' : k === 'webgl2' ? 'WebGL2' : ctx.view.backendLabel.value;
+      renderer.dataset.kind = k ?? '';
+      renderer.toggleAttribute('data-error', !k && ctx.view.backendLabel.value !== 'Başlatılıyor…');
+    };
+    syncRenderer();
+    this.d.add(watchAll([ctx.view.backendKind, ctx.view.backendLabel], syncRenderer));
     this.d.add(
-      watchAll([ctx.view.backendKind, ctx.view.backendLabel], () => {
-        const k = ctx.view.backendKind.value;
-        renderer.textContent = k === 'webgpu' ? 'WebGPU' : k === 'webgl2' ? 'WebGL2' : ctx.view.backendLabel.value;
-        renderer.toggleAttribute('data-error', !k);
-      }),
+      tooltip(renderer, () => ({ title: 'Çizim motoru', description: `${ctx.view.backendLabel.value}. Değiştirmek için tıklayın; seçim hemen uygulanır ve hatırlanır.` }), 'top'),
     );
-    renderer.textContent = 'Başlatılıyor';
-    this.d.add(tooltip(renderer, () => ({ title: 'Çizim motoru', description: ctx.view.backendLabel.value }), 'top'));
     this.d.add(
       ctx.selection.ids.subscribe((ids) => {
         selCount.hidden = ids.size === 0;

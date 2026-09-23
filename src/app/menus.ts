@@ -52,6 +52,7 @@ export const MAIN_MENU: TopMenu[] = [
       'view.coords',
       '-',
       { label: 'Tema', items: ['view.theme.dark', 'view.theme.light'] },
+      { label: 'Çizim motoru', icon: 'chip', items: ['view.renderer.webgl2', 'view.renderer.webgpu'] },
     ],
   },
   {
@@ -125,15 +126,15 @@ export function commandItem(ctx: AppContext, id: string, overrides: Partial<Menu
   const cmd = ctx.commands.get(id);
   if (!cmd) return { label: id, disabled: true };
   const checked = cmd.isChecked?.();
-  const isTheme = id.startsWith('view.theme.') && id !== 'view.theme.toggle';
+  const isRadio = (id.startsWith('view.theme.') && id !== 'view.theme.toggle') || id.startsWith('view.renderer.');
   // Tools report "active" via isChecked, but in menus they read as actions.
   const isTool = id.startsWith('tool.');
   return {
     label: cmd.title,
-    icon: checked === undefined || isTheme || isTool ? cmd.icon : undefined,
+    icon: checked === undefined || isRadio || isTool ? cmd.icon : undefined,
     shortcut: ctx.keymap.chordFor(id),
     checked: isTool ? undefined : checked,
-    radio: isTheme,
+    radio: isRadio,
     disabled: !ctx.commands.isEnabled(id),
     run: () => ctx.commands.execute(id),
     ...overrides,

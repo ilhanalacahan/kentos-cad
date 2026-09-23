@@ -48,7 +48,10 @@ pnpm e2e                  # Başsız Chrome'da uçtan uca duman testi (kendi Vit
 npx tsc --noEmit -p .     # yalnızca tip denetimi
 ```
 
-- `?renderer=webgpu` ya da `?renderer=webgl2` URL parametresi kayıtlı çizim motoru tercihini geçersiz kılar.
+- **Çizim motoru:** varsayılan WebGL2'dir; WebGPU isteğe bağlıdır.
+  - Etkin motor durum çubuğunun sağ alt köşesinde yazar. Tıklayınca motor seçilir: seçim hemen uygulanır (`view.switchBackend`, sayfa yenilenmez) ve `prefs.rendererPreference` ile hatırlanır. Aynı seçim **Görünüm → Çizim motoru** menüsünde ve Uygulama ayarları → Çizim motoru bölümünde de vardır.
+  - `?renderer=webgpu` ya da `?renderer=webgl2` URL parametresi açılışta kayıtlı tercihi geçersiz kılar.
+  - WebGPU başlatılamazsa WebGL2'ye düşülür ve uyarı yazılır.
 - Her değişiklikten sonra `tsc` temiz olmalı ve `pnpm test` geçmeli (bkz. §9.4).
 - Geliştirme modunda uygulama bağlamı `window.kentos` olarak açıktır (üretim derlemesinde yoktur). Tarayıcıda doğrulama yaparken durumu buradan okuyun, ör. `kentos.doc.size`, `kentos.tools.activeId.value`.
 - Arayüzü etkileyen her değişiklik **gerçek tarayıcıda** denenmelidir: tıklama, klavye, açık ve koyu tema, "Büyük" yazı boyutu.
@@ -327,8 +330,8 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
 ```
 
 - **`RenderBackend` sözleşmesi** (`render/types.ts`): `init`, `resize`, `upload(SceneLayer)`, `remove(id)`, `render(FrameState)`, `dispose`.
-  - WebGL2 tam olarak uygulanmıştır.
-  - WebGPU aynı sözleşmeyi uygulayan bir iskelettir.
+  - WebGL2 (varsayılan) ve WebGPU tam olarak uygulanmıştır ve aynı çizimi üretir (bkz. §9.5).
+  - Motor çalışırken değiştirilebilir: yeni arka uç kendi tuvalini alır, bütün katmanlar belgeden yeniden yüklenir ve eski tuval ancak ilk kare çizildikten sonra kaldırılır; boş kare görünmez.
   - Arka uca yalnızca `SceneLayer` ve `FrameState` gider; varlık, katman ağacı ya da DOM gitmez.
 - **`SceneLayer`:** katman başına çizgi, dolgu ve nokta topluları. Renk ve kesikli çizgi deseni topluya aittir.
   - Çizgi: segment listesi ve kümülatif mesafe. Kesik desen parça gölgelendiricide piksel cinsinden hesaplanır.
@@ -509,19 +512,23 @@ Kurallar:
 
 - `model/geom` ve `model/ops` altındaki her yeni fonksiyon test ile gelir. Sınır durumları (paralel, çakışık, sıfır uzunluk, açı 0/2π geçişi) mutlaka sınanır.
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
-- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile) ve geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
+- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi, geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme) ve `geo` (CRS arama).
 
-### 9.5 Yeni çizim arka ucu (WebGPU)
+### 9.5 Çizim arka uçları (WebGL2 ve WebGPU)
 
-`render/webgpu/WebGPUBackend.ts` aynı `RenderBackend` sözleşmesini uygular:
+`render/webgpu/WebGPUBackend.ts`, `WebGL2Backend` ile adım adım aynı `RenderBackend` sözleşmesini uygular:
 
 - çizgiler için `line-list` hattı, köşe verisi `{pos: vec2f, dist: f32}`
 - dolgular için `triangle-list`
-- noktalar için örneklenmiş dörtgenler (WebGPU'da nokta boyutu yoktur)
+- noktalar için örneklenmiş dörtgenler (WebGPU'da nokta boyutu yoktur); simge, köşe gölgelendiricisinde piksel cinsinden kurulur
+- bağ grubu 0 kare verisi (öteleme, ölçek, piksel/metre, dpr, görünüm boyutu), bağ grubu 1 topluya ait stil (renk, kesik desen, nokta boyutu ve simgesi); stil tamponu yükleme sırasında bir kez yazılır
+- 4× MSAA; karışım WebGL2 ile aynıdır
 
-Kesik desen ve nokta simgesi mantığı WebGL2 gölgelendiricilerindeki ile aynı olmalıdır. `createBackend` tarayıcı desteklemiyorsa WebGL2'ye düşer.
+WGSL gölgelendiricileri (`render/webgpu/shaders.ts`) GLSL'deki kesik desen ve nokta simgesi mantığının birebir karşılığıdır; birinde yapılan değişiklik ötekine de yapılır. `lib.dom` yalnızca WebGPU bayrak tiplerini bildirir; `GPUBufferUsage` gibi sabitler dosyada belirtimdeki değerleriyle tanımlıdır. `createBackend` tarayıcı desteklemiyorsa WebGL2'ye düşer.
+
+Başsız Chrome'da `--enable-unsafe-webgpu` tek başına yetmez (aygıt ilk gönderimde düşer). `scripts/e2e/cdp.mjs` içindeki `WEBGPU_ARGS` Vulkan/SwiftShader bayraklarını ekler; duman testi iki motorun çizdiği piksel sayısını karşılaştırır.
 
 ### 9.6 Yeni dosya biçimi (planlı arayüz)
 
@@ -564,7 +571,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - `.kcad` biçimi: JSON manifest (proje ayarları, katmanlar, şemalar) ve ikili geometri parçaları
    - IndexedDB otomatik kayıt
    - ileride sunucu eşitleme ve PostGIS
-6. **WebGPU arka ucu** ve GPU metin (SDF).
+6. GPU metin (SDF) ve kalın çizgiler (örneklenmiş dörtgen); iki arka uçta birlikte. WebGPU arka ucu yapıldı.
 7. **Eklenti API'si:** komut, araç, panel ve IO bağdaştırıcısı katkıları; mevcut kayıtlar bu API'nin ilk kullanıcılarıdır.
 
 ---
@@ -574,7 +581,6 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Örnek proje kodla üretiliyor (`model/sampleProject.ts`). Dosya açma ve kaydetme yok; bilinçli olarak ertelendi, çünkü kayıt bulut üzerinde olacak ve sunucu tarafı henüz yok. "Kaydet" yalnızca kaydedilmemiş işaretini temizliyor.
 - Pano yalnızca bu sekmede (bellekte) çalışıyor; sekmeler ya da uygulamalar arası kopyalama yok.
 - Öznitelikler serbest metin; şema yok.
-- WebGPU arka ucu iskelet.
 - Çizgi kalınlıkları ekranda 1 px. `lineWeight` şimdilik yalnızca veri.
 - Budama ve uzatma, sınır olarak görünür alandaki tüm kenarları her imleç hareketinde yeniden topluyor (önizleme için). Büyük veride R-tree ile yalnızca hedefin çevresine bakılmalı.
 - Köşe yuvarlama ve pah iki çizgi arasında ya da bir çoklu çizginin iki düz komşu kenarı arasında çalışıyor; çizgi ile çoklu çizgi, yay ile çizgi arası ve "tüm köşeler" seçeneği yok.

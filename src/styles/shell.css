@@ -875,7 +875,13 @@
   color: var(--c-accent-text);
 }
 .status__renderer {
+  color: var(--c-text-2);
+}
+.status__renderer .icon {
   color: var(--c-text-3);
+}
+.status__renderer[data-kind='webgpu'] .icon {
+  color: var(--c-accent-text);
 }
 .status__renderer[data-error] {
   color: var(--c-danger);
