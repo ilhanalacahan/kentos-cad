@@ -74,14 +74,22 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: calc(250px * var(--ui-scale)) minmax(0, 1fr) calc(340px * var(--ui-scale));
+  grid-template-columns: calc(300px * var(--ui-scale)) minmax(0, 1fr) calc(340px * var(--ui-scale));
 }
 .smgr__tree {
   min-height: 0;
   overflow: auto;
-  padding: 8px 0;
+  padding: 8px 6px;
   background: var(--c-panel-head);
   border-right: 1px solid var(--c-line);
+}
+.smgr__tree .tree__row {
+  padding: 0 8px 0 calc(6px + var(--depth, 0) * 12px);
+  border-radius: var(--r-sm);
+  cursor: default;
+}
+.smgr__tree .tree__content {
+  gap: 8px;
 }
 .smgr__tree .tree__row svg {
   flex: none;

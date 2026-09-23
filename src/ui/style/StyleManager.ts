@@ -148,15 +148,10 @@ class StyleManager implements DetailsHost {
         renderRow: (n, row) =>
           row.append(
             icon(n.path.length ? 'folder' : n.source === 'system' ? 'lock' : n.source === 'user' ? 'styles' : 'save', 15),
-            h('span', { class: 'tree__label', title: n.description ?? null }, n.label),
+            h('span', { class: 'tree__name', title: n.description ? `${n.label}\n${n.description}` : n.label }, n.label),
             h('span', { class: 'smgr__count' }, String(n.count)),
           ),
         onSelect: (n) => {
-          // Libraries are browsed top-down: choosing a folder opens it.
-          if (n.children.length && !this.expanded.has(n.key)) {
-            this.expanded.add(n.key);
-            queueMicrotask(() => this.renderTree());
-          }
           this.at = { source: n.source, path: n.path };
           this.query = '';
           search.value = '';
@@ -167,6 +162,7 @@ class StyleManager implements DetailsHost {
           if (n.source !== 'system' && n.path.length) this.renameInline(n.key, n.label, (to) => this.ctx.styles.library.renameCategory(n.source as 'user' | 'project', n.path, to));
         },
         empty: () => 'Kitaplık boş.',
+        clickToggles: true,
       },
       'Sembol kategorileri',
     );
@@ -424,7 +420,7 @@ class StyleManager implements DetailsHost {
 
   /** Swaps a tree row's label for a text field; Enter or leaving the field renames, Esc keeps the name. */
   private renameInline(key: string, current: string, done: (name: string) => void): void {
-    const label = this.tree.rowOf(key)?.querySelector('.tree__label');
+    const label = this.tree.rowOf(key)?.querySelector('.tree__name');
     if (!label) return;
     const input = h('input', { class: 'field field--inline', value: current, 'aria-label': 'Kategori adı', dataset: { escape: 'local' }, spellcheck: 'false' });
     label.replaceWith(input);

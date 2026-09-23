@@ -20,6 +20,11 @@ export interface TreeAdapter<T> {
   matches?(node: T, query: string): boolean;
   /** Text when nothing is listed (default speaks of layers). */
   empty?(filtered: boolean): string;
+  /**
+   * Browsing trees (libraries): a click on a node with children opens it,
+   * a second click on the selected node closes it; the caret still toggles.
+   */
+  readonly clickToggles?: boolean;
 }
 
 /** Generic keyboard-accessible tree (role=tree), re-rendered from the model. */
@@ -84,9 +89,15 @@ export class TreeView<T> {
           e.stopPropagation();
           if (hasKids) a.setExpanded(n, !a.isExpanded(n));
         });
-        row.addEventListener('click', () => this.focus(id, false));
+        row.addEventListener('click', (e) => {
+          if ((e.target as HTMLElement).closest('input')) return;
+          const again = this.focusedId === id;
+          this.focus(id, false);
+          if (a.clickToggles && hasKids && (again || !a.isExpanded(n))) a.setExpanded(n, !a.isExpanded(n));
+        });
         row.addEventListener('dblclick', (e) => {
-          if ((e.target as HTMLElement).closest('button')) return;
+          if ((e.target as HTMLElement).closest('button, input')) return;
+          if (a.clickToggles) return;
           if (hasKids && !a.onActivate) a.setExpanded(n, !a.isExpanded(n));
           else a.onActivate?.(n);
         });
