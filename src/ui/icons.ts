@@ -51,6 +51,9 @@ const ICONS = {
   parallel: '<path d="M2 14 9 7h9" stroke-dasharray="2.4 1.6"/><path d="M2 10.46 7.96 4.5H18M2 17.54 10.04 9.5H18"/>',
   perpIn: `<path d="M3 16h14M10 4v12M10 13.3h2.7V16"/><path d="m8 8.5 2 2 2-2"/>${grip(10, 4)}`,
   perpOut: `<path d="M3 16h14M8 16V4M8 13.3h2.7V16"/><path d="m6 6 2-2 2 2"/>${grip(8, 16)}`,
+  arrayPolar: '<circle cx="10" cy="10" r="6.5" stroke-dasharray="2 2"/><rect x="8.3" y="1.8" width="3.4" height="3.4"/><rect x="14.8" y="8.3" width="3.4" height="3.4"/><rect x="8.3" y="14.8" width="3.4" height="3.4"/><rect x="1.8" y="8.3" width="3.4" height="3.4"/><circle cx="10" cy="10" r=".9" fill="currentColor" stroke="none"/>',
+  align: `<path d="M4 9.5 8.5 4.5l4 3.6" stroke-dasharray="2 1.5"/><path d="M4 16h9v-5"/>${grip(4, 16)}${grip(13, 16)}`,
+  lengthen: `<path d="M3 13h9"/><path d="M12 13h5.5" stroke-dasharray="2 1.5"/><path d="m15 10.5 2.5 2.5-2.5 2.5"/>${grip(12, 13)}`,
   // Alan işlemleri
   boundary: '<path d="M3 15h14M5 17 11 3M9 3l6 14"/><path d="M5.86 15h8.28L10 5.33z" fill="currentColor" fill-opacity=".3" stroke="none"/><circle cx="10" cy="11.8" r="1" fill="currentColor" stroke="none"/>',
   toArea: '<path d="m3.8 8 6-4.5 6.5 3.5-1.8 9H5.6z" fill="currentColor" fill-opacity=".3" stroke-dasharray="2.2 1.5"/>',

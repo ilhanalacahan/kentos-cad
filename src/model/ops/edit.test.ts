@@ -5,6 +5,7 @@ import { sweep } from '../geom/arc';
 import { breakEntity } from './break';
 import { entityEdges } from './edges';
 import { explodeEntity } from './explode';
+import { lengthenEntity, lengthOf, lengthToward, nearEnd } from './lengthen';
 import { chamferLines, cornerOfPath } from './fillet';
 import { entityGrips, moveGrip } from './grips';
 import { joinEntities } from './join';
@@ -273,5 +274,52 @@ describe('divisionParams', () => {
   });
   it('measures off a step without a point on the far end', () => {
     expect(divisionParams(pathOf(line(0, 0, 10, 0))!, { step: 2.5 })).toEqual([2.5, 5, 7.5]);
+  });
+});
+
+describe('uzat-kısalt', () => {
+  const line = withId({ kind: 'line', a: v(0, 0), b: v(10, 0) });
+  it('lengthens and shortens a line at either end', () => {
+    const g = lengthenEntity(line, true, 15);
+    expect('geometry' in g && g.geometry.kind === 'line' && g.geometry.b).toEqual(v(15, 0));
+    const s = lengthenEntity(line, false, 4);
+    expect('geometry' in s && s.geometry.kind === 'line' && s.geometry.a.x).toBeCloseTo(6, 12);
+    expect('error' in lengthenEntity(line, true, 0)).toBe(true);
+  });
+  it('an arc grows on its circle, never past a full turn', () => {
+    const arc = withId({ kind: 'arc', c: v(0, 0), r: 2, a0: 0, a1: Math.PI / 2 });
+    const g = lengthenEntity(arc, true, Math.PI * 2);
+    expect('geometry' in g && g.geometry.kind === 'arc' && g.geometry.a1).toBeCloseTo(Math.PI, 12);
+    const s = lengthenEntity(arc, false, Math.PI / 2);
+    expect('geometry' in s && s.geometry.kind === 'arc' && s.geometry.a0).toBeCloseTo(Math.PI / 4, 12);
+    expect('error' in lengthenEntity(arc, true, 5 * Math.PI)).toBe(true);
+  });
+  it('a polyline shortens across vertices and lengthens its end segment', () => {
+    const pl = withId({ kind: 'polyline', pts: [v(0, 0), v(10, 0), v(10, 10)] });
+    const s = lengthenEntity(pl, true, 5);
+    expect('geometry' in s && s.geometry.kind === 'polyline' && s.geometry.pts).toEqual([v(0, 0), v(5, 0)]);
+    const g = lengthenEntity(pl, true, 25);
+    expect('geometry' in g && g.geometry.kind === 'polyline' && g.geometry.pts[2]).toEqual(v(10, 15));
+    const f = lengthenEntity(pl, false, 22);
+    expect('geometry' in f && f.geometry.kind === 'polyline' && f.geometry.pts[0].x).toBeCloseTo(-2, 12);
+  });
+  it('a polyline ending in an arc keeps the arc on its circle', () => {
+    // Quarter circle from (10,0) to (20,10) about (10,10), counter-clockwise.
+    const pl = withId({ kind: 'polyline', pts: [v(0, 0), v(10, 0), v(20, 10)], bulges: [0, Math.tan(Math.PI / 8), 0] });
+    const L = lengthOf(pl)!;
+    const g = lengthenEntity(pl, true, L + 5 * Math.PI);
+    if (!('geometry' in g) || g.geometry.kind !== 'polyline') throw new Error('expected polyline');
+    // Now a half circle ending at (10,20).
+    expect(g.geometry.pts[2].x).toBeCloseTo(10, 9);
+    expect(g.geometry.pts[2].y).toBeCloseTo(20, 9);
+    expect(lengthOf(withId(g.geometry))).toBeCloseTo(L + 5 * Math.PI, 9);
+  });
+  it('the dragged length follows the pointer beyond the end and inside the path', () => {
+    expect(lengthToward(line, true, v(13, 2))).toBeCloseTo(13, 12);
+    expect(lengthToward(line, true, v(7, -1))).toBeCloseTo(7, 12);
+    expect(lengthToward(line, false, v(-3, 1))).toBeCloseTo(13, 12);
+    expect(nearEnd(line, v(9, 0))).toBe(true);
+    const arc = withId({ kind: 'arc', c: v(0, 0), r: 1, a0: 0, a1: Math.PI / 2 });
+    expect(lengthToward(arc, true, v(-1, 0.001))).toBeCloseTo(Math.PI, 2);
   });
 });

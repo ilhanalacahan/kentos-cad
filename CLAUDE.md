@@ -215,10 +215,10 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   | Ölçü | `tools/dimensionTool.ts` | Tür başta tek tuşla seçilir: Hizalı (H), Doğrusal (D; yön imlecin yerinden, `Y` yatay ΔY, `X` düşey ΔX sabitler, `O` serbest bırakır), Açı (A; iki kenara tıklanır ya da `K` ile köşe ve iki kol; yayın konduğu bölge açıyı seçer), Yarıçap (R), Çap (Ç). Yerleştirme adımında yazılan sayı ötelenmeyi (açıda yarıçapı) tam verir |
   | Referans hat | `tools/perpTools.ts` | Önce bir hatta tıklanır (başlangıç A, tıklamaya yakın uç), sonra ona göre çalışılır: dik in (her nokta hatta dik iner; yay ve dairede merkeze), dik çık (dik ayak tıklanır ya da yazılır, dik boy gösterilir ya da yazılır, sağa artı) |
   | Tek tık | `tools/hatchTool.ts`, `tools/areaTools.ts` | Tarama: “Sınır: kapalı nesne” (varsayılan, Netcad gibi) tıklanan yeri çevreleyen en küçük kapalı nesneyi doldurur; içindeki ya da kenarına taşan, ondan küçük kapalı nesneler (parseldeki bina) ada olur ve taranmaz. “Sınır: çizgiler” (B, AutoCAD gibi) görünür çizgilerin kapattığı yüzü doldurur, içteki gruplar ada olur; sınır tek katmana daraltılabilir (K). “Adalar” (A) adaları kapatır. İçine tıklayarak alan aynı yüzleri kullanır (`tools/visibleFaces.ts`: görünüm, çizim ya da katman görünürlüğü değişince yeniden kurulan önbellek) |
-  | `SelectionFirstTool` | `tools/modifyTools.ts` | Seçim yoksa önce seçtirir, Enter ile aşamalara geçer, sonucu **afin dönüşümle** uygular: taşı, kopyala, döndür, ölçekle, aynala, dizi |
+  | `SelectionFirstTool` | `tools/modifyTools.ts`, `tools/arrangeTools.ts` | Seçim yoksa önce seçtirir, Enter ile aşamalara geçer, sonucu **afin dönüşümle** uygular: taşı, kopyala, döndür, ölçekle, aynala, dizi; kutupsal dizi (merkez; N adet, A doldurma açısı, D nesneleri döndür; önizlemeli, sağ tık uygular), hizala (iki kaynak-hedef çifti, Ö ölçekle; ilk çiftten sonra sağ tık yalnız taşır) |
   | `SelectionActionTool` | `tools/editTools.ts`, `tools/areaTools.ts` | Seçim varsa hemen çalışır, yoksa seçtirip Enter bekler: birleştir, patlat; alan birleştir, alan kesiştir, alana çevir, çizgiye çevir |
   | Alan işlemleri | `tools/areaTools.ts` | Alan çıkar (iki seçim: kesilecekler, sonra çıkarılacaklar), alan böl (alanları seç, sonra kesme çizgisini çiz ya da “Çizgiyle kes” ile göster; parçalar ve alanları canlı görünür), içine tıklayarak alan (tek tık; oluşacak bölge önceden boyanır) |
-  | `EdgePickTool` | `tools/edgeTools.ts`, `tools/pathEditTools.ts`, `tools/cornerTools.ts` | İmlecin altındaki kenara doğrudan etki eder: ötele, buda, uzat; kır, böl, köşe ekle/sil; `CornerTool` alt ailesi iki çizgiye ya da çoklu çizginin komşu iki kenarına etki eder: köşe yuvarla, pah |
+  | `EdgePickTool` | `tools/edgeTools.ts`, `tools/pathEditTools.ts`, `tools/cornerTools.ts`, `tools/lengthenTool.ts` | İmlecin altındaki kenara doğrudan etki eder: ötele, buda, uzat; uzat-kısalt (uca tıklanır; dinamikte yeni uç fareyle gösterilir ya da toplam boy yazılır, fark/yüzde/toplam kiplerinde tıklanan uç hemen değişir); kır, böl, köşe ekle/sil; `CornerTool` alt ailesi iki çizgiye ya da çoklu çizginin komşu iki kenarına etki eder: köşe yuvarla, pah |
   | Diğer | `tools/SelectTool.ts`, `tools/editTools.ts` | Seçim (pencere/kesişim, tutamaçla düzenleme), kaydırma, pencere yakınlaştırma; esnet (kesişim penceresi → temel → hedef); yapıştır |
 
 - **Şeffaf araçlar** (`ctx.tools.nest(child)` / `unnest(point)`): çalışan komutu bitirmeden üstünde açılır (AutoCAD 'CAL gibi). Sonuç noktası üst araca `acceptPoint(p)` ile, tıklanmış gibi verilir; Esc yalnızca şeffaf aracı kapatır. Nokta alan her araç ailesi `acceptPoint`'i uygular (`PointInputTool`, `SelectionFirstTool`, seçim aracında sıcak tutamaç, esnet, yapıştır).
@@ -325,6 +325,7 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 | `ops/trim.ts` | Hızlı budama ve uzatma. Kapalı şekiller açılır, daire yaya dönüşür; yayla biten çoklu çizgi kendi çemberi boyunca uzar. |
 | `ops/break.ts`, `ops/join.ts`, `ops/explode.ts`, `ops/stretch.ts`, `ops/vertex.ts` | Kır (iki nokta arası ya da tek noktadan; kapalıda saat yönünün tersine), birleştir (uç toleranslı zincir; kapanırsa alan), patlat (çizgi/yay, eğri → çoklu çizgi, ölçü → çizgi + yazı), esnet (penceredeki köşeler), köşe ekle/sil (yay kenarı aynı çember üzerinde ikiye bölünür) |
 | `ops/areas.ts` | Nesne ↔ alan: `areaOfEntity` (alan ve daire tam; tam elips ve kapalı eğri 1 mm içinde çokgen; ilk ve son noktası aynı çoklu çizgi), `polygonOfArea`, `polylinesOfPolygon`, `lineSource` |
+| `ops/lengthen.ts` | Uzat-kısalt: yeni toplam boy bir uçtan; kısaltma yolu keser (yay tam), uzatma son parçayı sürdürür (düz parça doğrultusunda, yay kendi çemberinde, tam turu geçemez); `lengthToward` imleçten boy |
 | `ops/offset.ts`, `ops/fillet.ts`, `ops/grips.ts` | Nesne öteleme; iki çizgi için köşe yuvarlama ve pah, çoklu çizgi köşesinde yuvarlama (yay parçası) ve pah (`cornerOfPath`); tutamaç anlamları |
 
 - **İşlemler geometri döndürür, belgeyi değiştirmez.** Sonuç `EntityGeometry` ya da `{ error }` olur. Kaydı araç yapar (`doc.transact`); böylece her değişiklik tek adımda geri alınır.
@@ -523,7 +524,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/geom/region.test.ts` | Alan cebiri: örtüşen, komşu (ortak kenar), T-bağlantılı, köşede değen, delikli alanlar; daire ve yay kenarları; TM koordinatında girdi köşelerinin bit bit korunması; bölme, yüzler, adalar, sarkan çizgi |
 | `model/ops/areas.test.ts` | Nesne ↔ alan dönüşümleri; adalı alanda alan, çevre, kenar, aynalama, tutamaç, esnet, patlat ve belgenin deliği düşürmesi |
 | `render/triangulate.test.ts` | Delikli halkaların üçgenlenmesi (köprü, iç bükey köşe), toplam alan |
-| `model/ops/edit.test.ts` | Yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
+| `model/ops/edit.test.ts` | Uzat-kısalt (çizgi, yay, köşeleri aşan kısaltma, yayla biten çoklu çizgi, imleçten boy); yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
 | `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
 
 Kurallar:
@@ -569,8 +570,8 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - **Netcad çizim eşdeğerliği (referans Netcad'dir; AutoCAD ikincil ölçüttür. Bağlayıcı hedef: çizim kusursuz olmadan başka işe geçilmez):**
      - *Netcad'e özgü, var:* Koordinat hesap makinası (yan nokta, kenar kesişimi, doğru kesişimi, hat üzerinde nokta, açı-mesafe, orta nokta), köşe yuvarla/kır/sil, paralel al (ötele), böl, birleştir; **alan işlemleri** (birleştir, kesiştir, çıkar, böl; yaylar ve ortak sınırlar tam), adalı alan, alana çevir, içine tıklayarak alan (adalarla), çizgiye çevir; Paralel Çizgi (sol/sağ mesafe, gönyeli köşeler, eksen isteğe bağlı, koridor alan olarak); Dik in, Dik çık.
      - *Netcad'e özgü, eksik:* alanı verilen alana göre bölme (ifraz, topolojiyle); sembol ve blok yerleştirme; klotoid (spiral) nesnesi; poligon ve kutupsal ölçü hesapları (Hesap menüsü).
-     - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (teğet yay kipi, Geri), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, ölçüler (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap), HATCH; MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, dikdörtgen ARRAY, OFFSET (mesafe, noktadan geç), TRIM, EXTEND, BREAK, JOIN, EXPLODE, FILLET, CHAMFER, tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
-     - *Eksik:* PLINE yay alt seçenekleri (açı, merkez, yön, yarıçap, ikinci nokta), Uzunluk ve kalınlık; CIRCLE TTT; DONUT; REVCLOUD; MTEXT; kutupsal ve yol boyunca ARRAY; LENGTHEN; ALIGN; ROTATE/SCALE referans ve kopya ayrıntıları; TRIM/EXTEND için sınır seçme kipi; FILLET/CHAMFER çoklu ve "kırpma yok" seçenekleri.
+     - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (teğet yay kipi, Geri), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, ölçüler (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap), HATCH; MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, dikdörtgen ve kutupsal ARRAY, ALIGN, LENGTHEN, OFFSET (mesafe, noktadan geç), TRIM, EXTEND, BREAK, JOIN, EXPLODE, FILLET, CHAMFER, tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
+     - *Eksik:* PLINE yay alt seçenekleri (açı, merkez, yön, yarıçap, ikinci nokta), Uzunluk ve kalınlık; CIRCLE TTT; DONUT; REVCLOUD; MTEXT; yol boyunca ARRAY; ROTATE/SCALE referans ve kopya ayrıntıları; TRIM/EXTEND için sınır seçme kipi; FILLET/CHAMFER çoklu ve "kırpma yok" seçenekleri.
    - **Sıradaki (B, semboloji):** sembol ve blok kütüphanesi (belgeye tanım kaydı, `insert` türü, ölçek/açı, patlatma); çizgi tipi kütüphanesi (desenli ve sembollü hatlar); Mekânsal Planlar Yapım Yönetmeliği gösterimleri ve lejant
    - **Sonra (C, D):** yatay/düşey, açı ve yarıçap ölçüsü; adalı ve ilişkisel tarama; nokta hesapları (dik ayak, doğrultu-mesafe, otomatik nokta numarası); kutupsal ve yol boyunca dizi; özellik eşle, yön ters çevir, benzerini seç; imleç yanında dinamik giriş kutusu
 2. **Veri modeli:**
@@ -606,7 +607,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Birleştirme aynı uçta birden fazla aday varsa ilk bulunanla devam ediyor (dallanan ağlarda sonuç seçim sırasına bağlı).
 - Esnet, aynı pencereye giren bir yayı üç tanımlama noktasından yeniden kuruyor; tek ucu taşınan yayın orta noktası yarı yol kadar kayıyor (AutoCAD'deki gibi sehim korunmuyor).
 - Yol ötelemesinde, dar iç köşelerde oluşan kendi kendini kesen parçalar temizlenmiyor.
-- Dizi yalnızca dikdörtgen; kutupsal dizi yok.
+- Dizi dikdörtgen ve kutupsal; yol boyunca dizi yok. Diziler ilişkisel değil (tek tek kopyalar).
 - Tarama ilişkisel değil: sınır değişince tarama güncellenmez. Yayları ve daireleri parçalı (72 parça/tur) saklar.
 - Alan işlemlerinde parça sınıflandırma O(n²)'dir (her parça için kaynakların sarım sayısı); parsel ölçeğinde anlık, binlerce köşeli alanlarda yavaşlar. İçine tıklayarak alan görünümdeki bütün kenarları bindirir; büyük veride R-tree ile tıklanan yerin çevresine bakılmalı.
 - Adalı alanda buda, kır ve dış halka dışında köşe ekle/sil yok (önce Patlat); ötele yalnızca dış halkayı öteler.
@@ -653,6 +654,8 @@ src/
     hatchTool.ts             Tarama (kapalı nesne ya da çizgilerle sınır, ada algılama)
     visibleFaces.ts          Görünür çizgilerin kapattığı yüzler (önbellekli; tarama ve içine tıklayarak alan)
     modifyTools.ts           SelectionFirstTool ailesi: taşı, kopyala, döndür, ölçekle, aynala, dizi
+    arrangeTools.ts          Kutupsal dizi, hizala
+    lengthenTool.ts          Uzat-kısalt
     edgeTools.ts             EdgePickTool tabanı: ötele, buda, uzat
     cornerTools.ts           CornerTool: köşe yuvarla, pah (köşeye tıkla, imleçle boyut göster)
     pathEditTools.ts         Kır, böl, köşe ekle/sil

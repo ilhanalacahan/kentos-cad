@@ -482,6 +482,26 @@ try {
   await key('h');
   await key('Escape');
 
+  // Kutupsal dizi (typed centre and count) and Uzat-kısalt (typed total length).
+  const unit = await addGeom({ kind: 'line', a: { x: AX + 110, y: N - 40 }, b: { x: AX + 115, y: N - 40 } });
+  await b.eval(`window.kentos.selection.set([${unit}])`);
+  const beforeArray = await b.eval('window.kentos.doc.size');
+  await b.eval(`window.kentos.commands.execute('tool.arrayPolar')`);
+  await cmd(`${AX + 100},${N - 40}`);
+  await key('n');
+  await cmd('3');
+  await key('Enter');
+  check('kutupsal dizi: 3 adet, 2 yeni kopya', (await b.eval('window.kentos.doc.size')) === beforeArray + 2);
+  await key('Escape');
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${AX + 95}, minY: ${N - 60}, maxX: ${AX + 125}, maxY: ${N - 20} }, 20)`);
+  await sleep(100);
+  await key('u', { shift: true });
+  await b.click(...(await toScreen(AX + 114, N - 40)));
+  await cmd('12');
+  const longer = await b.eval(`window.kentos.doc.get(${unit})`);
+  check('uzat-kısalt: typed total length at the clicked end', Math.abs(longer.b.x - (AX + 122)) < 1e-9 && longer.a.x === AX + 110);
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
