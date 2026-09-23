@@ -113,17 +113,37 @@ export class CadDocument {
 
   // ── Editing (all edits are undoable) ────────────────────────────────
 
-  /** Groups several edits into one undo step. */
+  /**
+   * Groups several edits into one undo step, all or nothing: if `fn`
+   * throws, what it already changed is reverted (newest first) and nothing
+   * is recorded, marked dirty or kept for undo; the error goes on to the
+   * caller. A transaction inside a transaction joins the outer one as a
+   * savepoint: its failure reverts only its own edits, and the outer one
+   * reverts everything if the error reaches it. Entity ids are not reused.
+   */
   transact<T>(label: string, fn: () => T): T {
-    if (this.pending) return fn();
-    this.pending = { label, ops: [] };
+    const outer = this.pending;
+    const tx = outer ?? { label, ops: [] };
+    const mark = tx.ops.length;
+    if (!outer) this.pending = tx;
+    let done = false;
     try {
-      return fn();
+      const result = fn();
+      done = true;
+      return result;
     } finally {
-      const tx = this.pending;
-      this.pending = null;
-      if (tx.ops.length) this.commit(tx);
+      if (!done) this.rollback(tx, mark);
+      if (!outer) {
+        this.pending = null;
+        if (done && tx.ops.length) this.commit(tx);
+      }
     }
+  }
+
+  /** Reverts the ops a transaction applied after `mark`, newest first, and forgets them. */
+  private rollback(tx: Transaction, mark: number): void {
+    const undone = tx.ops.splice(mark);
+    if (undone.length) this.applyAll(undone.reverse().map(invert));
   }
 
   /**
