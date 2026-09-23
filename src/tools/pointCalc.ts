@@ -15,13 +15,49 @@ export type CalcKind = 'side' | 'distances' | 'lines' | 'along' | 'polar' | 'mid
  * its references on the drawing (with snaps), takes the typed values and
  * hands the computed point back to the command as if clicked.
  */
-export const CALC_KINDS: { kind: CalcKind; label: string; alias: string; description: string }[] = [
-  { kind: 'side', label: 'Yan nokta (dik ayak, dik boy)', alias: 'YAN', description: 'Bir hatta göre dik ayak ve dik boy (sağa artı) ile nokta.' },
-  { kind: 'distances', label: 'Kenar kesişimi', alias: 'KKES', description: 'İki noktaya verilen uzaklıklardan nokta.' },
-  { kind: 'lines', label: 'Doğru kesişimi (4 nokta)', alias: 'DKES', description: 'İki doğrunun, uzantıları dahil, kesiştiği nokta.' },
-  { kind: 'along', label: 'Hat üzerinde nokta', alias: 'HAT', description: 'Bir hat üzerinde başlangıçtan uzaklıkla ya da a/b oranıyla nokta.' },
-  { kind: 'polar', label: 'Açı ve mesafe', alias: 'AM', description: 'Durulan noktadan, bakılan doğrultuya göre saat yönünde açı ve mesafeyle nokta.' },
-  { kind: 'mid', label: 'İki nokta ortası', alias: 'ORTA', description: 'İki noktanın tam ortası.' },
+export const CALC_KINDS: { kind: CalcKind; label: string; alias: string; icon: string; description: string }[] = [
+  {
+    kind: 'side',
+    label: 'Yan nokta (dik ayak, dik boy)',
+    alias: 'YAN',
+    icon: 'calcSide',
+    description: 'Ölçü krokisindeki gibi: bir hat boyunca dik ayak, ona dik dik boy (sağa artı). A ve B’ye tıklayın, “12.5,3” yazın.',
+  },
+  {
+    kind: 'distances',
+    label: 'Kenar kesişimi',
+    alias: 'KKES',
+    icon: 'calcDistances',
+    description: 'İki noktaya uzaklığı bilinen nokta (şeritle ölçülmüş köşe). A ve B’ye tıklayın, “d1,d2” yazın, iki çözümden birine tıklayın.',
+  },
+  {
+    kind: 'lines',
+    label: 'Doğru kesişimi (4 nokta)',
+    alias: 'DKES',
+    icon: 'calcLines',
+    description: 'İki doğrunun, uzantıları dahil, kesiştiği nokta. Birinci doğrunun iki noktasına, sonra ikincinin iki noktasına tıklayın.',
+  },
+  {
+    kind: 'along',
+    label: 'Hat üzerinde nokta',
+    alias: 'HAT',
+    icon: 'calcAlong',
+    description: 'A–B hattı üzerinde, A’dan uzaklıkla ya da oranla (1/3) nokta. A ve B’ye tıklayın, uzaklığı yazın ya da hatta tıklayın.',
+  },
+  {
+    kind: 'polar',
+    label: 'Açı ve mesafe',
+    alias: 'AM',
+    icon: 'calcPolar',
+    description: 'Takeometre gibi: durulan noktadan (S), bakılan noktaya (R) göre saat yönünde açı ve mesafe. S ve R’ye tıklayın, “açı,mesafe” yazın.',
+  },
+  {
+    kind: 'mid',
+    label: 'İki nokta ortası',
+    alias: 'ORTA',
+    icon: 'calcMid',
+    description: 'İki noktanın tam ortası. İki noktaya tıklayın.',
+  },
 ];
 
 const REFS: Record<CalcKind, string[]> = {

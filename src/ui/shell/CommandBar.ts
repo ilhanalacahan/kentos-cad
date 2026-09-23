@@ -4,9 +4,10 @@ import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
 import { SNAP_LABEL, type SnapKind } from '../../viewport/picking';
-import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc';
+import { canCalcPoint } from '../../tools/pointCalc';
+import { calcMenuItems } from './calcMenu';
 import { optionButtons, parsePrompt } from '../promptOptions';
-import { PopupMenu, type MenuItem } from '../widgets/PopupMenu';
+import { PopupMenu } from '../widgets/PopupMenu';
 
 /**
  * Strip at the top of the drawing while a command runs: tool, the step it
@@ -36,9 +37,9 @@ export class CommandBar extends Component {
     this.calc.addEventListener('click', () => {
       const r = this.calc.getBoundingClientRect();
       PopupMenu.open(
-        CALC_KINDS.map((k): MenuItem => ({ label: k.label, hint: k.alias, run: () => startPointCalc(ctx, k.kind) })),
+        calcMenuItems(ctx),
         { x: r.left, y: r.bottom + 4 },
-        { minWidth: 260 },
+        { minWidth: 320 },
       );
     });
     this.el = h(

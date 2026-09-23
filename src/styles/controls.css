@@ -205,6 +205,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Two-line item: what it is, then what it does. */
+.menu__item[data-detail] {
+  align-items: flex-start;
+  height: auto;
+  padding-top: 6px;
+  padding-bottom: 7px;
+}
+.menu__item[data-detail] .menu__icon {
+  width: 26px;
+  margin-top: 1px;
+}
+.menu__label--2 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: calc(330px * var(--ui-scale));
+}
+.menu__detail {
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  white-space: normal;
+}
+.menu__item[data-active] .menu__detail {
+  color: var(--c-text-2);
+}
 .menu__hint {
   margin-left: 16px;
   color: var(--c-text-3);

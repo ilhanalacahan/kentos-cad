@@ -71,6 +71,13 @@ const ICONS = {
   snapTangent: '<circle cx="10" cy="12" r="5"/><path d="M3 6.5h14"/>',
   snapNearest: '<path d="M3 16.5 17 3.5" stroke-dasharray="2 1.6"/><path d="M6 6h8l-8 8h8z"/>',
   calc: '<rect x="4" y="2.5" width="12" height="15" rx="1.5"/><path d="M6.5 5.5h7v3h-7z"/><path d="M7 11.5h.01M10 11.5h.01M13 11.5h.01M7 14.5h.01M10 14.5h.01M13 14.5h.01" stroke-width="2" stroke-linecap="round"/>',
+  // Point calculator: clicked points are grips, the computed point is a ring.
+  calcSide: `<path d="M3 14h14"/><path d="M9 14V7.6" stroke-dasharray="2 1.5"/><path d="M9 11.8h2.2V14"/><circle cx="9" cy="6" r="1.6"/>${grip(3, 14)}${grip(17, 14)}`,
+  calcDistances: `<path d="M5 15 10 7.5 15 15" stroke-dasharray="2 1.5"/><path d="M8.33 6.64A9 9 0 0 1 11.44 8.71M8.56 8.71A9 9 0 0 1 11.67 6.64"/><circle cx="10" cy="7.5" r="1.3"/>${grip(5, 15)}${grip(15, 15)}`,
+  calcLines: `<path d="M3 15 7 11M17 15l-4-4"/><path d="M7 11 12.5 5.5M13 11 7.5 5.5" stroke-dasharray="2 1.5"/><circle cx="10" cy="8" r="1.5"/>${grip(3, 15)}${grip(7, 11)}${grip(17, 15)}${grip(13, 11)}`,
+  calcAlong: `<path d="M3 13h14M3 8.5v2.5M11 8.5v2.5M3 9.7h8"/><circle cx="11" cy="13" r="1.6"/>${grip(3, 13)}${grip(17, 13)}`,
+  calcPolar: `<path d="M5 15h12" stroke-dasharray="2 1.5"/><path d="M5 15 11.2 7.1M9 15a4 4 0 0 0-1.54-3.15"/><circle cx="12" cy="6" r="1.5"/>${grip(5, 15)}${grip(17, 15)}`,
+  calcMid: `<path d="M3 13h14M6.5 11.3v3.4M13.5 11.3v3.4"/><circle cx="10" cy="13" r="1.6"/>${grip(3, 13)}${grip(17, 13)}`,
   tracking: '<path d="M2.5 13.5h15M13.5 2.5v15" stroke-dasharray="2 1.7"/><path d="M4.5 11v5M2 13.5h5M11 3.5h5M13.5 1v5"/><circle cx="13.5" cy="13.5" r="1.4" fill="currentColor"/>',
 
   // App chrome

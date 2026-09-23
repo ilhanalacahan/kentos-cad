@@ -17,6 +17,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** Right-aligned secondary text (counts, units). */
   hint?: string;
+  /** A second line under the label saying what the item does (the row grows). */
+  detail?: string;
   run?: () => void;
   items?: MenuItem[] | (() => MenuItem[]);
 }
@@ -119,14 +121,17 @@ export class PopupMenu {
           'aria-checked': item.checked !== undefined ? String(item.checked) : null,
           'aria-disabled': item.disabled ? 'true' : null,
           'aria-haspopup': hasSub ? 'menu' : null,
+          'data-detail': item.detail ? '' : null,
         },
         h(
           'span',
           { class: 'menu__check' },
           item.checked ? (item.radio ? h('span', { class: 'menu__dot' }) : icon('check', 14)) : null,
         ),
-        h('span', { class: 'menu__icon' }, item.swatch ? h('span', { class: 'swatch', style: `--swatch:${item.swatch}` }) : item.icon ? icon(item.icon, 16) : null),
-        h('span', { class: 'menu__label' }, item.label),
+        h('span', { class: 'menu__icon' }, item.swatch ? h('span', { class: 'swatch', style: `--swatch:${item.swatch}` }) : item.icon ? icon(item.icon, item.detail ? 22 : 16) : null),
+        item.detail
+          ? h('span', { class: 'menu__label menu__label--2' }, h('span', { class: 'menu__title' }, item.label), h('span', { class: 'menu__detail' }, item.detail))
+          : h('span', { class: 'menu__label' }, item.label),
         item.hint ? h('span', { class: 'menu__hint' }, item.hint) : null,
         item.shortcut ? h('span', { class: 'menu__kbd' }, formatChord(item.shortcut)) : null,
         hasSub ? h('span', { class: 'menu__sub' }, icon('chevronRight', 14)) : null,

@@ -210,6 +210,7 @@ Yalnızca **yüzen** öğeler gölge alır: araç kutusu (`--shadow-float`); men
 ### 7.2 Açılır menü (PopupMenu)
 
 - **Satır düzeni:** onay sütunu (✓ ya da radyo noktası), simge ya da renk örneği, etiket, ipucu (sayı, birim), kısayol ve alt menü oku.
+- **İki satırlı öğe** (`MenuItem.detail`): adın altında ne yaptığını ve nasıl kullanıldığını söyleyen üçüncül renkte bir satır; simge 22 px'e büyür. Adından anlaşılmayan yöntemler için kullanılır (ör. Nokta hesabı).
 - Açma ve kapama durumu olan komutlarda simge yerine onay sütunu gösterilir. Araç komutları eylem olarak simgeyle gösterilir.
 - Devre dışı öğeler soluk görünür ama listede kalır; kullanıcı özelliğin varlığını görür.
 - Ekran kenarına sığmazsa yukarıya ya da sola açılır.
