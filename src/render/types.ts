@@ -253,6 +253,15 @@ export function batchImagePx(b: StyledBatch, pxPerM: number, dpr: number): numbe
   return 0;
 }
 
+/** Text smaller than this on screen (CSS px) is left out: it cannot be read and only clutters a far view. */
+export const MIN_TEXT_PX = 3;
+
+/** False for a text batch too small to read at this zoom (every other batch draws). */
+export function batchLegible(b: StyledBatch, pxPerM: number, dpr: number): boolean {
+  if (b.kind !== 'marker' || b.look.kind !== 'image' || b.look.image.kind !== 'text') return true;
+  return batchImagePx(b, pxPerM, dpr) >= MIN_TEXT_PX * dpr;
+}
+
 /** Whether a batch can show in a view (origin-relative box of the view in metres, device px per metre). */
 export function batchInView(b: BatchExtent, view: readonly [number, number, number, number], pxPerM: number, dpr: number): boolean {
   const r = b.reachUnit === 'world' ? b.reach : (b.reach * dpr) / pxPerM;

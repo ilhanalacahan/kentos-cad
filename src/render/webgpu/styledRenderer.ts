@@ -1,4 +1,4 @@
-import { batchImage, batchImagePx, batchInView, MARKER_STRIDE, STROKE_STRIDE, type AtlasHit, type AtlasSource, type StyledBatch } from '../types';
+import { batchImage, batchImagePx, batchInView, batchLegible, MARKER_STRIDE, STROKE_STRIDE, type AtlasHit, type AtlasSource, type StyledBatch } from '../types';
 import { dashValues, inScale, patternReach, type StyledFrame } from '../webgl2/styledRenderer';
 import { SHAPE_IDS } from '../webgl2/styledShaders';
 import { STYLED_WGSL } from './styledShaders';
@@ -215,7 +215,7 @@ export class WebGPUStyledRenderer {
       for (const layer of layers)
         for (const s of layer.list) {
           const b = s.batch;
-          s.visible = inScale(b, f.scaleDenominator) && batchInView(b, view, f.pxPerM, f.dpr);
+          s.visible = inScale(b, f.scaleDenominator) && batchInView(b, view, f.pxPerM, f.dpr) && batchLegible(b, f.pxPerM, f.dpr);
           if (!s.visible) continue;
           const image = batchImage(b);
           if (!image) continue;

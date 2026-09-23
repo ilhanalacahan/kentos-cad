@@ -1,4 +1,4 @@
-import { batchImage, batchImagePx, batchInView, MARKER_STRIDE, STROKE_STRIDE, type AtlasHit, type AtlasSource, type RGBA, type ScaleRange, type StyledBatch } from '../types';
+import { batchImage, batchImagePx, batchInView, batchLegible, MARKER_STRIDE, STROKE_STRIDE, type AtlasHit, type AtlasSource, type RGBA, type ScaleRange, type StyledBatch } from '../types';
 import { AREA_VS, HATCH_FS, MARKER_FS, MARKER_VS, PATTERN_FS, SHAPE_IDS, STROKE_FS, STROKE_VS, TILE_FS } from './styledShaders';
 
 /**
@@ -193,7 +193,7 @@ void main() { outColor = u_color; }`;
       for (const list of layers)
         for (const s of list) {
           const b = s.batch;
-          s.visible = inScale(b, f.scaleDenominator) && batchInView(b, view, f.pxPerM, f.dpr);
+          s.visible = inScale(b, f.scaleDenominator) && batchInView(b, view, f.pxPerM, f.dpr) && batchLegible(b, f.pxPerM, f.dpr);
           s.hit = null;
           if (!s.visible) continue;
           const image = batchImage(b);

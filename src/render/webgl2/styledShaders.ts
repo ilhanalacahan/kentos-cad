@@ -160,7 +160,11 @@ void main() {
   float gap = u_spacing * k;
   float a;
   if (gap < 3.0) {
-    a = min(1.0, 2.0 * halfW / max(gap, 1e-4));
+    // Lines too close to tell apart: an even tint. At 3 px it matches the 1 px hairlines drawn above;
+    // as they merge it fades to the paper's true coverage, so a thin hatch never turns an area solid.
+    float hair = min(1.0, 2.0 * halfW / max(gap, 1e-4));
+    float paper = min(1.0, u_width / max(u_spacing, 1e-9));
+    a = mix(paper, hair, clamp((gap - 1.0) / 2.0, 0.0, 1.0));
   } else {
     float u = dot(p, n) - u_offset;
     float d = abs(fract(u / u_spacing + 0.5) - 0.5) * gap;
