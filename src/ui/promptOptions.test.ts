@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePrompt } from './promptOptions';
+import { optionForKey, parsePrompt } from './promptOptions';
 
 describe('parsePrompt', () => {
   it('splits tool, step and options', () => {
@@ -27,5 +27,15 @@ describe('parsePrompt', () => {
     const p = parsePrompt('Tutamaç: yeni konumu belirtin ya da koordinat yazın (Esc: vazgeç)');
     expect(p.tool).toBe('Tutamaç');
     expect(p.step).toBe('yeni konumu belirtin ya da koordinat yazın (Esc: vazgeç)');
+  });
+});
+
+describe('option letters', () => {
+  it('matches the exact key first, then the letter without Turkish marks', () => {
+    const { options } = parsePrompt('Ölçü: ilk nokta [Çap (Ç) / Daire (C2) / Sol (S)]');
+    expect(optionForKey(options, 'c')?.label).toBe('Çap');
+    expect(optionForKey(options, 'ç')?.label).toBe('Çap');
+    expect(optionForKey(options, 's')?.label).toBe('Sol');
+    expect(optionForKey(options, 'x')).toBeUndefined();
   });
 });

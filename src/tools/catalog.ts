@@ -1,4 +1,5 @@
-import { DimensionTool, TextTool } from './annotateTools';
+import { TextTool } from './annotateTools';
+import { DimensionTool } from './dimensionTool';
 import { HatchTool } from './hatchTool';
 import { ArcTool, CircleTool, SplineTool } from './curveTools';
 import { RayTool, XlineTool } from './constructionTools';
@@ -54,7 +55,7 @@ const defs: Def[] = [
 
   // Açıklama
   { id: 'text', label: 'Yazı', icon: 'text', group: 'annotate', shortcut: 'T', aliases: ['T', 'TEXT', 'YAZI'], description: 'Tek satır yazı: tıklanan yerde açılan kutuya yazılır. Yükseklik kâğıt mm olarak, açı derece ya da iki noktayla verilir; yazıya çift tıklayarak düzenleyin.', steps: ['Yazının başlayacağı yere tıklayın: orada bir yazı kutusu açılır.', 'Yazıyı yazıp Enter’a basın; Esc vazgeçer. Araç bir sonraki yazı için bekler.', '“Yükseklik” mm, “Açı” derece ya da bir çizgi boyunca iki tıkla verilir. Var olan yazıya çift tıklayarak düzenleyin.'], create: (c) => new TextTool(c) },
-  { id: 'dimension', label: 'Ölçülendirme', icon: 'dimension', group: 'annotate', shortcut: 'D', aliases: ['DIM', 'OLCU'], description: 'İki nokta arasına hizalı ölçü ekler; değer proje birimini izler.', steps: ['Ölçülecek ilk noktaya tıklayın.', 'İkinci noktaya tıklayın.', 'Ölçü çizgisinin duracağı yere tıklayın.'], create: (c) => new DimensionTool(c) },
+  { id: 'dimension', label: 'Ölçülendirme', icon: 'dimension', group: 'annotate', shortcut: 'D', aliases: ['DIM', 'OLCU', 'DIMLIN', 'DIMANG', 'DIMRAD', 'DIMDIA'], description: 'Ölçü ekler: hizalı, doğrusal (ΔY yatay / ΔX düşey), açı, yarıçap ve çap; değer proje birimini izler.', steps: ['Türü üstteki düğmelerden seçin (Hizalı, Doğrusal, Açı, Yarıçap, Çap).', 'Hizalı ve doğrusal: iki noktaya, sonra ölçü çizgisinin yerine tıklayın; doğrusalda yön imlecin yerinden seçilir. Açı: iki kenara (ya da “Köşeden” ile köşe ve iki kola) tıklayın, yayı yerleştirin.', 'Yarıçap ve çap: daireye ya da yaya tıklayın, doğrultuyu gösterin.'], create: (c) => new DimensionTool(c) },
   { id: 'hatch', label: 'Tarama', icon: 'hatch', group: 'annotate', shortcut: 'H', aliases: ['H', 'HATCH', 'TARAMA'], description: 'Tıklanan kapalı alanı desenle tarar; D ile desen değişir.', steps: ['Taranacak kapalı alanın içine tıklayın.', 'Deseni üstteki “Desen” düğmesiyle değiştirin.'], create: (c) => new HatchTool(c) },
 
   // Dönüştür

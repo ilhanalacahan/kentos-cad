@@ -2,7 +2,7 @@ import type { Entity, EntityGeometry } from '../entities';
 import type { Vec2 } from '../geometry';
 import { normAngle } from '../geom/arc';
 import { bulgeArc, bulgeAt } from '../geom/bulge';
-import { layoutDimension } from '../geom/dimension';
+import { layoutDimension, type DimensionLayout } from '../geom/dimension';
 import { hatchLines } from '../geom/hatch';
 import { catmullRom } from '../geom/spline';
 
@@ -13,9 +13,9 @@ export type ExplodeResult = { pieces: EntityGeometry[] } | { error: string };
  *   polyline / polygon → lines and arcs (one per segment, holes included)
  *   spline → polyline through its tessellated curve (so it can be trimmed)
  *   dimension → lines and the value text · patterned hatch → lines
- * `valueText` renders a dimension's measured length (project units).
+ * `valueText` renders a dimension's measured value (project units).
  */
-export function explodeEntity(e: Entity, valueText: (length: number) => string): ExplodeResult {
+export function explodeEntity(e: Entity, valueText: (l: DimensionLayout) => string): ExplodeResult {
   switch (e.kind) {
     case 'polyline':
     case 'polygon': {
@@ -32,8 +32,12 @@ export function explodeEntity(e: Entity, valueText: (length: number) => string):
     case 'dimension': {
       const l = layoutDimension(e);
       if (!l) return { error: 'Ölçü geometrisi geçersiz.' };
-      const pieces: EntityGeometry[] = l.lines.map(([a, b]) => ({ kind: 'line', a, b }));
-      const text = e.text || valueText(l.length);
+      const arc = l.pick[0]?.kind === 'arc' ? l.pick[0] : null;
+      // An angular dimension's arc comes out as one arc, not as the chords it is drawn with.
+      const onArc = (p: { x: number; y: number }) => !!arc && Math.abs(Math.hypot(p.x - arc.c.x, p.y - arc.c.y) - arc.r) < 1e-9 * Math.max(1, arc.r);
+      const pieces: EntityGeometry[] = l.lines.filter(([a, b]) => !(onArc(a) && onArc(b))).map(([a, b]) => ({ kind: 'line', a, b }));
+      if (arc) pieces.push({ kind: 'arc', c: arc.c, r: arc.r, a0: normAngle(arc.a0), a1: normAngle(arc.a0 + arc.sweep) });
+      const text = e.text || valueText(l);
       // textAt is the text's centre; single-line text is anchored at its start.
       const r = (l.rotation * Math.PI) / 180;
       const half = text.length * e.height * 0.55 * 0.5;

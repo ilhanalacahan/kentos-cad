@@ -2,7 +2,7 @@ import { centroid, emptyBounds, extendBounds, pathLength, pointInPolygon, signed
 import { arcEnd, arcLength, arcMid, arcStart, TAU, tessellateArc } from './geom/arc';
 import { bulgePathLength, bulgePathOutline, bulgeRingArea, hasBulges } from './geom/bulge';
 import { ellipseArea, ellipseLength, ellipsePoint, isFullEllipse, quadrantParams, tessellateEllipse } from './geom/ellipse';
-import { layoutDimension } from './geom/dimension';
+import { layoutDimension, type DimensionStyle } from './geom/dimension';
 import { catmullRom } from './geom/spline';
 
 export type EntityKind = 'point' | 'line' | 'polyline' | 'polygon' | 'circle' | 'arc' | 'ellipse' | 'spline' | 'xline' | 'ray' | 'text' | 'dimension' | 'hatch';
@@ -96,7 +96,11 @@ export interface SplineEntity extends EntityBase {
   pts: Vec2[];
   closed: boolean;
 }
-/** Aligned dimension; `text` overrides the measured value when set. */
+/**
+ * Dimension (aligned unless `style` says otherwise; see geom/dimension for
+ * what a, b, offset, angle and c mean per style). `text` overrides the
+ * measured value when set.
+ */
 export interface DimensionEntity extends EntityBase {
   kind: 'dimension';
   a: Vec2;
@@ -104,6 +108,11 @@ export interface DimensionEntity extends EntityBase {
   offset: number;
   height: number;
   text?: string;
+  style?: DimensionStyle;
+  /** linear: measured direction, degrees CCW from east (0 = ΔY, 90 = ΔX). */
+  angle?: number;
+  /** angular: the vertex. */
+  c?: Vec2;
 }
 export type HatchPatternType = 'solid' | 'lines' | 'cross';
 export interface HatchPattern {
@@ -202,7 +211,7 @@ export function entityVertices(e: EntityGeometry): Vec2[] {
     case 'spline':
       return e.pts;
     case 'dimension':
-      return [e.a, e.b];
+      return e.c ? [e.a, e.b, e.c] : [e.a, e.b];
     case 'hatch':
       return e.holes?.length ? [...e.ring, ...e.holes.flat()] : e.ring;
   }
@@ -230,7 +239,8 @@ export function entityOutline(e: EntityGeometry, segments = 72): Vec2[] {
       return bulgePathOutline(e.pts, e.bulges, e.kind === 'polygon', TAU / segments);
     case 'dimension': {
       const l = layoutDimension(e);
-      return l ? [e.a, l.d1, l.d2, e.b] : [e.a, e.b];
+      if (!l) return [e.a, e.b];
+      return (e.style ?? 'aligned') === 'aligned' || e.style === 'linear' ? [e.a, l.d1, l.d2, e.b] : [e.a, ...l.lines.flat(), e.b];
     }
     default:
       return entityVertices(e);
@@ -331,8 +341,11 @@ export function entityLength(e: Entity): number | null {
       return ellipseLength(e);
     case 'spline':
       return pathLength(catmullRom(e.pts, e.closed));
-    case 'dimension':
-      return Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y);
+    case 'dimension': {
+      // The measured value when it is a length (an angle has none).
+      const l = layoutDimension(e);
+      return l && l.unit === 'length' ? l.value : null;
+    }
     default:
       return null;
   }

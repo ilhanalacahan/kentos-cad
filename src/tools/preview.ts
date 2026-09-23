@@ -1,5 +1,6 @@
 import { entityOutline, polygonRing, type EntityGeometry, type RingGeometry } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
+import { layoutDimension } from '../model/geom/dimension';
 import type { ViewTransform } from '../viewport/Camera';
 
 /** Shared drawing helpers for tool previews (numbers go through ctx.format). */
@@ -65,6 +66,10 @@ export function strokeGeometry(
     g.setLineDash([]);
     g.strokeRect(Math.round(s.x) - 3.5, Math.round(s.y) - 3.5, 7, 7);
     g.restore();
+    return;
+  }
+  if (geom.kind === 'dimension') {
+    for (const [a, b] of layoutDimension(geom)?.lines ?? []) strokePath(g, view, [a, b], opts);
     return;
   }
   strokePath(g, view, entityOutline(geom, 64), { ...opts, closed: geom.kind === 'polygon' || geom.kind === 'circle' });

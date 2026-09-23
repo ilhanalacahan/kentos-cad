@@ -2,7 +2,7 @@ import type { AppContext } from '../../app/context';
 import { listen } from '../../core/disposable';
 import type { Entity } from '../../model/entities';
 import type { Vec2 } from '../../model/geometry';
-import { layoutDimension } from '../../model/geom/dimension';
+import { layoutDimension, type DimensionLayout } from '../../model/geom/dimension';
 import type { TextInputRequest } from '../../viewport/ViewportController';
 import { Component } from '../Component';
 import { h } from '../dom';
@@ -57,11 +57,11 @@ export class InlineTextEditor extends Component {
     const e = this.ctx.doc.get(id);
     if (!e || (e.kind !== 'text' && e.kind !== 'dimension')) return;
     this.close(true);
-    const place = placementOf(e);
+    const place = placementOf(e, this.ctx.view);
     if (!place) return;
     this.session = { kind: 'edit', id };
     this.input.value = e.kind === 'text' ? e.text : (e.text ?? '');
-    this.input.placeholder = e.kind === 'dimension' ? this.ctx.format.length(place.measured ?? 0, false) : '';
+    this.input.placeholder = place.measured ?? '';
     this.hint.textContent = 'Enter: kaydet · Esc: vazgeç';
     this.show(place);
     this.ctx.view.setEditing(id);
@@ -130,14 +130,15 @@ interface Placement {
   height: number;
   rotation: number;
   centered: boolean;
-  measured?: number;
+  /** A dimension's own value, shown when its text is cleared. */
+  measured?: string;
 }
 
-function placementOf(e: Entity): Placement | null {
+function placementOf(e: Entity, view: { dimensionText(l: DimensionLayout): string }): Placement | null {
   if (e.kind === 'text') return { at: e.p, height: e.height, rotation: e.rotation, centered: false };
   if (e.kind === 'dimension') {
     const l = layoutDimension(e);
-    return l ? { at: l.textAt, height: e.height, rotation: l.rotation, centered: true, measured: l.length } : null;
+    return l ? { at: l.textAt, height: e.height, rotation: l.rotation, centered: true, measured: view.dimensionText(l) } : null;
   }
   return null;
 }

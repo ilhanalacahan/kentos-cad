@@ -1,5 +1,6 @@
 import type { AppContext } from '../../app/context';
 import { watchAll } from '../../core/signal';
+import { DIMENSION_STYLE_LABEL, layoutDimension } from '../../model/geom/dimension';
 import { ENTITY_KIND_LABEL, HATCH_PATTERN_LABEL, entityArea, entityLength, type Entity, type HatchPatternType } from '../../model/entities';
 import { bearingGrad, dist } from '../../model/geometry';
 import { sweep } from '../../model/geom/arc';
@@ -260,10 +261,14 @@ export class PropertiesPanel extends Panel {
                 },
               },
         });
+        const style = e.style ?? 'aligned';
+        const l = layoutDimension(e);
+        geo.push({ label: 'Tür', value: DIMENSION_STYLE_LABEL[style] });
+        if (l?.unit === 'angle') geo.push({ label: 'Ölçülen açı', value: f.angle(l.value, false), numeric: true, unit: f.angleUnitLabel });
+        else if (l) geo.push(num(style === 'diameter' ? 'Ölçülen çap' : style === 'radius' ? 'Ölçülen yarıçap' : 'Ölçülen uzunluk', l.value, 'm'));
+        if (style === 'aligned') geo.push({ label: 'Semt', value: f.bearing(bearingGrad(e.a, e.b), false), numeric: true, unit: f.angleUnitLabel });
         geo.push(
-          num('Ölçülen uzunluk', entityLength(e)!, 'm'),
-          { label: 'Semt', value: f.bearing(bearingGrad(e.a, e.b), false), numeric: true, unit: f.angleUnitLabel },
-          n('Ötelenme', 'offset', e.offset),
+          n(style === 'angular' ? 'Yay yarıçapı' : style === 'radius' || style === 'diameter' ? 'Dışa uzantı' : 'Ötelenme', 'offset', e.offset),
           n('Yazı yüksekliği', 'height', e.height),
           {
             label: 'Yazı',

@@ -32,7 +32,7 @@ export function stretchEntity(e: Entity, r: Bounds, dx: number, dy: number): Ent
       if (!any(geom.ring) && !(geom.holes ?? []).some(any)) return null;
       return { ...geom, ring: geom.ring.map(mv), ...(geom.holes && { holes: geom.holes.map((h) => h.map(mv)) }) };
     case 'dimension':
-      return any([geom.a, geom.b]) ? { ...geom, a: mv(geom.a), b: mv(geom.b) } : null;
+      return any(geom.c ? [geom.a, geom.b, geom.c] : [geom.a, geom.b]) ? { ...geom, a: mv(geom.a), b: mv(geom.b), ...(geom.c && { c: mv(geom.c) }) } : null;
     case 'circle':
     case 'ellipse':
       return inside(geom.c, r) ? { ...geom, c: mv(geom.c) } : null;

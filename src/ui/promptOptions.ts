@@ -46,6 +46,22 @@ export function parsePrompt(prompt: string): ParsedPrompt {
 }
 
 /** Sends an option as if it had been typed (Enter and Esc map to confirm and cancel). */
+const TR_FOLD: Record<string, string> = { Ç: 'C', Ş: 'S', Ğ: 'G', Ö: 'O', Ü: 'U', İ: 'I' };
+const fold = (k: string) => {
+  const u = k.toLocaleUpperCase('tr-TR');
+  return TR_FOLD[u] ?? u;
+};
+
+/**
+ * The option a pressed letter selects: the exact key first, then the same
+ * letter without Turkish marks, so "Çap (Ç)" also answers to C on a
+ * keyboard without Ç.
+ */
+export function optionForKey(options: readonly PromptOption[], key: string): PromptOption | undefined {
+  const k = key.toLocaleUpperCase('tr-TR');
+  return options.find((o) => o.key.toLocaleUpperCase('tr-TR') === k) ?? options.find((o) => fold(o.key) === fold(k));
+}
+
 export function runPromptOption(ctx: AppContext, key: string): void {
   if (key === 'Enter') ctx.commands.execute('tool.confirm');
   else if (key === 'Esc') ctx.commands.execute('tool.cancel');

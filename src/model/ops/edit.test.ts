@@ -147,7 +147,7 @@ describe('explodeEntity', () => {
   });
   it('explodes a dimension into lines and its value text', () => {
     const d = withId({ kind: 'dimension', a: v(0, 0), b: v(10, 0), offset: 2, height: 1 });
-    const r = explodeEntity(d, (l) => l.toFixed(2));
+    const r = explodeEntity(d, (l) => l.value.toFixed(2));
     if (!('pieces' in r)) throw new Error('expected pieces');
     const text = r.pieces.find((p) => p.kind === 'text');
     expect(text && text.kind === 'text' && text.text).toBe('10.00');

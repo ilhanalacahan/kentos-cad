@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { edgeLabels } from '../ops/edgeLabels';
-import { layoutDimension, signedOffset } from './dimension';
+import { dimensionLabel, dimensionOffsetAt, layoutDimension, linearAngleFor, sectorArms, signedOffset } from './dimension';
 import { hatchLines } from './hatch';
 import { tangentPoints } from './intersect';
 import { catmullRom } from './spline';
@@ -83,7 +83,7 @@ describe('hatchLines', () => {
 describe('dimension', () => {
   it('puts the dimension line at the offset and measures the distance', () => {
     const l = layoutDimension({ a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, offset: 3, height: 1 })!;
-    expect(l.length).toBeCloseTo(10);
+    expect(l.value).toBeCloseTo(10);
     expect(l.d1).toEqual({ x: 0, y: 3 });
     expect(l.rotation).toBeCloseTo(0);
     expect(l.textAt.y).toBeGreaterThan(3);
@@ -94,6 +94,54 @@ describe('dimension', () => {
     // Offset −3 on a right-to-left line is above; text sits above the line too.
     expect(l.d1.y).toBeCloseTo(3);
     expect(l.textAt.y).toBeGreaterThan(3);
+  });
+  it('linear: horizontal (ΔY) and vertical (ΔX) distances', () => {
+    const h = layoutDimension({ a: { x: 0, y: 0 }, b: { x: 10, y: 5 }, offset: -3, height: 1, style: 'linear', angle: 0 })!;
+    expect(h.value).toBeCloseTo(10, 12);
+    expect(h.d1).toEqual({ x: 0, y: -3 });
+    expect(h.d2.x).toBeCloseTo(10, 12);
+    expect(h.d2.y).toBeCloseTo(-3, 12);
+    const v = layoutDimension({ a: { x: 0, y: 0 }, b: { x: 10, y: 5 }, offset: -12, height: 1, style: 'linear', angle: 90 })!;
+    expect(v.value).toBeCloseTo(5, 12);
+    expect(v.d1.x).toBeCloseTo(12, 12);
+    expect(v.d2.x).toBeCloseTo(12, 12);
+    expect(v.d2.y).toBeCloseTo(5, 12);
+    // The grip puts the line back through the point it is dragged to.
+    expect(dimensionOffsetAt({ a: { x: 0, y: 0 }, b: { x: 10, y: 5 }, offset: 0, height: 1, style: 'linear', angle: 90 }, { x: 12, y: 2 })).toBeCloseTo(-12, 12);
+  });
+  it('linear direction follows where the line is placed', () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 10, y: 5 };
+    expect(linearAngleFor(a, b, { x: 5, y: 10 })).toBe(0);
+    expect(linearAngleFor(a, b, { x: 15, y: 2 })).toBe(90);
+  });
+  it('angular: counter-clockwise from arm a to arm b, arc at the offset', () => {
+    const l = layoutDimension({ a: { x: 10, y: 0 }, b: { x: 0, y: 10 }, c: { x: 0, y: 0 }, offset: 5, height: 1, style: 'angular' })!;
+    expect(l.value).toBeCloseTo(Math.PI / 2, 12);
+    expect(l.unit).toBe('angle');
+    expect(l.d1.x).toBeCloseTo(5, 12);
+    expect(l.d2.y).toBeCloseTo(5, 12);
+    expect(l.pick[0].kind).toBe('arc');
+    // Reflex angle when the arms are given the other way round.
+    expect(layoutDimension({ a: { x: 0, y: 10 }, b: { x: 10, y: 0 }, c: { x: 0, y: 0 }, offset: 5, height: 1, style: 'angular' })!.value).toBeCloseTo(1.5 * Math.PI, 12);
+  });
+  it('angular between two lines takes the sector around the arc position', () => {
+    const c = { x: 0, y: 0 };
+    const [s, e] = sectorArms(c, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 1 });
+    expect(s).toEqual({ x: 0, y: 1 });
+    expect(e.x).toBe(-1);
+    expect(sectorArms(c, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 })).toEqual([{ x: 1, y: 0 }, { x: 0, y: 1 }]);
+  });
+  it('radius and diameter with their prefixes', () => {
+    const r = layoutDimension({ a: { x: 0, y: 0 }, b: { x: 3, y: 4 }, offset: 0, height: 1, style: 'radius' })!;
+    expect(r.value).toBeCloseTo(5, 12);
+    expect(dimensionLabel(undefined, r, { length: (m) => m.toFixed(2), angle: String })).toBe('R 5.00');
+    const d = layoutDimension({ a: { x: 0, y: 0 }, b: { x: 3, y: 4 }, offset: 2, height: 1, style: 'diameter' })!;
+    expect(d.value).toBeCloseTo(10, 12);
+    expect(d.d1.x).toBeCloseTo(-3, 12);
+    // The leader runs 2 m past the circle.
+    expect(Math.hypot(d.d2.x, d.d2.y)).toBeCloseTo(7, 12);
+    expect(dimensionLabel('Ø 10', d, { length: String, angle: String })).toBe('Ø 10');
   });
   it('computes a signed offset', () => {
     expect(signedOffset({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 2 })).toBeCloseTo(2);

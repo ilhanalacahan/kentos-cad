@@ -3,7 +3,7 @@ import type { CadDocument } from '../model/document';
 import { entityAnchor, entityVertices, type Entity } from '../model/entities';
 import { entityGrips, midGripSegment } from '../model/ops/grips';
 import type { Bounds, Vec2 } from '../model/geometry';
-import { layoutDimension } from '../model/geom/dimension';
+import { layoutDimension, type DimensionLayout } from '../model/geom/dimension';
 import type { LabelStyle } from '../model/layers';
 import { resolveColor, type CanvasPalette } from '../render/color';
 import type { ToolCursor } from '../tools/Tool';
@@ -42,7 +42,7 @@ export function drawLabels(
   cam: Camera,
   pal: CanvasPalette,
   boundsOf: (e: Entity) => Bounds,
-  formatLength: (m: number) => string,
+  dimensionText: (l: DimensionLayout) => string,
   editingId: number | null = null,
 ): void {
   const view = cam.visibleBounds();
@@ -69,7 +69,7 @@ export function drawLabels(
       g.textAlign = 'center';
       g.textBaseline = 'alphabetic';
       const color = e.color ?? layers.get(e.layerId)?.style.color;
-      haloText(g, e.text || formatLength(l.length), 0, 0, !color || color === 'fg' || color === 'fg-dim' ? pal.label : resolveColor(color, pal), pal.labelHalo);
+      haloText(g, e.text || dimensionText(l), 0, 0, !color || color === 'fg' || color === 'fg-dim' ? pal.label : resolveColor(color, pal), pal.labelHalo);
       g.restore();
       continue;
     }

@@ -7,7 +7,7 @@ import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc'
 import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
-import { optionButtons, parsePrompt, runPromptOption } from '../promptOptions';
+import { optionButtons, optionForKey, parsePrompt, runPromptOption } from '../promptOptions';
 
 /**
  * AutoCAD/Netcad-style command line. Accepts command aliases (L, PL,
@@ -72,7 +72,7 @@ export class CommandLine extends Component {
       if (ctx.tools.activeId.value === 'select' && !ctx.tools.nested) return false;
       const letter = e.key.toLocaleUpperCase('tr-TR');
       if (!/\p{L}/u.test(letter)) return false;
-      const opt = parsePrompt(ctx.tools.prompt.value).options.find((o) => o.key.toLocaleUpperCase('tr-TR') === letter);
+      const opt = optionForKey(parsePrompt(ctx.tools.prompt.value).options, letter);
       if (!opt) return false;
       runPromptOption(ctx, opt.key);
       return true;

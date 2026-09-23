@@ -468,6 +468,20 @@ try {
   check('Dik çık: 6 m from the clicked end, 5 m to the left', perp.kind === 'line' && at0(perp.a, 6, -40) && at0(perp.b, 6, -35), JSON.stringify(perp));
   await key('Escape');
 
+  // Dimension styles: linear ΔX locked with X and a typed offset; C picks "Çap" on any keyboard.
+  await key('d');
+  await key('d');
+  await cmd(`${AX},${N - 40}`);
+  await cmd(`${AX + 20},${N - 30}`);
+  await key('x');
+  await cmd('-6');
+  const lin = await newest();
+  check('linear dimension ΔX (X), typed offset', lin.kind === 'dimension' && lin.style === 'linear' && lin.angle === 90 && lin.offset === -6);
+  await key('c');
+  check('C selects “Çap (Ç)” instead of the circle tool', (await b.eval('window.kentos.tools.prompt.value')).includes('çapı ölçülecek'));
+  await key('h');
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');

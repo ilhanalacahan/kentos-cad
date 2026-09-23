@@ -230,6 +230,7 @@ export class PickIndex {
         case 'dimension': {
           consider('node', e.a, e.id);
           consider('node', e.b, e.id);
+          if (e.c) consider('node', e.c, e.id);
           const l = layoutDimension(e);
           if (l) {
             consider('endpoint', l.d1, e.id);

@@ -3,6 +3,7 @@ import { Signal } from '../core/signal';
 import { ENTITY_KIND_LABEL, entityGeometry, type Entity, type NewEntity } from '../model/entities';
 import { dist, type Bounds, type Vec2 } from '../model/geometry';
 import { translation } from '../model/geom/affine';
+import { dimensionLabel } from '../model/geom/dimension';
 import { explodeEntity } from '../model/ops/explode';
 import { joinEntities } from '../model/ops/join';
 import { stretchEntity } from '../model/ops/stretch';
@@ -85,7 +86,7 @@ export class ExplodeTool extends SelectionActionTool {
     let firstError: string | null = null;
     doc.transact('Patlat', () => {
       for (const e of targets) {
-        const r = explodeEntity(e, (l) => format.length(l, false));
+        const r = explodeEntity(e, (l) => dimensionLabel(undefined, l, { length: (m) => format.length(m, false), angle: (a) => format.angle(a) }));
         if ('error' in r) {
           firstError ??= r.error;
           continue;

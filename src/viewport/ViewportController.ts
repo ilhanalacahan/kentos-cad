@@ -3,6 +3,7 @@ import { DisposableStore, listen } from '../core/disposable';
 import { Emitter } from '../core/emitter';
 import { Signal } from '../core/signal';
 import type { Entity } from '../model/entities';
+import { dimensionLabel, type DimensionLayout } from '../model/geom/dimension';
 import type { Edge } from '../model/geom/intersect';
 import { entityGrips } from '../model/ops/grips';
 import type { Bounds, Vec2 } from '../model/geometry';
@@ -211,6 +212,12 @@ export class ViewportController {
   /** Smallest closed shape around a world point (hatch boundary). */
   enclosingRing(world: Vec2): { entity: Entity; ring: Vec2[] } | null {
     return this.picker.enclosing(world);
+  }
+
+  /** A dimension's measured value as drawn: prefix and value in project units (length without unit). */
+  dimensionText(l: DimensionLayout): string {
+    const f = this.ctx.format;
+    return dimensionLabel(undefined, l, { length: (m) => f.length(m, false), angle: (a) => f.angle(a) });
   }
 
   /** Visible entities whose bounds overlap `r` (candidates for boundaries and cut lines). */
@@ -735,7 +742,7 @@ export class ViewportController {
     const pal = this.palette;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, cam.width, cam.height);
-    drawLabels(g, this.ctx.doc, cam, pal, (e) => this.picker.boundsOf(e), (m) => this.ctx.format.length(m, false), this.editingId);
+    drawLabels(g, this.ctx.doc, cam, pal, (e) => this.picker.boundsOf(e), (l) => this.dimensionText(l), this.editingId);
     const sel = [...this.ctx.selection.ids.value].map((id) => this.ctx.doc.get(id)).filter((e): e is Entity => !!e);
     drawGrips(g, sel, cam, pal, this.ctx.tools.active.activeGrip?.() ?? null);
     this.ctx.tools.active.draw?.(g, cam);

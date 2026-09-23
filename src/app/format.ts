@@ -67,6 +67,11 @@ export class Formatter {
     return unit ? `${s} g` : s;
   }
 
+  /** An angle given in radians (angular dimensions), in the project's angle unit. */
+  angle(rad: number, unit = true): string {
+    return this.bearing((rad * 200) / Math.PI, unit);
+  }
+
   get angleUnitLabel(): string {
     return this.prefs.angleUnit.value === 'deg' ? '°' : 'g';
   }

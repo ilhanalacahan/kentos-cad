@@ -3,7 +3,7 @@ import type { Vec2 } from '../geometry';
 import { arcEnd, arcMid, arcStart, arcThrough } from '../geom/arc';
 import { translation } from '../geom/affine';
 import { bulgeAt, bulgeThrough, isArcBulge, segmentMid } from '../geom/bulge';
-import { layoutDimension, signedOffset } from '../geom/dimension';
+import { dimensionOffsetAt, layoutDimension } from '../geom/dimension';
 import { closestParam, ellipseFromCenter, ellipsePoint, isFullEllipse } from '../geom/ellipse';
 import { transformEntity } from './transform';
 
@@ -16,7 +16,7 @@ const DIRECTION_GRIP = 10;
  *   the vertices of each hole (polygon)
  *   circle: centre, 4 quadrants · arc: start, mid, end, centre
  *   point/text: insertion point · spline: fit points
- *   dimension: a, b, dimension-line middle · hatch: ring
+ *   dimension: a, b, dimension line (arc, leader end), vertex (angular) · hatch: ring
  */
 export function entityGrips(e: Entity): Vec2[] {
   switch (e.kind) {
@@ -49,7 +49,7 @@ export function entityGrips(e: Entity): Vec2[] {
       return e.ring;
     case 'dimension': {
       const l = layoutDimension(e);
-      return l ? [e.a, e.b, { x: (l.d1.x + l.d2.x) / 2, y: (l.d1.y + l.d2.y) / 2 }] : [e.a, e.b];
+      return l ? [e.a, e.b, l.handle, ...(e.c ? [e.c] : [])] : [e.a, e.b];
     }
   }
 }
@@ -127,7 +127,8 @@ export function moveGrip<E extends Entity>(e: E, index: number, p: Vec2): E | nu
     case 'dimension': {
       if (index === 0) return Math.hypot(e.b.x - p.x, e.b.y - p.y) > 1e-9 ? { ...e, a: p } : null;
       if (index === 1) return Math.hypot(p.x - e.a.x, p.y - e.a.y) > 1e-9 ? { ...e, b: p } : null;
-      return { ...e, offset: signedOffset(e.a, e.b, p) };
+      if (index === 3) return { ...e, c: p };
+      return { ...e, offset: dimensionOffsetAt(e, p) };
     }
   }
 }

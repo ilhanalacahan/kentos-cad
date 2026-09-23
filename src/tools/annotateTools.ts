@@ -1,6 +1,5 @@
 import type { AppContext } from '../app/context';
 import { dist, type Vec2 } from '../model/geometry';
-import { layoutDimension, signedOffset } from '../model/geom/dimension';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
@@ -148,58 +147,5 @@ export class TextTool extends PointInputTool {
     g.setLineDash([3, 3]);
     g.strokeRect(0, -px, px * 4, px);
     g.restore();
-  }
-}
-
-// ── Ölçü ────────────────────────────────────────────────────────────────
-
-/** Aligned dimension: two measured points, then the dimension-line position. */
-export class DimensionTool extends PointInputTool {
-  readonly id = 'dimension';
-  protected readonly label = 'Ölçü';
-
-  protected promptFor(n: number): string {
-    return n === 0 ? 'ilk ölçü noktasını belirtin' : n === 1 ? 'ikinci ölçü noktasını belirtin' : 'ölçü çizgisinin yerini gösterin ya da mesafe yazın';
-  }
-
-  private height(): number {
-    return paper(this.ctx, 2.5);
-  }
-
-  protected onPoint(p: Vec2): void {
-    if (this.pts.length < 2) {
-      if (!this.last || dist(this.last, p) > 1e-9) this.pts.push(p);
-      return;
-    }
-    this.commit(signedOffset(this.pts[0], this.pts[1], p));
-  }
-
-  override input(text: string): boolean {
-    const n = parseNumber(text);
-    if (this.pts.length === 2 && n !== null && !/[,;@<]/.test(text)) {
-      this.commit(n);
-      return true;
-    }
-    return super.input(text);
-  }
-
-  private commit(offset: number): void {
-    const [a, b] = this.pts;
-    const e = this.create({ kind: 'dimension', a, b, offset, height: this.height() });
-    if (e) this.ctx.log.success(`Ölçü eklendi: ${this.ctx.format.length(dist(a, b))}`);
-    this.pts = [];
-  }
-
-  override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    const pal = this.ctx.view.palette;
-    if (this.pts.length === 2 && this.hover) {
-      const l = layoutDimension({ a: this.pts[0], b: this.pts[1], offset: signedOffset(this.pts[0], this.pts[1], this.hover), height: this.height() });
-      if (l) {
-        for (const [p, q] of l.lines) strokePath(g, view, [p, q], { color: pal.accent });
-        drawTag(g, view.worldToScreen(this.hover), [this.ctx.format.length(l.length)], pal.accent, pal.labelHalo);
-      }
-      return;
-    }
-    super.draw(g, view);
   }
 }

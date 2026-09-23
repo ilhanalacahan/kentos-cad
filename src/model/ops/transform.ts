@@ -49,9 +49,22 @@ export function transformEntity<E extends Entity>(e: E, m: Affine): E {
     }
     case 'spline':
       return { ...e, pts: e.pts.map((p) => apply(m, p)) };
-    case 'dimension':
-      // A reflection swaps left and right of a→b, so the offset changes sign.
-      return { ...e, a: apply(m, e.a), b: apply(m, e.b), offset: e.offset * s * (isReflection(m) ? -1 : 1), height: e.height * s };
+    case 'dimension': {
+      const style = e.style ?? 'aligned';
+      const flip = isReflection(m);
+      const a = apply(m, e.a);
+      const b = apply(m, e.b);
+      const base = { ...e, height: e.height * s, ...(e.c && { c: apply(m, e.c) }) };
+      // An angle stays counter-clockwise from a to b: a reflection swaps the arms.
+      if (style === 'angular') return flip ? { ...base, a: b, b: a, offset: e.offset * s } : { ...base, a, b, offset: e.offset * s };
+      if (style === 'radius' || style === 'diameter') return { ...base, a, b, offset: e.offset * s };
+      // Aligned and linear: a reflection swaps left and right, so the offset changes sign.
+      const offset = e.offset * s * (flip ? -1 : 1);
+      if (style !== 'linear') return { ...base, a, b, offset };
+      const rad = ((e.angle ?? 0) * Math.PI) / 180;
+      const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
+      return { ...base, a, b, offset, angle: (Math.atan2(dir.y, dir.x) * 180) / Math.PI };
+    }
     case 'hatch': {
       const rad = (e.pattern.angle * Math.PI) / 180;
       const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
