@@ -1,5 +1,6 @@
 import type { AngleUnit } from '../model/projectSettings';
 import type { Entity, EntityKind, NewEntity } from '../model/entities';
+import type { CompiledExpression } from './expression';
 import type { Vec2 } from '../model/geometry';
 import type { LayerStyle } from '../model/layers';
 
@@ -22,9 +23,10 @@ export type FeatureScope = 'selection' | 'visible' | 'all' | 'layer' | 'ids';
 
 /**
  * Value of a features parameter. "ids" is what models pass between steps
- * (the objects a previous step created).
+ * (the objects a previous step created). `kinds` narrows the tool's kinds
+ * for this run (only polygons, say); absent means every kind the tool takes.
  */
-export type FeaturesValue = { scope: 'selection' | 'visible' | 'all' } | { scope: 'layer'; layerId: string } | { scope: 'ids'; ids: number[] };
+export type FeaturesValue = ({ scope: 'selection' | 'visible' | 'all' } | { scope: 'layer'; layerId: string } | { scope: 'ids'; ids: number[] }) & { kinds?: EntityKind[] };
 
 /** Value of a layer parameter: an existing layer, or a new one made when the tool writes to it. */
 export type LayerValue = { layerId: string } | { newName: string };
@@ -126,7 +128,30 @@ export interface PointParam<N extends string = string> extends ParamBase<N> {
   readonly default?: Default<Vec2 | null>;
 }
 
-export type ParamDef = FeaturesParam | NumberParam | StringParam | BooleanParam | EnumParam | LayerParam | PointParam;
+/**
+ * An expression over each object's attributes and geometry (expression.ts):
+ * a condition (select, filter) or a value (field calculator). Written as
+ * text; the tool receives it compiled.
+ */
+export interface ExpressionParam<N extends string = string> extends ParamBase<N> {
+  readonly type: 'expression';
+  readonly default?: Default<string>;
+  /** "condition": true or false per object; "value": something to write. */
+  readonly returns: 'condition' | 'value';
+  /** Name of the features parameter whose objects it reads (fields offered, live preview). */
+  readonly of?: string;
+  readonly placeholder?: string;
+}
+
+/** An attribute name of the objects of a features parameter; `allowNew` lets the user type a new one. */
+export interface FieldParam<N extends string = string> extends ParamBase<N> {
+  readonly type: 'field';
+  readonly default?: Default<string>;
+  readonly of: string;
+  readonly allowNew?: boolean;
+}
+
+export type ParamDef = FeaturesParam | NumberParam | StringParam | BooleanParam | EnumParam | LayerParam | PointParam | ExpressionParam | FieldParam;
 export type ParamType = ParamDef['type'];
 
 /** A parameter's value as the dialog and history hold it. */
@@ -144,7 +169,9 @@ export type ValueOf<D> = D extends { type: 'features' }
             ? LayerValue
             : D extends { type: 'point' }
               ? Vec2 | null
-              : never;
+              : D extends { type: 'expression' | 'field' }
+                ? string
+                : never;
 
 type Maybe<D, T> = D extends { optional: true } ? T | null : T;
 
@@ -164,7 +191,7 @@ export interface TargetLayer {
   readonly isNew: boolean;
 }
 
-type ResolvedOf<D> = D extends { type: 'features' } ? FeatureSet : D extends { type: 'layer' } ? TargetLayer : ValueOf<D>;
+type ResolvedOf<D> = D extends { type: 'features' } ? FeatureSet : D extends { type: 'layer' } ? TargetLayer : D extends { type: 'expression' } ? CompiledExpression : ValueOf<D>;
 
 /** What `run` receives: features and layers resolved, the rest as entered. */
 export type ResolvedValues<Ds extends readonly ParamDef[]> = { [D in Ds[number] as D['name']]: Maybe<D, ResolvedOf<D>> };
@@ -201,6 +228,10 @@ export interface DocumentSnapshot {
 export interface RunContext {
   readonly doc: DocumentSnapshot;
   readonly units: DefaultsContext;
+  /** Layer name for an id (expressions, summaries). */
+  layerName(id: string): string;
+  /** Ids selected when the run started (selection tools combine with it). */
+  readonly selection: readonly number[];
 }
 
 /** Progress, messages and cancellation, shared with the dialog. */
@@ -223,6 +254,8 @@ export interface ChangeSet {
 
 export interface RunResult {
   changes?: ChangeSet;
+  /** The selection after the run, for tools that select rather than edit. */
+  select?: readonly number[];
   /** Values for number/string outputs. */
   outputs?: Record<string, unknown>;
   /** One line for the log and history ("24 köşe numaralandı: P00001 – P00024"). */

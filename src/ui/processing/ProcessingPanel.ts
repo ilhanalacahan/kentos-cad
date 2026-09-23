@@ -175,7 +175,7 @@ export class ProcessingPanel extends Panel {
 
   private historyRow(r: RunRecord): HTMLElement {
     const { doc } = this.ctx;
-    const alive = r.added.filter((id) => doc.get(id));
+    const alive = (r.added.length ? r.added : r.touched).filter((id) => doc.get(id));
     const known = !!this.ctx.processing.registry.get(r.toolId);
     const reopen = h('button', { class: 'btn btn--small', type: 'button', disabled: !known, title: 'Aynı değerlerle pencereyi açar' }, 'Yeniden aç');
     reopen.addEventListener('click', () => openToolDialog(this.ctx, r.toolId, r.values));

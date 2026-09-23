@@ -226,6 +226,138 @@
   color: var(--c-text);
 }
 
+.pfield__hint {
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+}
+.pfield__hint:empty {
+  display: none;
+}
+
+/* Chips: kind filter (toggle) and expression helpers (insert). */
+.pfield__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.pfield__chips-label {
+  margin-right: 4px;
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+}
+.pfield__exprbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pfield__exprbar > .pfield__chips {
+  flex: 1;
+  min-width: 0;
+}
+.pfield__exprmenus {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.pchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: calc(24px * var(--ui-scale));
+  padding: 0 9px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-field);
+  color: var(--c-text-2);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.pchip:hover {
+  border-color: var(--c-line-strong);
+  color: var(--c-text);
+}
+.pchip[aria-pressed='true'] {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+  color: var(--c-text);
+}
+.pchip[aria-pressed='true'] .icon {
+  color: var(--c-accent-text);
+}
+.pchip[aria-pressed='false'] {
+  text-decoration: line-through;
+  text-decoration-color: var(--c-text-3);
+}
+.pchip__count {
+  color: var(--c-text-3);
+}
+.pchip--insert {
+  border-radius: var(--r-sm);
+}
+.pchip--menu {
+  gap: 3px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 6px;
+}
+.pchip--menu:hover {
+  background: var(--c-hover);
+  border-color: transparent;
+}
+
+/* Field picker: type a name or pick one the objects have. */
+.pfield__combo {
+  display: flex;
+  align-items: stretch;
+}
+.pfield__combo-input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.pfield__combo-btn {
+  display: grid;
+  place-items: center;
+  width: calc(30px * var(--ui-scale));
+  border: 1px solid var(--c-line-strong);
+  border-left: 0;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--c-field);
+  color: var(--c-text-3);
+}
+.pfield__combo-btn:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+
+/* Expression: typed like the command line, so it is set in mono. */
+.pfield__expr {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.pfield__preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--c-text-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pfield__preview:empty {
+  display: none;
+}
+.pfield__preview .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--c-ok);
+}
+.prow[data-invalid] .pfield__preview {
+  display: none;
+}
+
 /* Side panel: what the tool does, preview, where it runs */
 .ptool__side {
   display: flex;

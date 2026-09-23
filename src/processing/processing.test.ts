@@ -4,7 +4,9 @@ import type { Entity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
 import { LayerStore } from '../model/layers';
 import { BUILTIN_TOOLS } from './builtin';
+import { calculateField } from './builtin/calculateField';
 import { edgeLengths } from './builtin/edgeLengths';
+import { selectByExpression } from './builtin/selectByExpression';
 import { formatNumber, numberCorners, parseNumber, ringOrder, type NumberingOptions } from './builtin/numbering';
 import { vertexNumbering } from './builtin/vertexNumbering';
 import { orderSteps, checkModel, type ProcessingModel } from './model';
@@ -121,7 +123,7 @@ describe('registry', () => {
     expect(() => r.register(vertexNumbering)).toThrow();
     expect(() => r.register({ ...edgeLengths, id: 'x.y', category: 'nope' })).toThrow();
     const tree = r.tree();
-    expect(tree.map((n) => n.category.id)).toEqual(['points', 'annotation']);
+    expect(tree.map((n) => n.category.id)).toEqual(['points', 'annotation', 'attributes', 'selection']);
     expect(r.search('kose numara').map((t) => t.id)).toEqual(['points.numberVertices']);
     expect(r.search('KENAR').map((t) => t.id)).toEqual(['annotation.edgeLengths']);
     expect(r.categoryPath('points')).toBe('Nokta işlemleri');
@@ -180,6 +182,66 @@ describe('runner on a document', () => {
     // An empty result handed along a model still runs.
     const chained = await runner.run(vertexNumbering, { ...values, input: { scope: 'ids', ids: [] } });
     expect(chained.status === 'ok' && chained.record.summary).toBe('Numaralanacak alan yok.');
+  });
+});
+
+describe('expressions, fields and selection in tools', () => {
+  const setup = () => {
+    const doc = new CadDocument({ name: 't.kcad', layers: new LayerStore([{ id: 'a', name: 'Parseller' }, { id: 'b', name: 'Yol' }], 'a'), origin: v(0, 0) });
+    const small = doc.add({ kind: 'polygon', pts: square(0, 0, 10), layerId: 'a', label: '1', attrs: { Parsel: '1', Nitelik: 'Arsa' } });
+    const big = doc.add({ kind: 'polygon', pts: square(20, 0, 30), layerId: 'a', label: '2', attrs: { Parsel: '2', Nitelik: 'Tarla' } });
+    const road = doc.add({ kind: 'polyline', pts: [v(0, -5), v(60, -5)], layerId: 'b', attrs: {} });
+    let selected: number[] = [small.id];
+    const runner = new ProcessingRunner({ doc, selectedIds: () => selected, visibleBounds: () => null, select: (ids) => (selected = [...ids]) });
+    return { doc, runner, small, big, road, selection: () => selected };
+  };
+  it('summarizes kinds and fields, and narrows to the kinds the user keeps', () => {
+    const { runner } = setup();
+    const values = { ...defaultValues(calculateField, runner.defaults()), input: { scope: 'all' } };
+    const s = runner.describeInputs(calculateField, values).input;
+    expect(s.count).toBe(3);
+    expect(s.byKind).toEqual([
+      { kind: 'polygon', count: 2 },
+      { kind: 'polyline', count: 1 },
+    ]);
+    expect(s.fields.map((f) => f.name)).toEqual(['Nitelik', 'Parsel']);
+    const only = runner.describeInputs(calculateField, { ...values, input: { scope: 'all', kinds: ['polyline'] } }).input;
+    expect(only.count).toBe(1);
+    expect(validateValues(calculateField, { ...values, input: { scope: 'all', kinds: [] } }, { layerExists: () => true, layerLocked: () => false })[0].message).toContain('en az bir nesne türü');
+  });
+  it('selects by expression in every mode and leaves nothing to undo', async () => {
+    const { doc, runner, small, big, selection } = setup();
+    const base = { input: { scope: 'all' }, condition: "$alan > 50 ve Nitelik = 'Tarla'" };
+    let out = await runner.run(selectByExpression, { ...base, mode: 'new' });
+    expect(out.status === 'ok' && out.touched).toEqual([big.id]);
+    expect(selection()).toEqual([big.id]);
+    expect(doc.canUndo.value).toBe(true); // from the setup adds only
+    await runner.run(selectByExpression, { ...base, condition: 'Parsel = 1', mode: 'add' });
+    expect(selection().sort()).toEqual([small.id, big.id].sort());
+    await runner.run(selectByExpression, { ...base, condition: '$alan > 500', mode: 'remove' });
+    expect(selection()).toEqual([small.id]);
+    out = await runner.run(selectByExpression, { ...base, condition: 'boş(Parsel)', mode: 'within' });
+    expect(selection()).toEqual([]);
+    expect(out.status === 'ok' && out.record.summary).toBe('1 / 3 nesne koşulu sağladı; seçimde 0 nesne var.');
+    const bad = await runner.run(selectByExpression, { ...base, condition: '$alan >', mode: 'new' });
+    expect(bad.status === 'invalid' && bad.issues[0].message).toBe('“Koşul”: 8. karakterde: İfade yarım kalmış: sonunda bir değer eksik.');
+  });
+  it('calculates a field, follows the label, skips empty results, and undoes in one step', async () => {
+    const { doc, runner, small, big, road } = setup();
+    const values = { ...defaultValues(calculateField, runner.defaults()), input: { scope: 'all' }, field: 'Parsel', value: "Parsel + '/A'" };
+    const out = await runner.run(calculateField, values);
+    expect(out.status === 'ok' && out.record.summary).toBe('2 nesnede “Parsel” yazıldı; 1 nesnede sonuç boş olduğu için dokunulmadı.');
+    expect(doc.get(small.id)!.attrs.Parsel).toBe('1/A');
+    expect(doc.get(small.id)!.label).toBe('1/A');
+    expect(doc.get(road.id)!.attrs.Parsel).toBeUndefined();
+    doc.undo();
+    expect(doc.get(big.id)!.attrs.Parsel).toBe('2');
+    expect(doc.get(big.id)!.label).toBe('2');
+    // Default: the computed area with the project's area decimals, into a new field.
+    const area = await runner.run(calculateField, { ...defaultValues(calculateField, runner.defaults()), input: { scope: 'all', kinds: ['polygon'] }, where: "Nitelik = 'Tarla'" });
+    expect(area.status === 'ok' && area.record.summary).toBe('1 nesnede “Hesap alanı” yazıldı; 1 nesne koşulu sağlamadı.');
+    expect(doc.get(big.id)!.attrs['Hesap alanı']).toBe('900.00');
+    expect(doc.get(big.id)!.label).toBe('2');
   });
 });
 

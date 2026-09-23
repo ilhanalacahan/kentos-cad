@@ -1,6 +1,7 @@
 import { DisposableStore, listen } from '../../core/disposable';
 import { h, overlayRoot, type Child } from '../dom';
 import { icon } from '../icons';
+import { PopupMenu } from './PopupMenu';
 
 /** Modal dialog with focus trap-lite, Esc to close and restored focus. */
 export class Dialog {
@@ -41,6 +42,8 @@ export class Dialog {
         window,
         'keydown',
         (e) => {
+          // An open menu (a dropdown in the form) takes its own Esc first.
+          if (e.key === 'Escape' && PopupMenu.isOpen) return;
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();

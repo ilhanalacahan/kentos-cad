@@ -15,6 +15,7 @@ export interface ProcessingCategory {
 export const PROCESSING_CATEGORIES: readonly ProcessingCategory[] = [
   { id: 'points', label: 'Nokta işlemleri', icon: 'point', description: 'Nokta üretme, numaralandırma ve nokta listeleri' },
   { id: 'annotation', label: 'Yazı ve etiket', icon: 'text', description: 'Ölçü, uzunluk ve öznitelik yazıları' },
+  { id: 'attributes', label: 'Öznitelik', icon: 'table', description: 'Öznitelik hesaplama ve düzenleme' },
   { id: 'cadastre', label: 'Kadastro', icon: 'parcel', description: 'Parsel, ada ve tapu işlemleri' },
   { id: 'geometry', label: 'Geometri', icon: 'polygon', description: 'Sadeleştirme, tampon, onarım ve dönüşümler' },
   { id: 'analysis', label: 'Analiz', icon: 'measure', description: 'Ölçüm, istatistik ve raporlar' },

@@ -140,6 +140,8 @@ const ICONS = {
   processing: '<rect x="2.5" y="3" width="6" height="4.5" rx="1"/><circle cx="15" cy="5.25" r="2.25"/><rect x="11" y="12.5" width="6.5" height="4.5" rx="1"/><path d="M8.5 5.25h4.25M5.5 7.5v3.25a2 2 0 0 0 2 2H11"/><path d="m9.4 11 1.6 1.75-1.6 1.75"/>',
   numberVertices: `<path d="M3 13V4.5l6.5-2L13 6"/>${grip(3, 13)}${grip(3, 4.5)}${grip(9.5, 2.5)}<path d="M12 10v7.5M15.5 10v7.5M10.5 12.5H17M10.5 15H17"/>`,
   edgeLengths: `<path d="M3 16.5 10 3.5l7 13z"/><path d="M4.4 8.6 7.3 3.2M12.7 3.2l2.9 5.4M5.5 19h9" stroke-dasharray="1.6 1.4"/>`,
+  selectExpression: '<path d="M3.5 3 12 8.2l-3.7 1-1.9 3.6z"/><path d="M11 13.2h6.5M11 16.4h6.5"/>',
+  fieldCalc: '<rect x="2.5" y="3.5" width="15" height="13" rx="1"/><path d="M2.5 7.5h15M8 7.5v9"/><path d="M11 12h4M13 10v4"/>',
   play: '<path d="M6.5 4.5v11l8.5-5.5z"/>',
   history: '<path d="M3.5 10a6.5 6.5 0 1 0 2-4.7"/><path d="M3 3.3v3h3M10 6.5V10l2.5 1.8"/>',
   clear: '<path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>',

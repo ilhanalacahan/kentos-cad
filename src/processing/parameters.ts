@@ -1,3 +1,4 @@
+import { compileExpression, expressionError } from './expression';
 import type { DefaultsContext, FeaturesValue, LayerValue, ParamDef, ProcessingTool } from './types';
 
 /**
@@ -36,6 +37,9 @@ export function defaultValue(def: ParamDef, ctx: DefaultsContext): unknown {
       return { layerId: ctx.activeLayer } satisfies LayerValue;
     case 'point':
       return null;
+    case 'expression':
+    case 'field':
+      return '';
   }
 }
 
@@ -60,8 +64,13 @@ export function fits(def: ParamDef, v: unknown): boolean {
       return def.options.some((o) => o.value === v);
     case 'features': {
       const f = v as FeaturesValue;
-      return !!f && typeof f === 'object' && (f.scope === 'ids' ? Array.isArray(f.ids) : f.scope === 'layer' ? typeof f.layerId === 'string' : scopesOf(def).includes(f.scope));
+      if (!f || typeof f !== 'object') return false;
+      if (f.kinds !== undefined && !(Array.isArray(f.kinds) && f.kinds.every((k) => typeof k === 'string' && (!def.kinds || def.kinds.includes(k))))) return false;
+      return f.scope === 'ids' ? Array.isArray(f.ids) : f.scope === 'layer' ? typeof f.layerId === 'string' : scopesOf(def).includes(f.scope);
     }
+    case 'expression':
+    case 'field':
+      return typeof v === 'string';
     case 'layer': {
       const l = v as LayerValue;
       return !!l && typeof l === 'object' && ('layerId' in l ? typeof l.layerId === 'string' : typeof l.newName === 'string');
@@ -128,6 +137,20 @@ function checkParam(p: ParamDef, v: unknown, env: ValidationEnv): string | null 
     case 'features': {
       const f = v as FeaturesValue;
       if (f.scope === 'layer' && !env.layerExists(f.layerId)) return `${name}: seçilen katman artık yok.`;
+      if (f.kinds && !f.kinds.length) return `${name}: en az bir nesne türü seçin.`;
+      return null;
+    }
+    case 'expression': {
+      const src = (v as string).trim();
+      if (!src) return p.optional ? null : `${name}: bir ifade yazın.`;
+      const r = compileExpression(src);
+      return r.ok ? null : `${name}: ${expressionError(r)}`;
+    }
+    case 'field': {
+      const f = (v as string).trim();
+      if (!f) return p.optional ? null : `${name}: bir alan adı seçin${p.allowNew ? ' ya da yazın' : ''}.`;
+      if (f.length > 64) return `${name}: alan adı en çok 64 karakter olabilir.`;
+      if (/[[\]]/.test(f)) return `${name}: alan adında köşeli parantez kullanılamaz.`;
       return null;
     }
     case 'layer': {

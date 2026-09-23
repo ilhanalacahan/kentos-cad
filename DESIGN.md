@@ -114,7 +114,7 @@ Serin, kâğıt paftayı andıran griler. Krem ya da sıcak kâğıt tonu kullan
 | Aile | Kullanım |
 |---|---|
 | **Barlow** (400, 500, 600, italik 400) | Bütün arayüz metni. Karayolu levhalarından türemiş, dar ve okunaklı; yoğun özellik ızgaralarına uygun. |
-| **IBM Plex Mono** (400, 500) | **Yalnızca** komut satırı girdisi, komut geçmişi ve takma ad gösterimi (`PL`, `PARSEL`). Veri etiketlerinde mono kullanılmaz. |
+| **IBM Plex Mono** (400, 500) | **Yalnızca** komut satırı girdisi, komut geçmişi, takma ad gösterimi (`PL`, `PARSEL`) ve işlem pencerelerindeki ifade alanı (komut gibi yazılır). Veri etiketlerinde mono kullanılmaz. |
 
 Rakamlar her yerde **tabular** (`.num` sınıfı ya da `font-variant-numeric: tabular-nums`) yazılır, böylece koordinatlar imleç hareket ederken titremez.
 
@@ -329,6 +329,10 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
   - Hata alanın altında kırmızı simge ve metinle, alan kenarlığı kırmızı. Dokunulmamış alan hata göstermez; Çalıştır'dan sonra hepsi gösterilir ve ilk hatalı alana odaklanılır.
   - Sağ panel (`--c-panel-head`): kategori yolu, simge kutusu ve tek cümlelik açıklama (500), yardım paragrafları, kesikli kenarlıklı **Önizleme** kartı, dipte "Nerede çalışır" listesi (bu çalıştırmadaki yer yeşil dolu nokta, diğerleri "yakında") ve komut satırı takma adları (mono).
   - Alt çubuk: solda "Varsayılanlar" (hayalet), ortada durum (ilerleme çubuğu, ✓ özet + "Sonuçları seç" + "Geri al", ya da ⚠ düzeltilecek alan sayısı; en çok iki satır), sağda "Kapat" (çalışırken "Durdur") ve tek birincil düğme "▷ Çalıştır".
+- **Tür süzgeci:** nesne girdisinde iki ya da daha çok tür varsa sayının altında "Türler" ve her tür için hap düğme ("✓ Kapalı alan 118"). Açık hap yumuşak amber zemin ve amber çizgiyle, kapalı hap üstü çizili ve çizgisiz gösterilir.
+- **Alan seçici:** yazılabilir alan ve sağında ok düğmesi; menü nesnelerdeki alanları sayılarıyla listeler. Altında üçüncül bir satır sonucu söyler: "16 nesnede var; değeri değişir." ya da "Yeni alan: nesnelere eklenir."
+- **İfade alanı:** tam genişlikte tek satır, mono yazı. Altında solda "Alanlar" ve en çok altı alan hapı (fazlası "+n" menüsünde; tıklamak imlecin yerine ekler, gerekirse köşeli parantezle), sağda "Değişkenler" ve "İşlevler" menüleri (her öğede açıklama satırı). En altta canlı sonuç: ✓ "16 / 340 nesne koşulu sağlıyor." ya da "İlk nesnede (10): “472.26”."; eksik alan varsa ⓘ ile söylenir. Hata varsa önizleme gizlenir, hata alanın altında konumuyla yazar.
+- **Seçim sonucu:** seçim üreten araçta alt çubuk "Seçime yakınlaştır" sunar, "Geri al" sunmaz (belge değişmedi).
 - **Nokta parametresi:** değer tabular koordinat olarak yazılır, yanında "Haritadan göster" düğmesi; pencere kapanır, komut satırı "…: haritada bir nokta gösterin ya da Y,X yazın" der, nokta alınınca pencere aynı değerlerle döner.
 
 ### 7.12 Kontroller (genel)

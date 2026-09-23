@@ -14,6 +14,8 @@ export interface FeatureHost {
   selectedIds(): readonly number[];
   /** World box on screen, or null when there is no view (tests, server). */
   visibleBounds(): Bounds | null;
+  /** Replaces the selection (tools that select); absent where there is none. */
+  select?(ids: readonly number[]): void;
 }
 
 export const SCOPE_LABEL: Record<FeaturesValue['scope'], string> = {
@@ -59,11 +61,46 @@ export function describeCount(entities: readonly Entity[]): string {
 }
 
 export function resolveFeatures(value: FeaturesValue, def: Pick<FeaturesParam, 'kinds'>, host: FeatureHost): FeatureSet {
+  return narrow(value, host, fitting(value, def, host));
+}
+
+/** Objects in scope that the tool can take, before the user's kind filter. */
+function fitting(value: FeaturesValue, def: Pick<FeaturesParam, 'kinds'>, host: FeatureHost): Entity[] {
   const kinds = def.kinds ? new Set<EntityKind>(def.kinds) : null;
-  const entities = inScope(value, host).filter((e) => !kinds || kinds.has(e.kind));
+  return inScope(value, host).filter((e) => !kinds || kinds.has(e.kind));
+}
+
+function narrow(value: FeaturesValue, host: FeatureHost, candidates: Entity[]): FeatureSet {
+  const only = value.kinds ? new Set<EntityKind>(value.kinds) : null;
+  const entities = only ? candidates.filter((e) => only.has(e.kind)) : candidates;
   if (!entities.length) return { entities, description: `${WHERE_IN[value.scope](host, value)} uygun nesne yok` };
   const where = value.scope === 'layer' ? `“${host.doc.layers.get(value.layerId)?.name ?? '?'}” katmanında` : SCOPE_LABEL[value.scope].toLocaleLowerCase('tr-TR');
   return { entities, description: `${describeCount(entities)}; ${where}` };
+}
+
+/** A features parameter as the dialog shows it before running. */
+export interface InputSummary {
+  count: number;
+  description: string;
+  /** Kinds in scope the tool can take, with counts (for the kind filter), before that filter. */
+  byKind: { kind: EntityKind; count: number }[];
+  /** Attribute names on the objects, most common first (field pickers, expressions). */
+  fields: { name: string; count: number }[];
+}
+
+export function summarizeFeatures(value: FeaturesValue, def: Pick<FeaturesParam, 'kinds'>, host: FeatureHost): InputSummary {
+  const candidates = fitting(value, def, host);
+  const set = narrow(value, host, candidates);
+  const kinds = new Map<EntityKind, number>();
+  for (const e of candidates) kinds.set(e.kind, (kinds.get(e.kind) ?? 0) + 1);
+  const fields = new Map<string, number>();
+  for (const e of set.entities.slice(0, 20000)) for (const k of Object.keys(e.attrs)) fields.set(k, (fields.get(k) ?? 0) + 1);
+  return {
+    count: set.entities.length,
+    description: set.description,
+    byKind: [...kinds].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count),
+    fields: [...fields].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'tr')),
+  };
 }
 
 /** "Seçili nesneler arasında uygun nesne yok" — where the tool looked, as a sentence start. */

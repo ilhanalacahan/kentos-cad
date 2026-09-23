@@ -28,7 +28,7 @@ interface ProcessingMemory {
 export function createProcessing(doc: CadDocument, selection: Selection, visibleBounds: () => Bounds | null): ProcessingService {
   const registry = new ProcessingRegistry();
   for (const t of BUILTIN_TOOLS) registry.register(t);
-  const runner = new ProcessingRunner({ doc, selectedIds: () => [...selection.ids.value], visibleBounds });
+  const runner = new ProcessingRunner({ doc, selectedIds: () => [...selection.ids.value], visibleBounds, select: (ids) => selection.set(ids) });
   const memory = persistedSignals<ProcessingMemory>('kentos.processing.v1', { lastValues: {} });
   return {
     registry,

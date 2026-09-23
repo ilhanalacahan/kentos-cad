@@ -1,7 +1,8 @@
 import { Signal } from '../core/signal';
 import { foldTurkish } from '../core/text';
 import type { Entity, NewEntity } from '../model/entities';
-import { resolveFeatures, type FeatureHost } from './features';
+import { compileExpression, previewExpression } from './expression';
+import { resolveFeatures, summarizeFeatures, type FeatureHost, type InputSummary } from './features';
 import { isVisible, validateValues, type ValidationIssue } from './parameters';
 import type { DefaultsContext, ExecutionTarget, Feedback, FeaturesValue, LayerParam, LayerValue, ProcessingTool, RunContext, RunResult, TargetLayer } from './types';
 
@@ -37,18 +38,16 @@ export interface RunRecord {
   readonly summary: string;
   /** Ids of objects the run created. */
   readonly added: readonly number[];
+  /** Ids the run changed or selected (what "Sonuçları seç" offers when nothing was added). */
+  readonly touched: readonly number[];
 }
 
 export type RunOutcome =
-  | { status: 'ok'; result: RunResult; added: number[]; record: RunRecord }
+  | { status: 'ok'; result: RunResult; added: number[]; touched: number[]; record: RunRecord }
   | { status: 'invalid'; issues: ValidationIssue[] }
   | { status: 'canceled' | 'error'; message: string; record: RunRecord };
 
-/** A features parameter as the dialog shows it before running. */
-export interface InputSummary {
-  count: number;
-  description: string;
-}
+export type { InputSummary } from './features';
 
 export interface RunProgress {
   toolId: string;
@@ -103,12 +102,26 @@ export class ProcessingRunner {
   /** What each features parameter currently resolves to ("12 kapalı alan; seçili nesneler"). */
   describeInputs(tool: ProcessingTool, values: Record<string, unknown>): Record<string, InputSummary> {
     const out: Record<string, InputSummary> = {};
-    for (const p of tool.parameters) {
-      if (p.type !== 'features' || !values[p.name]) continue;
-      const set = resolveFeatures(values[p.name] as FeaturesValue, p, this.host);
-      out[p.name] = { count: set.entities.length, description: set.description };
-    }
+    for (const p of tool.parameters) if (p.type === 'features' && values[p.name]) out[p.name] = summarizeFeatures(values[p.name] as FeaturesValue, p, this.host);
     return out;
+  }
+
+  /**
+   * How an expression parameter works out on the objects it reads, for the
+   * dialog: "12 / 68 nesne koşulu sağlıyor." or the first value. Null when
+   * the expression is empty or has an error (the field shows that).
+   */
+  previewExpression(tool: ProcessingTool, values: Record<string, unknown>, name: string): string | null {
+    const def = tool.parameters.find((p) => p.name === name);
+    if (def?.type !== 'expression') return null;
+    const src = String(values[name] ?? '').trim();
+    const r = src ? compileExpression(src) : null;
+    if (!r?.ok) return null;
+    const input = tool.parameters.find((p) => p.name === (def.of ?? ''));
+    if (input?.type !== 'features' || !values[input.name]) return null;
+    const set = resolveFeatures(values[input.name] as FeaturesValue, input, this.host);
+    const layers = this.host.doc.layers;
+    return previewExpression(r.expr, set.entities, def.returns, (id) => layers.get(id)?.name ?? id);
   }
 
   /** The executor that will run the tool, or null when none of its targets is available here. */
@@ -129,8 +142,8 @@ export class ProcessingRunner {
     if (issues.length) return { status: 'invalid', issues };
     const started = Date.now();
     const copy = JSON.parse(JSON.stringify(values)) as Record<string, unknown>;
-    const record = (status: RunRecord['status'], summary: string, added: number[] = []): RunRecord => {
-      const r: RunRecord = { seq: ++this.seq, toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added };
+    const record = (status: RunRecord['status'], summary: string, added: number[] = [], touched: number[] = []): RunRecord => {
+      const r: RunRecord = { seq: ++this.seq, toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added, touched };
       this.history.set([r, ...this.history.value].slice(0, HISTORY_LIMIT));
       return r;
     };
@@ -153,6 +166,12 @@ export class ProcessingRunner {
         if (!set.entities.length && !p.optional && (v as FeaturesValue).scope !== 'ids') return { status: 'invalid', issues: [{ param: p.name, message: emptyInputMessage(p.label, v as FeaturesValue) }] };
         resolved[p.name] = set;
       }
+      if (p.type === 'expression') {
+        const src = (v as string).trim();
+        const r = src ? compileExpression(src) : null;
+        resolved[p.name] = r?.ok ? r.expr : null;
+      }
+      if (p.type === 'field') resolved[p.name] = (v as string).trim();
       if (p.type === 'layer') {
         const target = this.resolveLayer(v as LayerValue);
         if (target.isNew) newLayers.set(target.id, { name: target.name, def: p });
@@ -182,14 +201,20 @@ export class ProcessingRunner {
     };
     this.running.set({ toolId: tool.id, fraction: 0, label: '' });
     try {
-      const result = await executor.execute(tool, resolved, { doc: this.host.doc, units: this.defaults() }, feedback);
+      const layers = this.host.doc.layers;
+      const context: RunContext = { doc: this.host.doc, units: this.defaults(), layerName: (id) => layers.get(id)?.name ?? id, selection: [...this.host.selectedIds()] };
+      const result = await executor.execute(tool, resolved, context, feedback);
       if (this.canceled) {
         const message = 'İşlem iptal edildi; çizim değişmedi.';
         return { status: 'canceled', message, record: record('canceled', message) };
       }
       const added = this.apply(tool, result, newLayers, log);
-      const summary = result.summary ?? `${added.length} nesne eklendi.`;
-      return { status: 'ok', result, added, record: record('ok', summary, added) };
+      const doc = this.host.doc;
+      const selected = result.select ? [...new Set(result.select)].filter((id) => doc.get(id)) : null;
+      if (selected) this.host.select?.(selected);
+      const touched = [...new Set([...(result.changes?.update ?? []).map((u) => u.id), ...(selected ?? [])])].filter((id) => doc.get(id));
+      const summary = result.summary ?? (selected ? `${selected.length} nesne seçildi.` : `${added.length} nesne eklendi.`);
+      return { status: 'ok', result, added, touched, record: record('ok', summary, added, touched) };
     } catch (err) {
       const message = `“${tool.label}” çalışırken hata: ${(err as Error).message}`;
       return { status: 'error', message, record: record('error', message) };

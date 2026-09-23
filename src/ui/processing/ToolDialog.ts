@@ -33,7 +33,12 @@ export function openToolDialog(ctx: AppContext, toolId: string, values?: Record<
   new ToolDialog(ctx, tool, values);
 }
 
-type Status = { kind: 'idle' } | { kind: 'running'; fraction: number; label: string } | { kind: 'ok'; text: string; added: readonly number[] } | { kind: 'error' | 'invalid'; text: string };
+type Status =
+  | { kind: 'idle' }
+  | { kind: 'running'; fraction: number; label: string }
+  /** `pick`: objects "Sonuçları seç" selects; `selected`: the run set the selection itself; `undo`: it edited the drawing. */
+  | { kind: 'ok'; text: string; pick: readonly number[]; selected: boolean; undo: boolean }
+  | { kind: 'error' | 'invalid'; text: string };
 
 class ToolDialog {
   private readonly ctx: AppContext;
@@ -157,9 +162,14 @@ class ToolDialog {
   }
 
   private row(def: ParamDef): HTMLElement {
-    const env: FieldEnv = { ctx: this.ctx, describe: (name) => this.inputs[name], pickPoint: (name) => this.pickPoint(name) };
+    const env: FieldEnv = {
+      ctx: this.ctx,
+      describe: (name) => this.inputs[name],
+      previewExpression: (name) => this.ctx.processing.runner.previewExpression(this.tool, this.values, name),
+      pickPoint: (name) => this.pickPoint(name),
+    };
     const control = paramControl(def, this.values[def.name], (v, rebuild) => this.set(def.name, v, rebuild), env);
-    const stacked = def.type === 'features';
+    const stacked = def.type === 'features' || def.type === 'expression';
     return h(
       'div',
       { class: `prow${stacked ? ' prow--stacked' : ''}`, 'data-param': def.name },
@@ -209,18 +219,20 @@ class ToolDialog {
     if (running) {
       content = [h('div', { class: 'ptool__progress' }, h('span', { style: `width:${Math.round(s.fraction * 100)}%` })), h('span', { class: 'ptool__status-text' }, s.label || 'Çalışıyor…')];
     } else if (s.kind === 'ok') {
-      const select = h('button', { class: 'btn btn--ghost btn--small', type: 'button' }, 'Sonuçları seç');
-      select.addEventListener('click', () => {
-        this.ctx.selection.set(s.added);
+      // A selection result is already applied: offer to look at it; otherwise to select what changed.
+      const show = s.selected || s.pick.length ? h('button', { class: 'btn btn--ghost btn--small', type: 'button' }, s.selected ? 'Seçime yakınlaştır' : 'Sonuçları seç') : null;
+      show?.addEventListener('click', () => {
+        if (!s.selected) this.ctx.selection.set(s.pick);
         this.dialog.close();
+        if (this.ctx.selection.size) this.ctx.view.zoomToSelection();
       });
-      const undo = h('button', { class: 'btn btn--ghost btn--small', type: 'button' }, 'Geri al');
-      undo.addEventListener('click', () => {
+      const undo = s.undo ? h('button', { class: 'btn btn--ghost btn--small', type: 'button' }, 'Geri al') : null;
+      undo?.addEventListener('click', () => {
         this.ctx.commands.execute('edit.undo');
         this.status = { kind: 'idle' };
         this.render();
       });
-      content = [icon('success', 16), h('span', { class: 'ptool__status-text', title: s.text }, s.text), s.added.length ? select : null, undo];
+      content = [icon('success', 16), h('span', { class: 'ptool__status-text', title: s.text }, s.text), show, undo];
     } else if (fieldIssues || toolIssue || s.kind === 'invalid') {
       const text = toolIssue?.message ?? (fieldIssues ? `Çalıştırmadan önce ${fieldIssues} alanı düzeltin.` : s.kind === 'invalid' ? s.text : '');
       content = [icon('warning', 16), h('span', { class: 'ptool__status-text', title: text }, text)];
@@ -308,11 +320,14 @@ class ToolDialog {
     const log = (level: 'info' | 'warn', m: string) => (level === 'warn' ? this.ctx.log.warn(m) : this.ctx.log.info(m));
     const out: RunOutcome = await runner.run(this.tool, this.values, log);
     switch (out.status) {
-      case 'ok':
-        this.status = { kind: 'ok', text: out.record.summary, added: out.added };
+      case 'ok': {
+        const ch = out.result.changes;
+        const edited = out.added.length > 0 || !!ch?.update?.length || !!ch?.remove?.length;
+        this.status = { kind: 'ok', text: out.record.summary, pick: out.added.length ? out.added : out.touched, selected: !!out.result.select, undo: edited };
         this.ctx.log.success(`${this.tool.label}: ${out.record.summary}`);
         this.attempted = false;
         break;
+      }
       case 'invalid':
         this.issues = out.issues;
         this.status = { kind: 'invalid', text: out.issues[0]?.message ?? '' };

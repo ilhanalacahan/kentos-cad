@@ -625,6 +625,19 @@ try {
     check('processing: history lists the run', (await b.eval(`document.querySelectorAll('.phist__row').length`)) === 1 && (await b.eval('window.kentos.ui.dockTab.value')) === 'processing');
     await b.eval(`window.kentos.commands.execute('edit.undo')`);
     check('processing: the run is one undo step', (await b.eval('window.kentos.doc.size')) === size0);
+    // İfadeyle seç: a condition typed in the dialog selects what it matches
+    await b.eval(`window.kentos.commands.execute('processing.run.selection.byExpression')`);
+    await sleep(150);
+    await press('[data-param="input"] .seg__opt', 'Tümü');
+    await b.eval(`(() => { const i = document.querySelector('[data-param="condition"] input'); i.focus(); i.select(); })()`);
+    await b.type("Nitelik = 'Arsa' ve $alan > 450");
+    const expected = await b.eval(`(() => { const k = window.kentos; return [...k.doc.all()].filter((e) => k.doc.layers.isVisible(e.layerId) && e.attrs.Nitelik === 'Arsa' && e.kind === 'polygon' && k.doc.get(e.id) && (() => { let a = 0; const p = e.pts; for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; } return Math.abs(a / 2) > 450; })()).length; })()`);
+    const preview2 = await b.eval(`document.querySelector('[data-param="condition"] .pfield__preview')?.textContent ?? ''`);
+    check('processing: expression preview counts the matches', preview2.startsWith(`${expected} / `), preview2);
+    await press('.ptool__run');
+    await b.waitFor(`document.querySelector('.ptool__status')?.dataset.kind === 'ok'`, 5000).catch(() => {});
+    check('processing: İfadeyle seç selects the matches', expected > 0 && (await b.eval('window.kentos.selection.size')) === expected, String(expected));
+    await press('.dialog__foot .btn', 'Kapat');
     await b.eval(`window.kentos.ui.dockTab.set('layers'); window.kentos.ui.processingTab.set('tools'); window.kentos.selection.clear()`);
   }
 
