@@ -3,6 +3,7 @@ import type { Command } from '../../core/commands';
 import { listen } from '../../core/disposable';
 import { formatChord, isTextInput } from '../../core/keymap';
 import { looksLikeCoordinate } from '../../tools/coordinateInput';
+import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc';
 import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
@@ -143,7 +144,11 @@ export class CommandLine extends Component {
       log.command(`› ${text}`);
       this.remember(text);
       this.input.value = '';
-      if (!tool.input(text)) log.warn(`“${text}” anlaşılamadı. Koordinatı Y,X ya da @dY,dX biçiminde yazın.`);
+      if (tool.input(text)) return;
+      // Point calculator by its alias (YAN, KKES, DKES, HAT, AM, ORTA) while a point is expected.
+      const calc = CALC_KINDS.find((k) => k.alias === text.toLocaleUpperCase('tr-TR'));
+      if (calc && canCalcPoint(this.ctx)) return startPointCalc(this.ctx, calc.kind);
+      log.warn(`“${text}” anlaşılamadı. Koordinatı Y,X ya da @dY,dX biçiminde yazın.`);
       return;
     }
     const cmd = commands.byAlias(text) ?? commands.search(text, 1)[0];

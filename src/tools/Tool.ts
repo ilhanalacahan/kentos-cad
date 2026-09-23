@@ -52,6 +52,11 @@ export interface Tool {
   snapFrom?(): Vec2 | null;
   /** Grip currently being edited, drawn as the hot grip. */
   activeGrip?(): { id: number; index: number } | null;
+  /**
+   * A point computed elsewhere (the point calculator) given as if it had
+   * been clicked. False when the current stage does not take a point.
+   */
+  acceptPoint?(p: Vec2): boolean;
   /** Screen-space preview drawn on the overlay canvas. */
   draw?(g: CanvasRenderingContext2D, view: ViewTransform): void;
 }

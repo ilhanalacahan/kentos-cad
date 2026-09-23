@@ -85,6 +85,11 @@ export abstract class PointInputTool implements Tool {
     this.ctx.view.requestOverlay();
   }
 
+  acceptPoint(p: Vec2): boolean {
+    this.accept(p);
+    return true;
+  }
+
   protected accept(p: Vec2): void {
     this.ctx.log.info(`  ${this.ctx.format.point(p)}`);
     this.onPoint(p);

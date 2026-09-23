@@ -172,6 +172,12 @@ export class SelectTool implements Tool {
     return true;
   }
 
+  acceptPoint(p: Vec2): boolean {
+    if (!this.grip) return false;
+    this.commitGrip(p);
+    return true;
+  }
+
   confirm(): void {
     if (this.grip) return this.commitGrip(this.gripPoint ?? this.grip.origin);
     this.ctx.tools.repeatLast();

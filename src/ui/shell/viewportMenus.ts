@@ -7,6 +7,7 @@ import { midGripSegment } from '../../model/ops/grips';
 import { insertVertex, removeVertex } from '../../model/ops/vertex';
 import { SNAP_LABEL, type SnapKind } from '../../viewport/picking';
 import type { Vec2 } from '../../model/geometry';
+import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc';
 import { parsePrompt, runPromptOption } from '../promptOptions';
 import { PopupMenu, type MenuItem } from '../widgets/PopupMenu';
 
@@ -64,6 +65,9 @@ function commandItems(ctx: AppContext): MenuItem[] {
         ]
       : []),
     { kind: 'separator' },
+    ...(canCalcPoint(ctx)
+      ? [{ label: 'Nokta hesapla', icon: 'calc', items: () => CALC_KINDS.map((k): MenuItem => ({ label: k.label, hint: k.alias, run: () => startPointCalc(ctx, k.kind) })) }]
+      : []),
     { label: 'Tek seferlik kenet', icon: 'snap', items: () => snapItems(ctx, false) },
     commandItem(ctx, 'draft.snap'),
     commandItem(ctx, 'draft.ortho'),

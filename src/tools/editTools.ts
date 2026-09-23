@@ -218,6 +218,12 @@ export class StretchTool implements Tool {
     this.ctx.tools.exit();
   }
 
+  acceptPoint(p: Vec2): boolean {
+    if (this.stage !== 'base' && this.stage !== 'target') return false;
+    this.point(p);
+    return true;
+  }
+
   input(text: string): boolean {
     if (this.stage !== 'base' && this.stage !== 'target') return false;
     const pt = pointFromText(this.ctx, text, this.stage === 'target' ? this.base : null, this.hover);
@@ -300,6 +306,11 @@ export class PasteTool implements Tool {
 
   confirm(): void {
     this.ctx.tools.exit();
+  }
+
+  acceptPoint(p: Vec2): boolean {
+    this.place(p);
+    return true;
   }
 
   private place(at: Vec2): void {

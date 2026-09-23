@@ -140,6 +140,13 @@ export abstract class SelectionFirstTool implements Tool {
     return true;
   }
 
+  acceptPoint(p: Vec2): boolean {
+    if (this.picking) return false;
+    this.point(p);
+    this.refresh();
+    return true;
+  }
+
   confirm(): void {
     if (this.picking && this.ctx.selection.size) {
       this.picking = false;

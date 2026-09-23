@@ -213,6 +213,8 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   | `EdgePickTool` | `tools/edgeTools.ts`, `tools/pathEditTools.ts`, `tools/cornerTools.ts` | İmlecin altındaki kenara doğrudan etki eder: ötele, buda, uzat; kır, böl, köşe ekle/sil; `CornerTool` alt ailesi iki çizgiye ya da çoklu çizginin komşu iki kenarına etki eder: köşe yuvarla, pah |
   | Diğer | `tools/SelectTool.ts`, `tools/editTools.ts` | Seçim (pencere/kesişim, tutamaçla düzenleme), kaydırma, pencere yakınlaştırma; esnet (kesişim penceresi → temel → hedef); yapıştır |
 
+- **Şeffaf araçlar** (`ctx.tools.nest(child)` / `unnest(point)`): çalışan komutu bitirmeden üstünde açılır (AutoCAD 'CAL gibi). Sonuç noktası üst araca `acceptPoint(p)` ile, tıklanmış gibi verilir; Esc yalnızca şeffaf aracı kapatır. Nokta alan her araç ailesi `acceptPoint`'i uygular (`PointInputTool`, `SelectionFirstTool`, seçim aracında sıcak tutamaç, esnet, yapıştır).
+- **Nokta hesabı** (`tools/pointCalc.ts`, Netcad'in Koordinat hesap makinası): nokta beklenirken komut şeridindeki "Nokta hesabı" düğmesi, basılı sağ tık menüsü ya da komut satırında takma adla açılır: yan nokta (YAN: dik ayak, dik boy sağa artı), kenar kesişimi (KKES: iki uzaklık; iki çözümden biri tıklanır), doğru kesişimi (DKES: 4 nokta), hat üzerinde nokta (HAT: uzaklık ya da a/b), açı-mesafe (AM: bakılan doğrultudan saat yönünde, proje açı biriminde), iki nokta ortası (ORTA). Geometri `model/geom/survey.ts`'tedir.
 - **Katalog dışı araçlar** (`ctx.tools.run(tool, label)`): içeriği o anki duruma bağlı olan araçlar (ör. panodaki nesnelerle `PasteTool`) katalogda durmaz, "son komutu yinele"ye girmez.
 
 - **İmleç kısıtlaması** tek yerdedir (`tools/tracking.ts` → `constrainPoint`). Öncelik sırası: nesne keneti, nesne izleme, orto (Shift tersine çevirir), kutupsal izleme (F10, adım `prefs.polarIncrement`). Kutupsal kilit ışına 10 px yaklaşınca devreye girer.
@@ -293,6 +295,7 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 | `geom/offset.ts` | Gönyeli (miter) yol öteleme, keskin köşede pah; yaylı yolda yaylar merkezleri etrafında büyür/küçülür, komşular taşıyıcı doğru/çember kesişiminde birleşir; noktanın hangi tarafta olduğu |
 | `geom/shapes.ts` | Dikdörtgen (kenardan, döndürülmüş köşelerden, boyuttan), düzgün çokgen (içten, dıştan, kenardan), AutoCAD yay yöntemleri (başlangıç-merkez-bitiş/açı/kiriş, başlangıç-bitiş-açı/yön/yarıçap/merkez) |
 | `geom/ellipse.ts` | Elips ve eliptik yay: nokta, türev, parametre (afin dönüşümle birim çembere), yay uzunluğu (Simpson), alan, en yakın parametre (Newton), doğru kesişimi (tam), teğet noktaları (tam), eksenden/merkezden kurulum |
+| `geom/survey.ts` | Ölçmecilik yapıları: yan nokta (dik ayak/dik boy, sağa artı), kenar kesişimi, doğru kesişimi, hat üzerinde nokta, açı-mesafe (saat yönünde) |
 | `geom/tangentCircle.ts` | İki nesneye teğet, verilen yarıçaplı daire (TTY): paralel doğru ve çemberlerin kesişimleri, tıklanan yerlere en yakın çözüm |
 | `geom/spline.ts` | Merkezcil Catmull-Rom (Barry–Goldman), açık ve kapalı |
 | `geom/hatch.ts` | Tarama çizgilerini halkaya kırpma (tek-çift kuralı, yarı açık tepe kuralı, dünya ızgarasına hizalı, en çok 20 000 çizgi) |
@@ -493,6 +496,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/document.test.ts` | Geri alma ve yineleme, `transact`, katman devralma, proje ayarları, `Formatter` |
 | `model/geom/ellipse.test.ts` | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum |
 | `model/ops/curves2.test.ts` | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme) |
+| `model/geom/survey.test.ts` | Ölçmecilik yapıları ve işaret kuralları |
 | `model/geom/shapes.test.ts` | Dikdörtgen ve düzgün çokgen yapıları, yay yöntemleri |
 | `model/geom/bulge.test.ts` | Bulge yardımcıları, teğet devam, ters çevirme, TTY dairesi |
 | `ui/promptOptions.test.ts` | İstem ayrıştırma: araç, adım, seçenekler, değerler, notlar |
@@ -536,7 +540,9 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - **Yapıldı:** yay; döndür, ölçekle, aynala, ötele, buda, uzat, köşe yuvarla, dikdörtgen dizi; tutamaçla düzenleme; kutupsal izleme; kesişim, dik, en yakın ve çeyrek kenetleri
    - **Yapıldı (2. aşama):** eğri; hizalı ölçü; tarama (dolu, çizgili, çapraz); yerinde yazı düzenleme; yazı açısı ve yüksekliği; teğet keneti; "Kenar ölçülerini yaz"
    - **Yapıldı (3. aşama, A grubu):** çoklu çizgide yay parçaları (bulge) ve yay kipi; birleştir, patlat (eğri → çoklu çizgi dahil), kır, esnet, köşe ekle/sil ve kenar ortası tutamaçları, pah ve çoklu çizgi köşesinde yuvarlama/pah; böl (eşit parça ve aralık); pano (kes, kopyala, yapıştır, özgün koordinata yapıştır); daire 2N/3N/TTY, merkezden yay
-   - **AutoCAD/Netcad çizim eşdeğerliği (bağlayıcı hedef: çizim kusursuz olmadan başka işe geçilmez):**
+   - **Netcad çizim eşdeğerliği (referans Netcad'dir; AutoCAD ikincil ölçüttür. Bağlayıcı hedef: çizim kusursuz olmadan başka işe geçilmez):**
+     - *Netcad'e özgü, var:* Koordinat hesap makinası (yan nokta, kenar kesişimi, doğru kesişimi, hat üzerinde nokta, açı-mesafe, orta nokta), köşe yuvarla/kır/sil, paralel al (ötele), böl, birleştir.
+     - *Netcad'e özgü, eksik:* Paralel Çizgi (eksen çizilirken sol/sağ genişlikte paralel hatlar, köşeler kendiliğinden birleşir); alan işlemleri (kesiştir, çıkar, birleştir, böl); Dik in / Dik çık çizim komutları; sembol ve blok yerleştirme; klotoid (spiral) nesnesi; poligon ve kutupsal ölçü hesapları (Hesap menüsü).
      - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (teğet yay kipi, Geri), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, hizalı ölçü, HATCH; MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, dikdörtgen ARRAY, OFFSET (mesafe, noktadan geç), TRIM, EXTEND, BREAK, JOIN, EXPLODE, FILLET, CHAMFER, tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
      - *Eksik:* PLINE yay alt seçenekleri (açı, merkez, yön, yarıçap, ikinci nokta), Uzunluk ve kalınlık; CIRCLE TTT; DONUT; REVCLOUD; MTEXT; kutupsal ve yol boyunca ARRAY; LENGTHEN; ALIGN; ROTATE/SCALE referans ve kopya ayrıntıları; yatay/düşey, açı, yarıçap ölçüleri; TRIM/EXTEND için sınır seçme kipi; FILLET/CHAMFER çoklu ve "kırpma yok" seçenekleri.
    - **Sıradaki (B, semboloji):** sembol ve blok kütüphanesi (belgeye tanım kaydı, `insert` türü, ölçek/açı, patlatma); çizgi tipi kütüphanesi (desenli ve sembollü hatlar); Mekânsal Planlar Yapım Yönetmeliği gösterimleri ve lejant

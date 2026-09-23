@@ -326,6 +326,23 @@ try {
   const rays = await b.eval(`[...window.kentos.doc.all()].filter((e) => e.kind === 'ray' && e.p.y === ${N + 115}).map((e) => e.dir.x)`);
   check('trimming an xline on one side leaves a ray', !(await b.eval(`!!window.kentos.doc.get(${xl.id})`)) && rays.includes(1), JSON.stringify(rays));
 
+  // Point calculator (Netcad's koordinat hesap makinası) inside a running line: yan nokta.
+  await key('l');
+  await cmd(`${X},${N + 100}`);
+  await cmd(`${X},${N + 140}`);
+  await key('Escape');
+  await key('l');
+  await cmd(`${X + 60},${N + 100}`);
+  await cmd('YAN');
+  await b.move(...(await toScreen(X, N + 100)));
+  await b.click(...(await toScreen(X, N + 100)));
+  await b.move(...(await toScreen(X, N + 140)));
+  await b.click(...(await toScreen(X, N + 140)));
+  await cmd('30,5');
+  const side = await newest();
+  check('point calculator: yan nokta 30/5 feeds the line', Math.abs(side.b.x - X - 5) < 1e-9 && Math.abs(side.b.y - N - 130) < 1e-9, `(${(side.b.x - X).toFixed(9)}, ${(side.b.y - N).toFixed(9)})`);
+  await key('Escape');
+
   await b.eval(`window.kentos.view.camera.fit({ minX: ${X - 20}, minY: ${N - 80}, maxX: ${X + 140}, maxY: ${N + 80} }, 20)`);
   await sleep(100);
 

@@ -59,6 +59,7 @@ const ICONS = {
   snapPerpendicular: '<path d="M3 16.5h14" stroke-dasharray="2 1.6"/><path d="M6.5 16.5V5.5M6.5 11.5h5v5"/>',
   snapTangent: '<circle cx="10" cy="12" r="5"/><path d="M3 6.5h14"/>',
   snapNearest: '<path d="M3 16.5 17 3.5" stroke-dasharray="2 1.6"/><path d="M6 6h8l-8 8h8z"/>',
+  calc: '<rect x="4" y="2.5" width="12" height="15" rx="1.5"/><path d="M6.5 5.5h7v3h-7z"/><path d="M7 11.5h.01M10 11.5h.01M13 11.5h.01M7 14.5h.01M10 14.5h.01M13 14.5h.01" stroke-width="2" stroke-linecap="round"/>',
   tracking: '<path d="M2.5 13.5h15M13.5 2.5v15" stroke-dasharray="2 1.7"/><path d="M4.5 11v5M2 13.5h5M11 3.5h5M13.5 1v5"/><circle cx="13.5" cy="13.5" r="1.4" fill="currentColor"/>',
 
   // App chrome

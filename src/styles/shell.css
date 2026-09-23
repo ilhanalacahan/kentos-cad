@@ -491,6 +491,16 @@
   color: var(--c-text-3);
   font: 600 var(--fs-2xs) / 1 var(--font-ui);
 }
+.cmdbar__calc {
+  padding-right: 9px;
+  color: var(--c-text-2);
+}
+.cmdbar__calc[hidden] {
+  display: none;
+}
+.cmdbar__calc .icon {
+  color: var(--c-accent-text);
+}
 .cmdbar__snap {
   display: inline-flex;
   align-items: center;

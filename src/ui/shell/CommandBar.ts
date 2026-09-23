@@ -4,7 +4,9 @@ import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
 import { SNAP_LABEL, type SnapKind } from '../../viewport/picking';
+import { CALC_KINDS, canCalcPoint, startPointCalc } from '../../tools/pointCalc';
 import { optionButtons, parsePrompt } from '../promptOptions';
+import { PopupMenu, type MenuItem } from '../widgets/PopupMenu';
 
 /**
  * Strip at the top of the drawing while a command runs: tool, the step it
@@ -19,6 +21,7 @@ export class CommandBar extends Component {
   private readonly step: HTMLElement;
   private readonly opts: HTMLElement;
   private readonly snap: HTMLElement;
+  private readonly calc: HTMLButtonElement;
 
   constructor(ctx: AppContext, host: HTMLElement) {
     super();
@@ -27,10 +30,21 @@ export class CommandBar extends Component {
     this.step = h('span', { class: 'cmdbar__step' });
     this.opts = h('span', { class: 'cmdbar__opts' });
     this.snap = h('span', { class: 'cmdbar__snap', hidden: true });
+    // Netcad's coordinate calculator: offered whenever the command waits for a point.
+    this.calc = h('button', { class: 'cmdbar__opt cmdbar__calc', type: 'button', title: 'Ölçüyle nokta hesapla (yan nokta, kesişim, açı-mesafe…)' }, icon('calc', 14), h('span', null, 'Nokta hesabı'));
+    this.calc.addEventListener('pointerdown', (e) => e.preventDefault());
+    this.calc.addEventListener('click', () => {
+      const r = this.calc.getBoundingClientRect();
+      PopupMenu.open(
+        CALC_KINDS.map((k): MenuItem => ({ label: k.label, hint: k.alias, run: () => startPointCalc(ctx, k.kind) })),
+        { x: r.left, y: r.bottom + 4 },
+        { minWidth: 260 },
+      );
+    });
     this.el = h(
       'div',
       { class: 'cmdbar', role: 'status', 'aria-live': 'polite', hidden: true },
-      h('div', { class: 'cmdbar__main' }, this.tool, this.step, this.opts, this.snap),
+      h('div', { class: 'cmdbar__main' }, this.tool, this.step, this.opts, this.calc, this.snap),
       h(
         'span',
         { class: 'cmdbar__mouse', 'aria-hidden': 'true' },
@@ -68,5 +82,6 @@ export class CommandBar extends Component {
     replaceChildren(this.tool, d ? icon(d.icon, 16) : null, h('b', null, p.tool));
     replaceChildren(this.step, p.step, ...p.notes.map((n) => h('span', { class: 'cmdbar__note' }, n)));
     replaceChildren(this.opts, ...optionButtons(this.ctx, p.options, 'cmdbar__opt'));
+    this.calc.hidden = !canCalcPoint(this.ctx);
   }
 }
