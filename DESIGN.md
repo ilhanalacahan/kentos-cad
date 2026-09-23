@@ -336,7 +336,17 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
 - **Seçim sonucu:** seçim üreten araçta alt çubuk "Seçime yakınlaştır" sunar, "Geri al" sunmaz (belge değişmedi).
 - **Nokta parametresi:** değer tabular koordinat olarak yazılır, yanında "Haritadan göster" düğmesi; pencere kapanır, komut satırı "…: haritada bir nokta gösterin ya da Y,X yazın" der, nokta alınınca pencere aynı değerlerle döner.
 
-### 7.12 Kontroller (genel)
+### 7.12 Model tasarımcısı
+
+- **Pencere:** 1400 px genişlik, ekran yüksekliğinin %92'si. Üç sütun: solda parçalar (236), ortada diyagram, sağda ayarlar (340). Başlık modelin adını ve kaydedilmemişse "•" işaretini taşır.
+- **Diyagram zemini** alan tonudur (`--c-field`), üzerinde yakınlaşmayla ölçeklenen nokta ızgarası. Boş alan sürüklenir (el imleci), tekerlek yakınlaştırır; sağ altta Uzaklaş, Yakınlaş, Tümünü göster.
+- **Kutular:** panel zemini, güçlü çizgi, 6 px köşe. Girdi kutusu soldan 3 px mavi (`--c-info`) kenar ve mavi simgeyle "sorulan değer" olduğunu söyler; adım kutusu aracın simgesini taşır. İki satır: ad (600) ve üçüncül bilgi ("Girdi: Nesneler", "2 bağlantı"). Seçili kutu amber çerçeve alır; sorunlu adım kesik turuncu kenarla ve ⚠ ile ilk sorununu yazar. Bırakma hedefi amber halkayla gösterilir.
+- **Portlar:** kutunun sağında içi boş halka (üzerine gelince amber dolar, artı imleç); adımın solunda küçük dolu nokta. Bağlantılar üçüncül renkte eğridir, ortalarında beslenen parametre yazar (zemin renginde halkalı yazı); seçili kutuya giren ya da çıkan bağlantılar amberdir, sürüklenen bağlantı kesikli amber.
+- **Sol:** "Girdi ekle" iki sütunlu düğmeler (mavi simge), araçlar kategori başlıklarıyla; araç satırı sürüklenebilir (tutma imleci, sürüklerken imleci izleyen amber çerçeveli etiket). Dipte kısa bir kullanım notu.
+- **Sağ:** üstte simge kutusu, tür başlığı ve açıklama; bölüm başlıkları ayar grupları gibidir. Satırlarda etiket üstte, denetim altta ve tam genişliktedir. Parametre kaynağı açılır listedir; girdi ya da çıktıya bağlıysa kenarı mavidir. Silme düğmeleri kırmızı yazılı hayalet düğmedir.
+- **Alt çubuk:** solda "Düzenle" (hayalet), ortada durum, sağda Kapat, "Kaydet ve çalıştır…" ve tek birincil "Kaydet". Kaydedilmemiş değişiklikle kapatırken durum yerini soruya bırakır: "Kaydetmeden kapat", "Vazgeç", "Kaydet ve kapat".
+
+### 7.13 Kontroller (genel)
 
 | Kontrol | Kural |
 |---|---|

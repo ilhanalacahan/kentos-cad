@@ -1,5 +1,7 @@
 import type { AppContext } from '../../app/context';
-import { processingCommandId } from '../../app/processing';
+import { modelCommandId, processingCommandId } from '../../app/processing';
+import { foldTurkish } from '../../core/text';
+import type { ProcessingModel } from '../../processing/model';
 import { DisposableStore, listen } from '../../core/disposable';
 import { watchAll } from '../../core/signal';
 import type { ProcessingCategory } from '../../processing/categories';
@@ -14,7 +16,14 @@ import { tooltip } from '../widgets/tooltip';
 import { TreeView } from '../widgets/TreeView';
 import { openToolDialog, TARGET_SHORT } from './ToolDialog';
 
-type Node = { kind: 'category'; id: string; category: ProcessingCategory; children: Node[]; count: number } | { kind: 'tool'; id: string; tool: ProcessingTool; children: Node[] };
+type Node =
+  | { kind: 'category'; id: string; category: ProcessingCategory; children: Node[]; count: number }
+  | { kind: 'tool'; id: string; tool: ProcessingTool; children: Node[] }
+  | { kind: 'model'; id: string; model: ProcessingModel; children: Node[] }
+  | { kind: 'newModel'; id: string; children: Node[] };
+
+/** The models branch sits first; it is not a registry category. */
+const MODELS: ProcessingCategory = { id: '__models', label: 'Modeller', icon: 'processing', description: 'Araçları birbirine bağlayan akışlar; her biri tek adımda geri alınır' };
 
 /**
  * İşlem araç kutusu (QGIS Processing Toolbox): the tools by category with
@@ -46,7 +55,12 @@ export class ProcessingPanel extends Panel {
         isExpanded: (n) => !!this.query || !folded.value.includes(n.id),
         setExpanded: (n, open) => folded.set(open ? folded.value.filter((id) => id !== n.id) : [...folded.value, n.id]),
         renderRow: (n, row) => this.renderRow(n, row),
-        onActivate: (n) => (n.kind === 'tool' ? this.open(n.tool) : folded.set(folded.value.includes(n.id) ? folded.value.filter((id) => id !== n.id) : [...folded.value, n.id])),
+        onActivate: (n) => {
+          if (n.kind === 'tool') this.open(n.tool);
+          else if (n.kind === 'model') ctx.commands.execute(modelCommandId(n.model.id));
+          else if (n.kind === 'newModel') ctx.commands.execute('processing.newModel');
+          else folded.set(folded.value.includes(n.id) ? folded.value.filter((id) => id !== n.id) : [...folded.value, n.id]);
+        },
         empty: (filtered) => (filtered || this.query ? 'Aramayla eşleşen işlem yok. Başka bir kelime deneyin.' : 'Kayıtlı işlem aracı yok.'),
       },
       'İşlem araçları',
@@ -74,7 +88,7 @@ export class ProcessingPanel extends Panel {
         }
       }),
     );
-    this.d.add(watchAll([registry.version, folded], () => this.renderTools()));
+    this.d.add(watchAll([registry.version, folded, ctx.processing.models], () => this.renderTools()));
     this.d.add(watchAll([runner.history, ctx.ui.processingTab], () => this.renderView()));
     // Undo and erase change what "n nesneyi seç" can still select.
     this.d.add(ctx.doc.events.on('changed', () => ctx.ui.processingTab.value === 'history' && this.renderHistory(runner.history.value)));
@@ -125,10 +139,14 @@ export class ProcessingPanel extends Panel {
     const hits = this.query ? new Set(registry.search(this.query).map((t) => t.id)) : null;
     const toNode = (c: CategoryNode): Node => {
       const children = [...c.children.map(toNode), ...c.tools.map((tool): Node => ({ kind: 'tool', id: `tool:${tool.id}`, tool, children: [] }))];
-      return { kind: 'category', id: c.category.id, category: c.category, children, count: children.reduce((s, n) => s + (n.kind === 'tool' ? 1 : n.count), 0) };
+      return { kind: 'category', id: c.category.id, category: c.category, children, count: children.reduce((s, n) => s + (n.kind === 'category' ? n.count : n.kind === 'tool' ? 1 : 0), 0) };
     };
     this.rowSubs.dispose();
-    this.tree.render(registry.tree(hits ? (t) => hits.has(t.id) : undefined).map(toNode));
+    const q = this.query ? foldTurkish(this.query) : '';
+    const models = this.ctx.processing.models.value.filter((m) => !q || foldTurkish(`${m.label} ${m.description}`).includes(q));
+    const modelNodes: Node[] = models.map((m) => ({ kind: 'model', id: `model:${m.id}`, model: m, children: [] }));
+    const branch: Node[] = modelNodes.length || !q ? [{ kind: 'category', id: MODELS.id, category: MODELS, children: [...modelNodes, ...(q ? [] : [{ kind: 'newModel', id: '__newModel', children: [] } as Node])], count: modelNodes.length }] : [];
+    this.tree.render([...branch, ...registry.tree(hits ? (t) => hits.has(t.id) : undefined).map(toNode)]);
     this.updateMeta();
   }
 
@@ -137,6 +155,26 @@ export class ProcessingPanel extends Panel {
     if (n.kind === 'category') {
       row.append(h('span', { class: 'tree__folder' }, icon(n.category.icon ?? 'folder', 15)), h('span', { class: 'tree__name' }, n.category.label), h('span', { class: 'tree__count num' }, String(n.count)));
       if (n.category.description) this.rowSubs.add(tooltip(row, () => ({ title: n.category.label, description: n.category.description }), 'bottom'));
+      return;
+    }
+    if (n.kind === 'newModel') {
+      row.classList.add('pproc__tool', 'pproc__new');
+      row.append(h('span', { class: 'pproc__icon' }, icon('modelNew', 15)), h('span', { class: 'tree__name' }, 'Yeni model…'));
+      row.addEventListener('click', () => this.ctx.commands.execute('processing.newModel'));
+      return;
+    }
+    if (n.kind === 'model') {
+      const m = n.model;
+      row.classList.add('pproc__tool');
+      const builtin = this.ctx.processing.isBuiltinModel(m.id);
+      const edit = h('button', { class: 'ibtn ibtn--row', type: 'button', 'aria-label': builtin ? 'Kopyasını düzenle' : 'Modeli düzenle', title: builtin ? 'Kopyasını düzenle' : 'Modeli düzenle' }, icon('edit', 14));
+      edit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.ctx.commands.execute('processing.newModel', m.id);
+      });
+      row.append(h('span', { class: 'pproc__icon' }, icon('processing', 15)), h('span', { class: 'tree__name' }, m.label), edit);
+      row.addEventListener('click', () => this.ctx.commands.execute(modelCommandId(m.id)));
+      this.rowSubs.add(tooltip(row, () => ({ title: m.label, description: m.description || undefined, note: `${m.steps.length} adım${builtin ? '; hazır model' : ''}` }), 'bottom'));
       return;
     }
     const t = n.tool;

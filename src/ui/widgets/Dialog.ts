@@ -11,8 +11,13 @@ export class Dialog {
   private readonly d = new DisposableStore();
   private readonly returnFocus: Element | null;
   private readonly onClose?: () => void;
+  private readonly beforeClose?: () => boolean;
 
-  constructor(opts: { title: string; width?: number; className?: string; content: Child[]; footer?: Child[]; onClose?: () => void }) {
+  /**
+   * `beforeClose` may refuse a close asked by the user (Esc, ×, backdrop)
+   * by returning false, e.g. to ask about unsaved changes first.
+   */
+  constructor(opts: { title: string; width?: number; className?: string; content: Child[]; footer?: Child[]; onClose?: () => void; beforeClose?: () => boolean }) {
     Dialog.open?.close();
     Dialog.open = this;
     this.returnFocus = document.activeElement;
@@ -27,14 +32,15 @@ export class Dialog {
     );
     this.el = h('div', { class: 'dialog-backdrop' }, card);
     this.onClose = opts.onClose;
+    this.beforeClose = opts.beforeClose;
     overlayRoot().append(this.el);
     card.focus();
-    this.d.add(listen(close, 'click', () => this.close()));
+    this.d.add(listen(close, 'click', () => this.request()));
     // Keys pressed inside the dialog never reach app shortcuts behind it.
     this.d.add(listen<KeyboardEvent>(card, 'keydown', (e) => e.stopPropagation()));
     this.d.add(
       listen<PointerEvent>(this.el, 'pointerdown', (e) => {
-        if (e.target === this.el) this.close();
+        if (e.target === this.el) this.request();
       }),
     );
     this.d.add(
@@ -47,7 +53,7 @@ export class Dialog {
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            this.close();
+            this.request();
           } else if (!card.contains(e.target as Node)) {
             // Keep app shortcuts from firing behind the modal.
             e.stopPropagation();
@@ -56,6 +62,12 @@ export class Dialog {
         true,
       ),
     );
+  }
+
+  /** A close the user asked for; `beforeClose` may keep the dialog open. */
+  request(): void {
+    if (this.beforeClose && !this.beforeClose()) return;
+    this.close();
   }
 
   close(): void {

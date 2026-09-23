@@ -5,6 +5,7 @@ import './styles/controls.css';
 import './styles/panels.css';
 import './styles/settings.css';
 import './styles/processing.css';
+import './styles/model.css';
 import { createApp } from './app/createApp';
 
 createApp(document.getElementById('app')!)

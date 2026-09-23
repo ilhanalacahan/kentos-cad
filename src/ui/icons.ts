@@ -142,6 +142,8 @@ const ICONS = {
   edgeLengths: `<path d="M3 16.5 10 3.5l7 13z"/><path d="M4.4 8.6 7.3 3.2M12.7 3.2l2.9 5.4M5.5 19h9" stroke-dasharray="1.6 1.4"/>`,
   selectExpression: '<path d="M3.5 3 12 8.2l-3.7 1-1.9 3.6z"/><path d="M11 13.2h6.5M11 16.4h6.5"/>',
   fieldCalc: '<rect x="2.5" y="3.5" width="15" height="13" rx="1"/><path d="M2.5 7.5h15M8 7.5v9"/><path d="M11 12h4M13 10v4"/>',
+  modelNew: '<rect x="2.5" y="3" width="6" height="4.5" rx="1"/><rect x="11" y="12.5" width="6.5" height="4.5" rx="1"/><path d="M5.5 7.5v3.25a2 2 0 0 0 2 2H11"/><path d="M14.25 3.5v5M11.75 6h5"/>',
+  edit: '<path d="M4 16l.9-3.6 8.4-8.4a1.8 1.8 0 0 1 2.7 2.7l-8.4 8.4z"/><path d="M12 5.3l2.7 2.7"/>',
   play: '<path d="M6.5 4.5v11l8.5-5.5z"/>',
   history: '<path d="M3.5 10a6.5 6.5 0 1 0 2-4.7"/><path d="M3 3.3v3h3M10 6.5V10l2.5 1.8"/>',
   clear: '<path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>',

@@ -52,8 +52,8 @@ describe('processing in a worker', () => {
     const page = setup(() => fakeWorker());
     const bg = setup(() => fakeWorker());
     const values = defaultValues(vertexNumbering, page.runner.defaults());
-    const a = await page.runner.run(vertexNumbering, values, undefined, 'client');
-    const b = await bg.runner.run(vertexNumbering, values, undefined, 'worker');
+    const a = await page.runner.run(vertexNumbering, values, { target: 'client' });
+    const b = await bg.runner.run(vertexNumbering, values, { target: 'worker' });
     expect(a.status === 'ok' && a.record.target).toBe('client');
     expect(b.status === 'ok' && b.record.target).toBe('worker');
     const labels = (d: CadDocument) => [...d.all()].filter((e) => e.kind === 'point').map((e) => [e.label, (e as Extract<Entity, { kind: 'point' }>).p]);
@@ -64,7 +64,7 @@ describe('processing in a worker', () => {
   });
   it('compiles expressions in the worker', async () => {
     const { doc, runner, e2 } = setup(() => fakeWorker());
-    const out = await runner.run(calculateField, { ...defaultValues(calculateField, runner.defaults()), field: 'Etiket', value: "'P-' || Parsel" }, undefined, 'worker');
+    const out = await runner.run(calculateField, { ...defaultValues(calculateField, runner.defaults()), field: 'Etiket', value: "'P-' || Parsel" }, { target: 'worker' });
     expect(out.status === 'ok' && out.record.summary).toBe('2 nesnede “Etiket” yazıldı.');
     expect(doc.get(e2.id)!.attrs.Etiket).toBe('P-2');
   });
@@ -84,7 +84,7 @@ describe('processing in a worker', () => {
     let crash: WorkerLike | null = null;
     const broken = setup(() => (crash = fakeWorker({ silent: true })));
     const values = defaultValues(vertexNumbering, broken.runner.defaults());
-    const pending = broken.runner.run(vertexNumbering, values, undefined, 'worker');
+    const pending = broken.runner.run(vertexNumbering, values, { target: 'worker' });
     await new Promise((r) => setTimeout(r, 0));
     crash!.onerror?.(new Error('boom'));
     const failed = await pending;
@@ -98,7 +98,7 @@ describe('processing in a worker', () => {
       return w;
     });
     const size = doc.size;
-    const pending = runner.run(vertexNumbering, defaultValues(vertexNumbering, runner.defaults()), undefined, 'worker');
+    const pending = runner.run(vertexNumbering, defaultValues(vertexNumbering, runner.defaults()), { target: 'worker' });
     await new Promise((r) => setTimeout(r, 10));
     runner.cancel();
     const out = await pending;
@@ -106,7 +106,7 @@ describe('processing in a worker', () => {
     expect(workers[0].terminated).toBe(true);
     expect(doc.size).toBe(size);
     // The next job starts a fresh worker.
-    void runner.run(vertexNumbering, defaultValues(vertexNumbering, runner.defaults()), undefined, 'worker');
+    void runner.run(vertexNumbering, defaultValues(vertexNumbering, runner.defaults()), { target: 'worker' });
     await new Promise((r) => setTimeout(r, 0));
     expect(workers).toHaveLength(2);
     expect(workers[1].sent[0].entities).toHaveLength(2);

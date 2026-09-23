@@ -8,7 +8,7 @@ import { openAboutDialog, openShortcutsDialog } from '../ui/dialogs';
 import { openAppSettings, type AppSettingsSection } from '../ui/settings/AppSettingsDialog';
 import { openProjectSettings, type ProjectSettingsSection } from '../ui/settings/ProjectSettingsDialog';
 import { AppShell } from '../ui/shell/AppShell';
-import { openToolDialog } from '../ui/processing/ToolDialog';
+import { openModelDialog, openToolDialog } from '../ui/processing/ToolDialog';
 import { ViewportController } from '../viewport/ViewportController';
 import { Clipboard } from './clipboard';
 import { registerCoreCommands } from './commands';
@@ -63,6 +63,9 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   });
   registerProcessingCommands(ctx, {
     open: (id, values) => openToolDialog(ctx, id, values),
+    openModel: (id, values) => openModelDialog(ctx, id, values),
+    // The designer is loaded when first opened: most sessions never need it.
+    design: (id) => void import('../ui/processing/model/ModelDesigner').then((m) => m.openModelDesigner(ctx, id)),
     show: (tab) => shell?.showProcessing(tab),
   });
   registerDefaultKeybindings(ctx);

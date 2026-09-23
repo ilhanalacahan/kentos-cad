@@ -275,6 +275,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
   - `attrs { ids }`: yalnızca öznitelik değişti; tampon kurulmaz, etiket ve panel yenilenir.
 - **`load()`:** geçmiş tutmadan toplu yükleme yapar (dosya açma).
+- **`beginGroup(label)`:** `end()` çağrılana kadar yapılan bütün işlemleri (await arasında da) tek geri alma adımında toplar; `cancel()` yapılanları geri alır ve hiçbir şey kaydetmez. İşlem modelleri bunu kullanır.
 - **`Entity`:** türler `point | line | polyline | polygon | circle | arc | ellipse | spline | xline | ray | text | dimension | hatch`.
   - `ellipse`: DXF ELLIPSE biçimi: merkez `c`, büyük eksen vektörü `major`, küçük/büyük `ratio`, parametreler `t0 → t1` (saat yönünün tersine; eşitse tam elips). Nokta `c + major·cos t + minor·sin t`. Budama, kırma ve uzatma parametre uzayında yapılır, parçalar eliptik yay kalır. Öteleme (matematikte elips değildir) gerçek öteleme noktalarından sık bir çoklu çizgi verir.
   - `xline` / `ray`: taban noktası `p` ve birim yön `dir`; iki yöne ya da tek yöne sonsuz yardımcı çizgi. Tümünü göster ve sınır kutusu yalnızca `p`'yi sayar; pencere seçimi (tamamen içeride) onları hiç seçmez, kesişim seçimi seçer. Budama ve kırma AutoCAD gibi ışın ya da çizgi parçası üretir.
@@ -392,7 +393,7 @@ Toplu işlemler (QGIS Processing gibi) için ayrı bir çatıdır; ayrıntılar 
 - **Parametre değer tipleri tanımdan çıkar.** Tanım içindeki ok fonksiyonlarının argümanı tiplenir (`(v: Shown)`, `(c: DefaultsContext)`), yoksa çıkarım bozulur.
 - **Nesne kapsamları:** seçili, görünen, tümü (görünür katmanlar), katman (grup dahil) ve modellerde önceki adımın çıktısı (`ids`). Kullanıcı bir çalıştırmada nesne türlerini daraltabilir (`kinds`: yalnızca kapalı alanlar gibi). Zorunlu girdi boş kalırsa araç çalışmaz, alanda yönlendirme yazar.
 - **İfadeler** (`processing/expression.ts`): koşul ve değer parametreleri için güvenli, `eval`'siz bir dil: alanlar (`Nitelik`, `[Tapu alanı]`), geometri değişkenleri (`$alan`, `$uzunluk`, `$katman` …), Türkçe ve İngilizce işlev adları (`yuvarla`/`round`), `ve`/`veya`/`değil`. Öznitelik metni sayı gibi okunur, boş değer kuralları sabittir; hata mesajı karakter yerini söyler. Seçim üreten araçlar belgeyi değiştirmez, `select` döndürür.
-- **Modeller** (akış diyagramları) için veri yapısı `processing/model.ts`'tedir: adım değerleri sabit, model girdisi ya da önceki adımın çıktısı olabilir.
+- **Modeller** (akış diyagramları; `processing/model.ts`, `modelRunner.ts`, `modelEdit.ts`): adım değerleri sabit, model girdisi ya da önceki adımın çıktısı olabilir (tür uyumu `canFeed`). Model tek geri alma adımıdır (`CadDocument.beginGroup`); bir adım çalışmazsa önceki adımlar geri alınır. Yerleşik modeller değiştirilemez (kopyası düzenlenir); kullanıcının modelleri `kentos.processing.v1`'de. **Model tasarımcısı** (`ui/processing/model/`): solda girdiler ve araçlar, ortada kutu-bağlantı diyagramı (porttan sürükleyip bağlama), sağda seçilenin ayarları; kendi geri alma yığını, kaydedilmemiş değişiklik uyarısı.
 - **Arayüz:** İşlemler menüsü (kategoriler kayıttan üretilir), sağ dokta İşlemler sekmesi (arama, kategori ağacı, geçmiş), `ui/processing/ToolDialog.ts` penceresi.
 
 ---
@@ -529,7 +530,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/geom/geom.test.ts` | Afin dönüşüm (büyük TM koordinatında hassasiyet dahil), yay, kesişimler, öteleme |
 | `model/ops/ops.test.ts` | Nesne dönüşümü, budama (kapalı şekil ve daire dahil), uzatma, öteleme, köşe yuvarlama, tutamaçlar |
 | `model/geom/curves.test.ts` | Eğri, tarama kırpma, ölçü yerleşimi (tüm türler, doğrusal yön seçimi, açı bölgesi), teğet noktaları, kenar ölçüleri |
-| `model/document.test.ts` | Geri alma ve yineleme, `transact`, katman devralma, proje ayarları, `Formatter` |
+| `model/document.test.ts` | Geri alma ve yineleme, `transact`, await arasında gruplama ve grubu iptal, katman devralma, proje ayarları, `Formatter` |
 | `model/geom/ellipse.test.ts` | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum |
 | `model/ops/curves2.test.ts` | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme) |
 | `model/geom/parallel.test.ts` | Paralel çizgi yanları, gönye köşeleri, sıfır mesafe, koridor alanı, kapalı eksen |
@@ -543,7 +544,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `render/triangulate.test.ts` | Delikli halkaların üçgenlenmesi (köprü, iç bükey köşe), toplam alan |
 | `model/ops/edit.test.ts` | Uzat-kısalt (çizgi, yay, köşeleri aşan kısaltma, yayla biten çoklu çizgi, imleçten boy); yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
 | `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
-| `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama ve denetim |
+| `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama, denetim ve tür uyumu, model çalıştırma (zincir, tek geri alma, hatada geri alma), model düzenleme (adlandırma, zincirleme, uygun kaynaklar, silme, dizme) |
 | `processing/worker/worker.test.ts` | Worker'da çalıştırma (sahte worker, yapılandırılmış kopya): sayfayla aynı sonuç ve tek geri alma, worker'da ifade derleme, Otomatik seçim eşiği, bilinmeyen araç, çöken worker, Durdur ve yeni worker |
 | `processing/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme |
 
@@ -551,7 +552,7 @@ Kurallar:
 
 - `model/geom` ve `model/ops` altındaki her yeni fonksiyon test ile gelir. Sınır durumları (paralel, çakışık, sıfır uzunluk, açı 0/2π geçişi) mutlaka sınanır.
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
-- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
+- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi, yerleşik modelin tek geri alma adımıyla çalışması, tasarımcıda girdiye bağlı adımlı modelin kaydedilmesi), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme) ve `geo` (CRS arama).
 
@@ -606,7 +607,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - öznitelik tablosu (alt panelde, seçimle eşlenik), sorgu ve filtre, tematik stil
    - raster, WMS ve XYZ altlık (yeni `SceneLayer` türü)
    - CRS dönüşümleri: TUREF ↔ ED50 7 parametre ve grid; TM ve UTM dilimleri
-   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç). Sıradaki: model çalıştırıcısı ve akış diyagramı düzenleyicisi; sunucu ve PostGIS çalıştırıcıları sunucu tarafıyla birlikte
+   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı, modeller (çalıştırıcı, kitaplık, akış diyagramı tasarımcısı) yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç; Parsel ölçü yazıları modeli). Sıradaki: daha çok araç (sadeleştir, çift nesneleri temizle, parsel numaralandır, alan çizelgesi), modellerin proje dosyasında saklanması ve dışa aktarımı; sunucu ve PostGIS çalıştırıcıları sunucu tarafıyla birlikte
 4. **Harita işleri:**
    - ifraz, tevhid, aplikasyon (istasyondan semt ve mesafe)
    - kot noktası ve TIN, eşyükselti, boy kesit, hacim
@@ -665,9 +666,9 @@ src/
   model/                     Belge, varlıklar, geometri, katmanlar, seçim, proje ayarları, örnek proje
     geom/                    Saf geometri çekirdeği: afin, yay, bulge, kesişim, öteleme, teğet daire, düzlem bindirme ve alan cebiri (+ testler)
     ops/                     Nesne işlemleri: kenarlar, yol parametresi, dönüşüm, budama/uzatma, kır, birleştir, patlat, esnet, köşe, öteleme, köşe yuvarlama/pah, tutamaçlar (+ testler)
-  processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, expression + expressionLib (ifade dili) (+ testler)
+  processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit, expression + expressionLib (ifade dili) (+ testler)
     worker/                  Web Worker çalıştırıcısı: protokol, iş yürütme, executor, worker girişi (+ testler)
-    builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç
+    builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç; yerleşik modeller
   render/                    RenderBackend sözleşmesi, sahne kurucu, delikli üçgenleme, ızgara, renk; webgl2/ ve webgpu/
   viewport/                  Kamera, ViewportController, PickIndex, üst katman çizimi
   tools/                     Tool sözleşmesi, ToolManager, katalog, koordinat girişi, imleç kısıtlaması (tracking)
@@ -705,14 +706,15 @@ src/
     promptOptions.ts         İstem ayrıştırma ve seçenek düğmeleri (komut şeridi ve komut satırı ortak)
     menu/ toolbar/ toolbox/  Menü çubuğu, araç çubuğu, kayan araç kutusu
     dock/ layers/ properties/  Sağ dok (Katmanlar/İşlemler sekmeleri), katman ağacı, öznitelik paneli
-    processing/              İşlem aracı penceresi (ToolDialog), parametre kontrolleri, araç kutusu ve geçmiş paneli
+    processing/              İşlem aracı penceresi (ToolDialog, modeller dahil), parametre kontrolleri, araç kutusu ve geçmiş paneli
+      model/                 Model tasarımcısı: ModelDesigner, ModelCanvas, modelPalette, modelInspector
     bottom/                  Komut satırı ve alt panel (geçmiş, koordinat listesi, uyarılar)
     statusbar/               Durum çubuğu
     settings/                SettingsShell, crsPicker, Proje ve Uygulama ayarları pencereleri
     widgets/                 Genel parçalar (menü, açılır liste, ağaç, özellik ızgarası, pencere, kontroller)
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
-  styles/                    tokens, base, shell, controls, panels, settings, processing
+  styles/                    tokens, base, shell, controls, panels, settings, processing, model
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 ```

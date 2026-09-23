@@ -42,7 +42,9 @@ src/processing/
   registry.ts        ProcessingRegistry: kayıt, kategori ağacı, Türkçe katlamalı arama, version sinyali
   runner.ts          ProcessingRunner: doğrula → sayfaya bağlıyı çöz (RunJob) → çalışma yerini seç → çalıştır → tek geri alma adımıyla uygula → geçmiş
   job.ts             RunJob, FeatureRef, Executor arayüzü, materialize, EntitySnapshot, clientExecutor
-  model.ts           Modeller (akış diyagramı) veri yapısı, sıralama ve denetim
+  model.ts           Modeller (akış diyagramı) veri yapısı, tür uyumu, sıralama ve denetim
+  modelRunner.ts     Modeli çalıştırma (tek geri alma adımı, hata ve Durdur'da geri alma), modelAsTool
+  modelEdit.ts       Model taslağını düzenleme (tasarımcının işlemleri, saf)
   expression.ts      İfade dili: sözcüklere ayırma, ayrıştırma, closure'a derleme, hata mesajları, önizleme
   expressionLib.ts   İfade değerleri (tür dönüşümleri, eşitlik, sıralama), değişkenler ($alan …), işlevler
   processing.test.ts, expression.test.ts   Birim testleri
@@ -59,14 +61,17 @@ src/processing/
     edgeLengths.ts       annotation.edgeLengths: Kenar uzunluklarını yaz
     calculateField.ts    attributes.calculate: Öznitelik hesapla
     selectByExpression.ts  selection.byExpression: İfadeyle seç
+    models.ts        Yerleşik modeller (Parsel ölçü yazıları)
 
 src/app/processing.ts         ProcessingService (registry + runner + son değerler), komut kaydı
 src/ui/processing/
   ToolDialog.ts      Tanımdan üretilen araç penceresi
   paramFields.ts     Parametre türü başına kontrol
-  ProcessingPanel.ts Sağ doktaki araç kutusu ve geçmiş
+  ProcessingPanel.ts Sağ doktaki araç kutusu (Modeller dalı dahil) ve geçmiş
+  model/             Model tasarımcısı: ModelDesigner, ModelCanvas, modelPalette, modelInspector
 src/tools/pickPointTool.ts    Nokta parametresi için "Haritadan göster"
 src/styles/processing.css     Pencere ve panel stilleri
+src/styles/model.css          Model tasarımcısı stilleri
 ```
 
 Yeni bir araç ailesi büyüdükçe `builtin/` altında alt klasör açılır
@@ -214,25 +219,35 @@ interface Executor {
 
 ## 7. Modeller (akış diyagramları)
 
-Araçlar birbirine bağlanarak modeller (QGIS Model Designer gibi) kurulur.
-Veri yapısı bugünden sabittir (`processing/model.ts`), diyagram düzenleyicisi
-ve model çalıştırıcısı sonra gelecek:
+Araçlar birbirine bağlanarak modeller kurulur (QGIS Model Designer gibi). Bir model, adımları ve girdileri olan bir veridir; tek başına bir araç gibi çalıştırılır, araç kutusunda ve menüde görünür.
 
 ```ts
 ValueSource = { kind: 'value', value } | { kind: 'input', name } | { kind: 'output', step, output }
 ModelStep   { id, tool, values: Record<string, ValueSource>, position?, caption? }
-ProcessingModel { id, label, category, description, inputs: ParamDef[], steps, outputs }
+ProcessingModel { id, label, category, description, inputs: ParamDef[], steps, outputs, inputPositions? }
 ```
 
-- Bir adımın parametresi sabit bir değer, modelin kendi girdisi ya da önceki bir adımın çıktısı olabilir. `features` çıktısı sonraki adıma `{ scope: 'ids', ids }` olarak geçer; böylece adımlar birbirinin ürettiği nesneler üzerinden zincirlenir.
-- Model girdileri araç parametreleriyle aynı `ParamDef` türündedir; model penceresi aynı `ToolDialog` ile üretilecek.
-- `orderSteps` adımları bağımlılık sırasına dizer ve döngüyü bulur; `checkModel` bilinmeyen araç, bağlanmamış zorunlu parametre, olmayan girdi ya da çıktı ve döngü hatalarını kullanıcı diliyle döndürür.
-- Planlanan: model çalıştırıcı (her adım bir `runner.run`, bütün model tek geri alma adımı), diyagram düzenleyici (kutular ve bağlantılar, `position`), modellerin proje dosyasında ya da kullanıcı kitaplığında saklanması ve araç kutusunda "Modeller" kategorisi.
+- **Bağlantılar:** bir adımın parametresi sabit bir değer, modelin kendi girdisi, önceki bir adımın çıktısı ya da (değer verilmemişse) aracın varsayılanıdır. `features` çıktısı sonraki adıma `{ scope: 'ids', ids }` olarak geçer; adımlar birbirinin ürettiği, seçtiği ya da değiştirdiği nesneler üzerinden zincirlenir.
+- **Tür uyumu** (`canFeed`): aynı tür; sayı metne; metin ifadeye ve alan adına. `checkModel` bilinmeyen aracı, uyumsuz bağlantıyı, olmayan girdi ya da çıktıyı, değeri gereken ama bağlanmamış parametreyi (görünürlük koşuluyla) ve döngüyü kullanıcı diliyle bildirir. `orderSteps` bağımlılık sırasını verir.
+- **Çalıştırma** (`modelRunner.ts`, `runModel`): girdiler doğrulanır, model denetlenir, adımlar sırayla `runner.run(..., { silent: true })` ile çalışır. Bütün model **tek geri alma adımıdır**: `CadDocument.beginGroup` farklı zamanlarda (await arasında) yapılan işlemleri bir araya toplar. Bir adım çalışmazsa ya da Durdur'a basılırsa grup iptal edilir (`cancel`), önceki adımların yaptıkları geri alınır; ileti hangi adımın neden çalışmadığını söyler. Geçmişe model bir kayıt olarak girer (`model:<id>`). Adımlar çalışma yerlerini kendileri seçer (Otomatik); kullanıcı "Arka planda" seçerse bunu destekleyen adımlar worker'da çalışır.
+- **Pencere:** `modelAsTool` modeli bir aracın biçimine koyar (girdileri parametre olur); aynı `ToolDialog` açılır, sağ panelde adımlar sırasıyla ve "Modeli düzenle" düğmesi durur.
+- **Kitaplık:** yerleşik modeller (`builtin/models.ts`) değiştirilemez; düzenlenirse kopyası açılır. Kullanıcının modelleri bu tarayıcıda saklanır (`kentos.processing.v1` → `models`). Proje dosyası ve sunucu gelince modeller projeye ve paylaşılan kitaplığa da yazılabilecek. Her model bir komuttur (`processing.model.<id>`); kitaplık değişince komutlar yenilenir.
+- **Düzenleme işlemleri** (`modelEdit.ts`, saf ve testli): girdi ekle/sil, adım ekle (seçili kutuya bağlanarak)/sil, kaynak ata, uygun kaynakları listele (döngü oluşturacak adımları dışarıda bırakır), bağlantıları kenar olarak çıkar, sütunlara diz, kopyala.
+
+### 7.1 Model tasarımcısı
+
+`ui/processing/model/`: `ModelDesigner` (pencere, taslak, kendi geri alma yığını, kaydetme), `ModelCanvas` (diyagram), `modelPalette` (sol), `modelInspector` (sağ).
+
+- **Sol:** "Girdi ekle" (Nesneler, Sayı, Metin, Evet/hayır, Katman, Nokta) ve aranabilir araç listesi. Bir araca tıklamak seçili kutunun sağına ekler ve ilk uygun girdisini seçili kutuya bağlar; tuvale sürüklemek bırakılan yere koyar.
+- **Orta:** girdiler (mavi kenarlı) ve adımlar kutu, bağlantılar eğridir; eğri ortasında hangi parametreyi beslediği yazar. Kutular sürüklenir (10 px ızgaraya), boş alan sürüklenince tuval kayar, tekerlek yakınlaştırır, çift tık hepsini gösterir. Bir kutunun sağındaki noktadan sürükleyip bir adımın üstüne bırakmak, o adımın uygun girdilerini (ve adımın çıktılarını) bir menüde sorar. Sorunlu adım kesik turuncu kenarla ve ilk sorunuyla görünür.
+- **Sağ:** hiçbir şey seçili değilken modelin adı, kategorisi, açıklaması, çıktıları ve sorunları; girdi seçiliyken etiketi, açıklaması, isteğe bağlılığı ve türüne göre varsayılanı; adım seçiliyken başlığı ve her parametre için **kaynak** (aracın varsayılanı, sabit değer, girdi, önceki adımın çıktısı ya da "Yeni model girdisi yap"). Sabit değer, araç penceresindeki denetimin aynısıyla girilir.
+- **Alt:** "Düzenle" (sütunlara diz), durum (sorun sayısı ve ilki ya da "Model çalışmaya hazır"), Kapat, "Kaydet ve çalıştır…", Kaydet. Kaydedilmemiş değişiklikle kapatmak alt çubukta sorar. Ctrl+Z / Ctrl+Y taslakta geri alır, Ctrl+S kaydeder, Delete seçili kutuyu siler. Sorunlu model kaydedilebilir ama çalışmaz.
 
 ## 8. Arayüz
 
 - **Araç kutusu:** sağ dokun üst yuvasında "Katmanlar | İşlemler" sekmeleri. İşlemler sekmesinde arama (Türkçe harfler katlanır: "kose" = "köşe"), kategori ağacı (katlama durumu `ui.processingFolded`) ve "Araçlar | Geçmiş" seçicisi vardır. Araç satırına **tek tık** pencereyi açar.
-- **Menü:** üst menüde **İşlemler**: İşlem araç kutusu, İşlem geçmişi ve her kategori için bir alt menü. Alt menüler kayıttan üretilir (`'@processing'` işaretçisi, `app/menus.ts`).
+- **Menü:** üst menüde **İşlemler**: İşlem araç kutusu, İşlem geçmişi, **Modeller** (kitaplıktaki modeller ve "Yeni model…"; `'@models'`) ve her kategori için bir alt menü (`'@processing'`); hepsi kayıttan üretilir (`app/menus.ts`).
+- **Araç kutusunda Modeller dalı** en üsttedir: her model bir satır (tıklayınca çalıştırma penceresi; kalem düğmesi tasarımcıyı açar, yerleşik modelde kopyasını) ve "Yeni model…".
 - **Komutlar:** her araç `processing.run.<id>` komutudur; takma adları komut satırından yazılabilir (`KOSENUMARA`). `processing.toolbox`, `processing.history` ve eski `map.edgeLengths` (Harita menüsü) de komuttur.
 - **Pencere** (`ui/processing/ToolDialog.ts`): solda Girdi, Ayarlar, Çıktı ve katlanır "Gelişmiş ayarlar"; sağda kategori, açıklama, yardım, canlı önizleme, çalışma yerleri ve komut satırı takma adları; altta Varsayılanlar, durum, Kapat ve Çalıştır. Hatalar dokunulan alanda anında, Çalıştır'dan sonra hepsi görünür. Enter (metin alanında) ya da Ctrl+Enter çalıştırır. Başarılı çalıştırmada "Sonuçları seç" ve "Geri al" sunulur; pencere açık kalır, değer değiştirip yeniden çalıştırılabilir.
 - **Nokta parametresi:** "Haritadan göster" pencereyi kapatır, `PickPointTool` ile tek nokta ister (kenet ve `Y,X` yazımı çalışır; Esc vazgeçer) ve pencereyi değerlerle yeniden açar.
@@ -242,7 +257,7 @@ ProcessingModel { id, label, category, description, inputs: ParamDef[], steps, o
 
 | Durum | Kapsam | Yer |
 |---|---|---|
-| Her aracın son değerleri | Uygulama ayarı (bu tarayıcı) | `localStorage` `kentos.processing.v1` |
+| Her aracın ve modelin son değerleri, araç başına çalışma yeri seçimi, kullanıcının modelleri | Uygulama ayarı (bu tarayıcı) | `localStorage` `kentos.processing.v1` (`lastValues`, `targets`, `models`) |
 | Dok sekmesi, İşlemler görünümü, katlanan kategoriler | Çalışma alanı yerleşimi | `kentos.ui.v1` (`dockTab`, `processingTab`, `processingFolded`) |
 | Çalıştırma geçmişi | Oturum | `runner.history` (bellekte, en çok 100) |
 | Araçların ürettiği nesneler ve katmanlar | Belge verisi | `CadDocument` (tek geri alma adımı) |
@@ -273,6 +288,7 @@ türünün işaretidir (bkz. §10).
 
 | Kimlik | Ad | Ne yapar |
 |---|---|---|
+| `builtin.parcelSheet` (model) | Parsel ölçü yazıları | Üç adım: köşeleri numaralar (önek bir model girdisi), kenar uzunluklarını yazar, hesaplanan alanı "Hesap alanı" alanına yazar. Tek geri alma adımı. |
 | `points.numberVertices` | Köşe noktalarını numarala | Alanların (ve çoklu çizgilerin) köşelerine biçimli numaralı nokta ve/veya yazı koyar. Biçim: önek + doldurma karakteri + sayı, toplam uzunluk sabit (`P` + `00001` = 6). Yön saat yönünde ya da tersine; başlangıç kuzeybatı, en kuzey, ilk çizilen ya da gösterilen noktaya en yakın köşe. Delikli alanlarda önce dış halka. Komşu alanların ortak köşesi tek numara alır (tolerans ayarlı); hedef katmandaki aynı biçimli numaralar korunur ve numara kaldığı yerden devam eder. |
 | `attributes.calculate` | Öznitelik hesapla | Seçilen alana (var olan ya da yeni) her nesne için bir ifadenin değerini yazar; varsayılan `metin($alan, <proje alan hassasiyeti>)`. İsteğe bağlı koşulla yalnızca bazı nesnelere yazar; sonuç boşsa alana dokunmaz ya da boşaltır. Etiket alanın eski değerini gösteriyorsa yeni değeri gösterir. Tek geri alma adımı. |
 | `selection.byExpression` | İfadeyle seç | Koşulu sağlayan nesneleri seçer: yeni seçim, seçime ekle, seçimden çıkar ya da seçim içinde ara. Belgeyi değiştirmez. |

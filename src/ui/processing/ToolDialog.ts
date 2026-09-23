@@ -2,7 +2,9 @@ import type { AppContext } from '../../app/context';
 import { DisposableStore } from '../../core/disposable';
 import type { Vec2 } from '../../model/geometry';
 import { defaultValues, isVisible, restoreValues, type ValidationIssue } from '../../processing/parameters';
-import { WORKER_THRESHOLD, type InputSummary, type RunOutcome, type TargetChoice } from '../../processing/runner';
+import { orderSteps, stepName, type ProcessingModel } from '../../processing/model';
+import { MODEL_PREFIX, modelAsTool, runModel } from '../../processing/modelRunner';
+import { WORKER_THRESHOLD, type InputSummary, type RunOptions, type RunOutcome, type TargetChoice } from '../../processing/runner';
 import type { ExecutionTarget, ParamDef, ProcessingTool } from '../../processing/types';
 import { PickPointTool } from '../../tools/pickPointTool';
 import { h, replaceChildren, type Child } from '../dom';
@@ -33,12 +35,31 @@ export const TARGET_SHORT: Record<ExecutionTarget, string> = {
 };
 
 export function openToolDialog(ctx: AppContext, toolId: string, values?: Record<string, unknown>): void {
+  if (toolId.startsWith(MODEL_PREFIX)) return openModelDialog(ctx, toolId.slice(MODEL_PREFIX.length), values);
   const tool = ctx.processing.registry.get(toolId);
   if (!tool) {
     ctx.log.error(`İşlem aracı bulunamadı: ${toolId}`);
     return;
   }
   new ToolDialog(ctx, tool, values);
+}
+
+/** A model's run dialog: its inputs as the form, its steps on the side; it runs step by step. */
+export function openModelDialog(ctx: AppContext, modelId: string, values?: Record<string, unknown>): void {
+  const model = ctx.processing.model(modelId);
+  if (!model) {
+    ctx.log.error(`Model bulunamadı: ${modelId}. Silinmiş olabilir.`);
+    return;
+  }
+  const lookup = (id: string) => ctx.processing.registry.get(id);
+  new ToolDialog(ctx, modelAsTool(model, lookup), values, { model, run: (v, opts) => runModel(model, v, ctx.processing.runner, lookup, opts) });
+}
+
+interface DialogOptions {
+  /** Set for a model: the side panel lists its steps. */
+  model?: ProcessingModel;
+  /** Runs the subject; a tool runs through the runner by default. */
+  run?(values: Record<string, unknown>, opts: RunOptions): Promise<RunOutcome>;
 }
 
 type Status =
@@ -70,9 +91,12 @@ class ToolDialog {
   private readonly runBtn: HTMLButtonElement;
   private readonly closeBtn: HTMLButtonElement;
 
-  constructor(ctx: AppContext, tool: ProcessingTool, values?: Record<string, unknown>) {
+  private readonly opts: DialogOptions;
+
+  constructor(ctx: AppContext, tool: ProcessingTool, values?: Record<string, unknown>, opts: DialogOptions = {}) {
     this.ctx = ctx;
     this.tool = tool;
+    this.opts = opts;
     const runner = ctx.processing.runner;
     this.values = restoreValues(tool, values ?? ctx.processing.lastValues(tool.id), runner.defaults());
     this.choice = ctx.processing.targetChoice(tool.id);
@@ -175,9 +199,13 @@ class ToolDialog {
    * listed as coming, so the user sees what the tool will be able to do.
    */
   private renderTargets(): void {
-    const { runner } = this.ctx.processing;
-    const available = new Set(runner.executorsFor(this.tool).map((e) => e.target));
-    const auto = runner.executorFor(this.tool, 'auto', runner.inputSize(this.tool, this.values))?.target;
+    const { runner, registry } = this.ctx.processing;
+    const model = this.opts.model;
+    // A model runs each step where it can: offer every place one of its steps can go.
+    const tools = model ? model.steps.flatMap((s) => registry.get(s.tool) ?? []) : [this.tool];
+    const available = new Set(tools.flatMap((t) => runner.executorsFor(t).map((e) => e.target)));
+    const declared = model ? [...available] : this.tool.targets;
+    const auto = model ? null : runner.executorFor(this.tool, 'auto', runner.inputSize(this.tool, this.values))?.target;
     const option = (value: TargetChoice, label: string, note: string | null, disabled = false) => {
       const checked = this.choice === value;
       const b = h(
@@ -197,9 +225,9 @@ class ToolDialog {
     const several = available.size > 1;
     replaceChildren(
       this.targetsEl,
-      several ? option('auto', 'Otomatik', auto ? `şimdi: ${TARGET_SHORT[auto]}` : null) : null,
+      several ? option('auto', 'Otomatik', auto ? `şimdi: ${TARGET_SHORT[auto]}` : model ? 'adım adım' : null) : null,
       several && this.choice === 'auto' ? h('div', { class: 'ptool__target-hint' }, `${WORKER_THRESHOLD.toLocaleString('tr-TR')} nesneden büyük işler arka planda çalışır; sayfa donmaz.`) : null,
-      this.tool.targets.map((t) =>
+      declared.map((t) =>
         available.has(t) ? option(t, TARGET_LABEL[t], !several ? 'bu çalıştırmada' : null) : option(t, TARGET_LABEL[t], 'yakında', true),
       ),
     );
@@ -294,13 +322,15 @@ class ToolDialog {
   private side(): HTMLElement {
     const { registry } = this.ctx.processing;
     const cat = registry.category(this.tool.category);
-    const help = (this.tool.help ?? '').split(/\n\s*\n/).filter(Boolean);
+    const model = this.opts.model;
+    const help = model ? [] : (this.tool.help ?? '').split(/\n\s*\n/).filter(Boolean);
     return h(
       'aside',
       { class: 'ptool__side' },
-      h('div', { class: 'ptool__crumb' }, icon(cat?.icon ?? 'processing', 14), registry.categoryPath(this.tool.category)),
+      h('div', { class: 'ptool__crumb' }, icon(model ? 'processing' : (cat?.icon ?? 'processing'), 14), model ? `Modeller › ${registry.categoryPath(this.tool.category) || 'Genel'}` : registry.categoryPath(this.tool.category)),
       h('div', { class: 'ptool__heading' }, h('span', { class: 'ptool__icon' }, icon(this.tool.icon ?? 'processing', 20)), h('p', { class: 'ptool__about' }, this.tool.description)),
       help.map((p) => h('p', { class: 'ptool__help' }, p)),
+      model ? this.modelSteps(model) : null,
       this.tool.preview ? h('div', { class: 'ptool__preview' }, h('div', { class: 'ptool__side-title' }, 'Önizleme'), this.preview) : null,
       h(
         'div',
@@ -310,6 +340,31 @@ class ToolDialog {
         this.tool.aliases?.length ? h('div', { class: 'ptool__side-title' }, 'Komut satırından') : null,
         this.tool.aliases?.length ? h('div', { class: 'ptool__aliases' }, this.tool.aliases.map((a) => h('code', null, a))) : null,
       ),
+    );
+  }
+
+  /** The steps of a model in run order, and the way into the designer. */
+  private modelSteps(model: ProcessingModel): HTMLElement {
+    const { registry } = this.ctx.processing;
+    const lookup = (id: string) => registry.get(id);
+    const ids = orderSteps(model);
+    const order = Array.isArray(ids) ? ids.map((id) => model.steps.find((s) => s.id === id)!) : model.steps;
+    const builtin = this.ctx.processing.isBuiltinModel(model.id);
+    const edit = h('button', { class: 'btn btn--small', type: 'button' }, icon('edit', 14), builtin ? 'Kopyasını düzenle' : 'Modeli düzenle');
+    edit.addEventListener('click', () => {
+      this.dialog.close();
+      this.ctx.commands.execute('processing.newModel', model.id);
+    });
+    return h(
+      'div',
+      { class: 'ptool__steps' },
+      h('div', { class: 'ptool__side-title' }, 'Adımlar'),
+      h(
+        'ol',
+        null,
+        order.map((s) => h('li', null, h('span', { class: 'ptool__step-icon' }, icon(lookup(s.tool)?.icon ?? 'processing', 14)), stepName(s, lookup))),
+      ),
+      edit,
     );
   }
 
@@ -350,16 +405,14 @@ class ToolDialog {
       return;
     }
     this.ctx.processing.remember(this.tool.id, this.values);
-    const where = runner.executorFor(this.tool, this.choice, runner.inputSize(this.tool, this.values))?.target;
+    const where = this.opts.model ? undefined : runner.executorFor(this.tool, this.choice, runner.inputSize(this.tool, this.values))?.target;
     this.status = { kind: 'running', fraction: 0, label: '', where };
     this.renderStatus();
     const log = (level: 'info' | 'warn', m: string) => (level === 'warn' ? this.ctx.log.warn(m) : this.ctx.log.info(m));
-    const out: RunOutcome = await runner.run(this.tool, this.values, log, this.choice);
+    const out: RunOutcome = this.opts.run ? await this.opts.run(this.values, { log, target: this.choice }) : await runner.run(this.tool, this.values, { log, target: this.choice });
     switch (out.status) {
       case 'ok': {
-        const ch = out.result.changes;
-        const edited = out.added.length > 0 || !!ch?.update?.length || !!ch?.remove?.length;
-        this.status = { kind: 'ok', text: out.record.summary, pick: out.added.length ? out.added : out.touched, selected: !!out.result.select, undo: edited };
+        this.status = { kind: 'ok', text: out.record.summary, pick: out.added.length ? out.added : out.touched, selected: !!out.result.select, undo: out.edited };
         this.ctx.log.success(`${this.tool.label}: ${out.record.summary}`);
         this.attempted = false;
         break;

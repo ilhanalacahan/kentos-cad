@@ -20,6 +20,14 @@ export { clientExecutor, type Executor } from './job';
 /** Where the user wants a tool to run; "auto" sends big jobs to the worker. */
 export type TargetChoice = 'auto' | ExecutionTarget;
 
+export interface RunOptions {
+  /** Messages from the tool (feedback.info / warn) and about skipped changes. */
+  log?: (level: 'info' | 'warn', message: string) => void;
+  target?: TargetChoice;
+  /** No history record (a model records itself once, not each step). */
+  silent?: boolean;
+}
+
 /** Input size (objects) from which "auto" prefers the worker. */
 export const WORKER_THRESHOLD = 2000;
 
@@ -42,7 +50,8 @@ export interface RunRecord {
 }
 
 export type RunOutcome =
-  | { status: 'ok'; result: RunResult; added: number[]; touched: number[]; record: RunRecord }
+  /** `edited`: the drawing changed (there is something to undo). */
+  | { status: 'ok'; result: RunResult; added: number[]; touched: number[]; edited: boolean; record: RunRecord }
   | { status: 'invalid'; issues: ValidationIssue[] }
   | { status: 'canceled' | 'error'; message: string; record: RunRecord };
 
@@ -152,16 +161,33 @@ export class ProcessingRunner {
     this.canceled = true;
   }
 
-  async run(tool: ProcessingTool, values: Record<string, unknown>, log?: (level: 'info' | 'warn', message: string) => void, choice: TargetChoice = 'auto'): Promise<RunOutcome> {
+  /** Whether the user pressed Durdur during the current run (models stop between steps). */
+  get canceling(): boolean {
+    return this.canceled;
+  }
+
+  /** One undo step for several runs (a model); see CadDocument.beginGroup. */
+  beginGroup(label: string): { end(): void; cancel(): void } {
+    return this.host.doc.beginGroup(label);
+  }
+
+  /** Adds a history record (runs record themselves; a model adds one for all its steps). */
+  addRecord(r: Omit<RunRecord, 'seq'>): RunRecord {
+    const full: RunRecord = { ...r, seq: ++this.seq };
+    this.history.set([full, ...this.history.value].slice(0, HISTORY_LIMIT));
+    return full;
+  }
+
+  async run(tool: ProcessingTool, values: Record<string, unknown>, opts: RunOptions = {}): Promise<RunOutcome> {
+    const { log, target: choice = 'auto', silent = false } = opts;
     const issues = this.validate(tool, values);
     if (issues.length) return { status: 'invalid', issues };
     const started = Date.now();
     const copy = JSON.parse(JSON.stringify(values)) as Record<string, unknown>;
     let target: ExecutionTarget | undefined;
     const record = (status: RunRecord['status'], summary: string, added: number[] = [], touched: number[] = []): RunRecord => {
-      const r: RunRecord = { seq: ++this.seq, toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added, touched, target };
-      this.history.set([r, ...this.history.value].slice(0, HISTORY_LIMIT));
-      return r;
+      const r = { toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added, touched, target };
+      return silent ? { ...r, seq: 0 } : this.addRecord(r);
     };
     // Resolve what depends on the host: features to ids, layers to a target (new layers are made only on apply).
     const jobValues: Record<string, unknown> = { ...values };
@@ -233,7 +259,9 @@ export class ProcessingRunner {
       if (selected) this.host.select?.(selected);
       const touched = [...new Set([...(result.changes?.update ?? []).map((u) => u.id), ...(selected ?? [])])].filter((id) => doc.get(id));
       const summary = result.summary ?? (selected ? `${selected.length} nesne seçildi.` : `${added.length} nesne eklendi.`);
-      return { status: 'ok', result, added, touched, record: record('ok', summary, added, touched) };
+      const ch = result.changes;
+      const edited = added.length > 0 || !!ch?.update?.length || !!ch?.remove?.length;
+      return { status: 'ok', result, added, touched, edited, record: record('ok', summary, added, touched) };
     } catch (err) {
       const message = `“${tool.label}” çalışırken hata: ${(err as Error).message}`;
       return { status: 'error', message, record: record('error', message) };

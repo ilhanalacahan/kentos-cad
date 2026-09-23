@@ -44,6 +44,8 @@ export class CadDocument {
   private undoStack: Transaction[] = [];
   private redoStack: Transaction[] = [];
   private pending: Transaction | null = null;
+  /** Open group (see beginGroup): committed transactions join it instead of the undo stack. */
+  private group: Transaction | null = null;
 
   constructor(opts: { name: string; layers: LayerStore; origin: Vec2; settings?: Partial<ProjectSettingsData> }) {
     this.name = new Signal(opts.name);
@@ -115,6 +117,31 @@ export class CadDocument {
     }
   }
 
+  /**
+   * Groups everything committed until `end()` into one undo step, across
+   * awaits (a processing model runs several tools, each applying its own
+   * transaction). `cancel()` reverts what the group did and records
+   * nothing. A group inside a group joins the outer one.
+   */
+  beginGroup(label: string): { end(): void; cancel(): void } {
+    if (this.group) return { end: () => {}, cancel: () => {} };
+    const g: Transaction = { label, ops: [] };
+    this.group = g;
+    const close = () => {
+      if (this.group === g) this.group = null;
+    };
+    return {
+      end: () => {
+        close();
+        if (g.ops.length) this.commit(g);
+      },
+      cancel: () => {
+        close();
+        if (g.ops.length) this.applyAll([...g.ops].reverse().map(invert));
+      },
+    };
+  }
+
   add(init: NewEntity): Entity {
     const entity = { ...init, id: this.nextId++ } as Entity;
     this.record({ type: 'add', entity }, 'Ekle');
@@ -180,6 +207,10 @@ export class CadDocument {
   }
 
   private commit(tx: Transaction): void {
+    if (this.group && tx !== this.group) {
+      this.group.ops.push(...tx.ops);
+      return;
+    }
     this.undoStack.push(tx);
     if (this.undoStack.length > 200) this.undoStack.shift();
     this.redoStack = [];

@@ -9,7 +9,9 @@ import { edgeLengths } from './builtin/edgeLengths';
 import { selectByExpression } from './builtin/selectByExpression';
 import { formatNumber, numberCorners, parseNumber, ringOrder, type NumberingOptions } from './builtin/numbering';
 import { vertexNumbering } from './builtin/vertexNumbering';
-import { orderSteps, checkModel, type ProcessingModel } from './model';
+import { canFeed, orderSteps, checkModel, type ProcessingModel } from './model';
+import { addInput, addStep, autoLayout, copyModel, edgesOf, newModel, removeInput, removeStep, setSource, slug, sourcesFor } from './modelEdit';
+import { modelAsTool, runModel } from './modelRunner';
 import { defaultValues, restoreValues, validateValues } from './parameters';
 import { ProcessingRegistry } from './registry';
 import { ProcessingRunner } from './runner';
@@ -270,5 +272,121 @@ describe('models', () => {
     const issues = checkModel(m, (id) => r.get(id)).map((i) => i.message);
     expect(issues.some((s) => s.includes('olmayan bir çıktıya'))).toBe(true);
     expect(issues.some((s) => s.includes('Bilinmeyen işlem aracı'))).toBe(true);
+  });
+});
+
+describe('running models', () => {
+  const setup = () => {
+    const doc = new CadDocument({ name: 't.kcad', layers: new LayerStore([{ id: 'a', name: 'Parseller' }], 'a'), origin: v(0, 0) });
+    doc.add({ kind: 'polygon', pts: square(0, 0, 10), layerId: 'a', attrs: {} });
+    doc.add({ kind: 'polygon', pts: square(10, 0, 10), layerId: 'a', attrs: {} });
+    const runner = new ProcessingRunner({ doc, selectedIds: () => [], visibleBounds: () => null });
+    const tools = new Map(BUILTIN_TOOLS.map((t) => [t.id, t]));
+    return { doc, runner, lookup: (id: string) => tools.get(id) };
+  };
+  const numberThenTag = (tagValue: string): ProcessingModel => ({
+    id: 'm1',
+    label: 'Numarala ve işaretle',
+    category: 'points',
+    description: '',
+    inputs: [{ name: 'parcels', label: 'Parseller', type: 'features', kinds: ['polygon'], default: { scope: 'all' } }],
+    steps: [
+      { id: 'tag', tool: 'attributes.calculate', values: { input: { kind: 'output', step: 'num', output: 'points' }, field: { kind: 'value', value: 'Tür2' }, value: { kind: 'value', value: tagValue } } },
+      { id: 'num', tool: 'points.numberVertices', values: { input: { kind: 'input', name: 'parcels' }, prefix: { kind: 'value', value: 'K' } } },
+    ],
+    outputs: [{ name: 'points', label: 'Noktalar', from: { step: 'num', output: 'points' } }],
+  });
+  it('chains steps through their outputs and undoes the whole model in one step', async () => {
+    const { doc, runner, lookup } = setup();
+    const size = doc.size;
+    const out = await runModel(numberThenTag("'köşe'"), { parcels: { scope: 'all' } }, runner, lookup);
+    expect(out.status).toBe('ok');
+    const points = [...doc.all()].filter((e) => e.kind === 'point');
+    expect(points).toHaveLength(6);
+    expect(points.every((p) => p.attrs['Tür2'] === 'köşe' && p.label?.startsWith('K000'))).toBe(true);
+    expect(out.status === 'ok' && out.record.summary).toMatch(/^2 adım çalıştı\. 2 nesnede 6 köşe numaralandı.*6 nesnede “Tür2” yazıldı\.$/);
+    expect(out.status === 'ok' && (out.result.outputs?.points as number[]).length).toBe(6);
+    expect(runner.history.value).toHaveLength(1);
+    expect(runner.history.value[0].toolId).toBe('model:m1');
+    expect(doc.undo()).toBe('Numarala ve işaretle');
+    expect(doc.size).toBe(size);
+  });
+  it('takes back earlier steps when a later one fails', async () => {
+    const { doc, runner, lookup } = setup();
+    const size = doc.size;
+    const out = await runModel(numberThenTag("'yarım"), { parcels: { scope: 'all' } }, runner, lookup);
+    expect(out.status).toBe('error');
+    expect(out.status === 'error' && out.message).toBe('2. adım (Öznitelik hesapla) çalışmadı: “Değer”: Tırnak kapanmamış. Önceki adımların sonuçları geri alındı.');
+    expect(doc.size).toBe(size);
+    expect(doc.canUndo.value).toBe(true); // only the setup adds
+    expect(doc.undo()).toBe('Ekle');
+  });
+  it('checks types between sources and parameters, and presents the model as a tool', () => {
+    const { lookup } = setup();
+    expect(canFeed('features', 'features')).toBe(true);
+    expect(canFeed('number', 'string')).toBe(true);
+    expect(canFeed('string', 'expression')).toBe(true);
+    expect(canFeed('number', 'features')).toBe(false);
+    const bad = numberThenTag("'x'");
+    bad.steps[0].values.input = { kind: 'output', step: 'num', output: 'count' };
+    expect(checkModel(bad, lookup).map((i) => i.message)).toEqual(['“Nesneler” “Yeni numara sayısı” çıktısından beslenemez: türler uymuyor.']);
+    const t = modelAsTool(numberThenTag("'x'"), lookup);
+    expect(t.id).toBe('model:m1');
+    expect(t.parameters.map((p) => p.name)).toEqual(['parcels']);
+    expect(t.help).toBe('1. Köşe noktalarını numarala\n\n2. Öznitelik hesapla');
+  });
+});
+
+describe('editing models', () => {
+  const tools = new Map(BUILTIN_TOOLS.map((t) => [t.id, t]));
+  const lookup = (id: string) => tools.get(id);
+  it('names inputs and steps from Turkish labels, uniquely', () => {
+    expect(slug('Nokta öneki')).toBe('noktaOneki');
+    expect(slug('1. girdi')).toBe('g1Girdi');
+    const m = newModel();
+    expect(addInput(m, 'features', 'Parseller')).toBe('parseller');
+    expect(addInput(m, 'features', 'Parseller')).toBe('parseller2');
+    expect(addStep(m, 'points.numberVertices', lookup)).toBe('koseNoktalariniNumarala');
+    expect(addStep(m, 'points.numberVertices', lookup)).toBe('koseNoktalariniNumarala2');
+  });
+  it('chains a new step to the selected node and offers only fitting, acyclic sources', () => {
+    const m = newModel();
+    const parcels = addInput(m, 'features', 'Parseller');
+    addInput(m, 'number', 'Basamak');
+    const num = addStep(m, 'points.numberVertices', lookup, undefined, { kind: 'input', name: parcels });
+    expect(m.steps[0].values.input).toEqual({ kind: 'input', name: 'parseller' });
+    const calc = addStep(m, 'attributes.calculate', lookup, undefined, { kind: 'step', id: num });
+    expect(m.steps[1].values.input).toEqual({ kind: 'output', step: num, output: 'points' });
+    const inputParam = tools.get('attributes.calculate')!.parameters[0];
+    expect(sourcesFor(m, calc, inputParam, lookup).map((o) => `${o.group}: ${o.label}`)).toEqual(['Girdi: Parseller', 'Köşe noktalarını numarala: Numaralı noktalar']);
+    // The numbering step cannot read from the step that reads from it.
+    expect(sourcesFor(m, num, tools.get('points.numberVertices')!.parameters[0], lookup).map((o) => o.group)).toEqual(['Girdi']);
+    const decimals = tools.get('annotation.edgeLengths')!.parameters.find((p) => p.name === 'decimals')!;
+    const edges = addStep(m, 'annotation.edgeLengths', lookup);
+    expect(sourcesFor(m, edges, decimals, lookup).map((o) => o.label)).toEqual(['Basamak', 'Yeni numara sayısı', 'Yazılan nesne sayısı']);
+    expect(edgesOf(m)).toEqual([
+      { from: { kind: 'input', name: 'parseller' }, to: num, params: ['input'] },
+      { from: { kind: 'step', id: num }, to: calc, params: ['input'] },
+    ]);
+  });
+  it('removing an input or a step clears what read from it; layout goes by depth', () => {
+    const m = newModel();
+    const parcels = addInput(m, 'features', 'Parseller');
+    const num = addStep(m, 'points.numberVertices', lookup, undefined, { kind: 'input', name: parcels });
+    const calc = addStep(m, 'attributes.calculate', lookup, undefined, { kind: 'step', id: num });
+    setSource(m, calc, 'field', { kind: 'value', value: 'Tür2' });
+    m.outputs.push({ name: 'points', label: 'Noktalar', from: { step: num, output: 'points' } });
+    autoLayout(m);
+    expect(m.inputPositions!.parseller.x).toBeLessThan(m.steps[0].position!.x);
+    expect(m.steps[0].position!.x).toBeLessThan(m.steps[1].position!.x);
+    removeStep(m, num);
+    expect(m.steps.map((s) => s.id)).toEqual([calc]);
+    expect(m.steps[0].values).toEqual({ field: { kind: 'value', value: 'Tür2' } });
+    expect(m.outputs).toEqual([]);
+    removeInput(m, parcels);
+    expect(m.inputs).toEqual([]);
+    const c = copyModel(m);
+    expect(c.id).not.toBe(m.id);
+    expect(c.label).toBe('Yeni model (kopya)');
   });
 });

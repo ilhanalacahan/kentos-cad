@@ -30,6 +30,30 @@ describe('CadDocument history', () => {
     expect(doc.undo()).toBe('iki');
     expect(doc.size).toBe(0);
   });
+  it('groups several transactions across awaits into one undo step, or cancels them', async () => {
+    const doc = new CadDocument({ name: 't', layers: new LayerStore([{ id: 'a', name: 'A' }], 'a'), origin: { x: 0, y: 0 } });
+    const line = (x: number) => ({ kind: 'line' as const, a: { x, y: 0 }, b: { x: x + 1, y: 0 }, layerId: 'a', attrs: {} });
+    const g = doc.beginGroup('Model');
+    doc.transact('Adım 1', () => doc.add(line(0)));
+    await Promise.resolve();
+    const second = doc.transact('Adım 2', () => doc.add(line(1)));
+    doc.update(second.id, { attrs: { K: '1' } });
+    expect(doc.canUndo.value).toBe(false);
+    g.end();
+    expect(doc.size).toBe(2);
+    expect(doc.undo()).toBe('Model');
+    expect(doc.size).toBe(0);
+    expect(doc.canUndo.value).toBe(false);
+    doc.redo();
+    expect(doc.get(second.id)!.attrs.K).toBe('1');
+    const c = doc.beginGroup('İptal');
+    doc.add(line(5));
+    doc.remove([second.id]);
+    c.cancel();
+    expect(doc.size).toBe(2);
+    expect(doc.get(second.id)!.attrs.K).toBe('1');
+    expect(doc.undo()).toBe('Model');
+  });
   it('marks the project dirty when project settings change', () => {
     const doc = makeDoc();
     expect(doc.dirty.value).toBe(false);

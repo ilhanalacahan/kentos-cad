@@ -1,4 +1,5 @@
-import type { ParamDef, ProcessingTool } from './types';
+import { isVisible } from './parameters';
+import type { ParamDef, ParamType, ProcessingTool } from './types';
 
 /**
  * Models (QGIS "Model Designer" gibi): tools wired into a flow diagram.
@@ -35,9 +36,35 @@ export interface ProcessingModel {
   steps: ModelStep[];
   /** Model outputs, taken from step outputs. */
   outputs: { name: string; label: string; from: { step: string; output: string } }[];
+  /** Positions of the input boxes in the diagram (px), by input name. */
+  inputPositions?: Record<string, { x: number; y: number }>;
 }
 
 export type ModelIssue = { step?: string; message: string };
+
+/** Kinds of value a model input or a step output can feed. */
+export type SourceType = ParamType | 'string' | 'number' | 'features';
+
+/**
+ * Whether a value of type `from` (a model input or a step output) can feed
+ * a parameter of type `to`: same type, a number or text where text is
+ * written, and text into an expression or a field name.
+ */
+export function canFeed(from: SourceType, to: ParamType): boolean {
+  if (from === to) return true;
+  if (to === 'string') return from === 'number' || from === 'enum';
+  if (to === 'expression' || to === 'field') return from === 'string';
+  return false;
+}
+
+/** Required and with nothing to fall back on: a point, an expression, a field or a text that may not be empty. */
+function needsSource(p: ParamDef): boolean {
+  if (p.optional || 'default' in p) return false;
+  return p.type === 'point' || p.type === 'expression' || p.type === 'field' || (p.type === 'string' && !p.allowEmpty);
+}
+
+/** How a step is named in messages and in the diagram. */
+export const stepName = (step: ModelStep, lookup: (id: string) => ProcessingTool | undefined) => step.caption || lookup(step.tool)?.label || step.tool;
 
 /** Problems that stop a model from running: unknown tools, parameters, inputs, outputs, cycles. */
 export function checkModel(model: ProcessingModel, lookup: (id: string) => ProcessingTool | undefined): ModelIssue[] {
@@ -51,17 +78,29 @@ export function checkModel(model: ProcessingModel, lookup: (id: string) => Proce
       issues.push({ step: s.id, message: `Bilinmeyen işlem aracı: ${s.tool}` });
       continue;
     }
+    // What is known before running: fixed values and fixed defaults (for visibleWhen).
+    const known = Object.fromEntries(tool.parameters.map((p) => {
+      const src = s.values[p.name];
+      const d = (p as { default?: unknown }).default;
+      return [p.name, src?.kind === 'value' ? src.value : typeof d === 'function' ? undefined : d];
+    }));
     for (const p of tool.parameters) {
       const src = s.values[p.name];
       if (!src) {
-        if (!p.optional && !('default' in p)) issues.push({ step: s.id, message: `“${p.label}” bağlanmamış.` });
+        if (needsSource(p) && isVisible(p, known)) issues.push({ step: s.id, message: `“${p.label}” için bir değer ya da bağlantı gerekiyor.` });
         continue;
       }
-      if (src.kind === 'input' && !inputs.has(src.name)) issues.push({ step: s.id, message: `“${p.label}” olmayan bir model girdisine bağlı: ${src.name}` });
+      if (src.kind === 'input') {
+        const input = model.inputs.find((i) => i.name === src.name);
+        if (!input || !inputs.has(src.name)) issues.push({ step: s.id, message: `“${p.label}” olmayan bir model girdisine bağlı: ${src.name}` });
+        else if (!canFeed(input.type, p.type)) issues.push({ step: s.id, message: `“${p.label}” “${input.label}” girdisinden beslenemez: türler uymuyor.` });
+      }
       if (src.kind === 'output') {
         const from = steps.get(src.step);
         const fromTool = from && lookup(from.tool);
-        if (!fromTool?.outputs?.some((o) => o.name === src.output)) issues.push({ step: s.id, message: `“${p.label}” olmayan bir çıktıya bağlı: ${src.step}.${src.output}` });
+        const out = fromTool?.outputs?.find((o) => o.name === src.output);
+        if (!out) issues.push({ step: s.id, message: `“${p.label}” olmayan bir çıktıya bağlı: ${src.step}.${src.output}` });
+        else if (!canFeed(out.type, p.type)) issues.push({ step: s.id, message: `“${p.label}” “${out.label}” çıktısından beslenemez: türler uymuyor.` });
       }
     }
   }

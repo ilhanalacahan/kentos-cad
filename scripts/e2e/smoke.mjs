@@ -644,15 +644,36 @@ try {
       const p = k.processing;
       const tool = p.registry.get('attributes.calculate');
       const values = { input: { scope: 'all', kinds: ['polygon'] }, field: 'Deneme', value: "metin($alan, 3) || '/' || $sıra", where: '', empty: 'keep', label: false };
-      const page = await p.runner.run(tool, values, undefined, 'client');
+      const page = await p.runner.run(tool, values, { target: 'client' });
       const a = [...k.doc.all()].filter((e) => e.attrs.Deneme).map((e) => e.attrs.Deneme);
       k.doc.undo();
-      const bg = await p.runner.run(tool, values, undefined, 'worker');
+      const bg = await p.runner.run(tool, values, { target: 'worker' });
       const w = [...k.doc.all()].filter((e) => e.attrs.Deneme).map((e) => e.attrs.Deneme);
       k.doc.undo();
       return { page: page.status, bg: bg.status, target: bg.record && bg.record.target, same: a.length > 0 && JSON.stringify(a) === JSON.stringify(w), n: a.length };
     })()`);
     check('processing: the Web Worker gives the same result as the page', both.page === 'ok' && both.bg === 'ok' && both.target === 'worker' && both.same, JSON.stringify(both));
+    // Models: the built-in one runs as one undo step; the designer builds and saves a new one
+    await b.eval(`(() => { const k = window.kentos; k.selection.set(k.doc.byLayer('parsel').filter((e) => e.kind === 'polygon').slice(0, 3).map((e) => e.id)); k.commands.execute('processing.model.builtin.parcelSheet'); })()`);
+    await sleep(200);
+    const m0 = await b.eval('window.kentos.doc.size');
+    await press('.ptool__run');
+    await b.waitFor(`document.querySelector('.ptool__status')?.dataset.kind === 'ok'`, 8000).catch(() => {});
+    const m1 = await b.eval('window.kentos.doc.size');
+    const record = await b.eval('window.kentos.processing.runner.history.value[0]');
+    check('processing: the built-in model runs its three steps', m1 > m0 && record.toolId === 'model:builtin.parcelSheet' && /^3 adım çalıştı/.test(record.summary), record.summary);
+    await press('.dialog__foot .btn', 'Kapat');
+    await b.eval(`window.kentos.commands.execute('edit.undo')`);
+    check('processing: one undo takes the whole model back', (await b.eval('window.kentos.doc.size')) === m0);
+    await b.eval(`window.kentos.commands.execute('processing.newModel')`);
+    await sleep(250);
+    await press('.mpalette__input', 'Nesneler');
+    await press('.mpalette__tool', 'Kenar uzunluklarını yaz');
+    const wired = await b.eval(`document.querySelectorAll('.medge').length`);
+    await press('.dialog__foot .btn', 'Kaydet');
+    const saved = await b.eval(`window.kentos.processing.models.value.find((m) => m.label === 'Yeni model')`);
+    check('processing: the designer chains a tool to the input and saves the model', wired === 1 && !!saved && saved.steps[0].values.input?.kind === 'input', JSON.stringify(saved?.steps?.[0]?.values));
+    await press('.dialog__foot .btn', 'Kapat');
     await b.eval(`window.kentos.ui.dockTab.set('layers'); window.kentos.ui.processingTab.set('tools'); window.kentos.selection.clear()`);
   }
 
