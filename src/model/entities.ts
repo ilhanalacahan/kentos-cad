@@ -24,6 +24,8 @@ interface EntityBase {
   attrs: Record<string, string>;
   /** Short label drawn at the entity's anchor (parcel number, point name). */
   label?: string;
+  /** Library symbol drawn for this object, overriding its layer's style (docs/STYLE.md). */
+  symbol?: string;
 }
 
 export interface PointEntity extends EntityBase {

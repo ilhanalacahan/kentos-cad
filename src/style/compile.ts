@@ -5,7 +5,7 @@ import { offsetPath } from '../model/geom/offset';
 import type { Vec2 } from '../model/geometry';
 import { interiorPoint, placeAlong, type StyledGeometry } from './geometry';
 import type { FillPaint, MarkerCommon, MarkerStyle, PrimitiveSink, PrimUnit, StrokeStyle } from './primitives';
-import type { DataDefined, FillLayer, LineLayer, MarkerLayer, MarkerSymbol, SizeUnit, Symbol } from './types';
+import type { DataDefined, FillLayer, LineLayer, MarkerLayer, MarkerSymbol, SizeUnit, Symbol } from '../model/style';
 
 /**
  * Symbol × geometry × object → drawing primitives. Pure and CPU-side:
@@ -194,7 +194,10 @@ function emitLineLayer(layer: LineLayer, pts: readonly Vec2[], closed: boolean, 
   }
   const interval = layer.interval !== undefined ? toWorld(layer.interval, layer.unit, env) : 0;
   const along = layer.offsetAlong !== undefined ? toWorld(layer.offsetAlong, layer.unit, env) : 0;
-  for (const p of placeAlong(path, closed, layer.placement, interval, along)) emitMarkerSymbol(layer.marker, p.at, layer.rotate === false ? 0 : p.angle, level, t, env, sink);
+  // One style object per marker layer for the whole path: the sink keys batches by identity.
+  const styles = layer.marker.layers.flatMap((m) => markerStyle(m, level, t, env) ?? []);
+  if (!styles.length) return;
+  for (const p of placeAlong(path, closed, layer.placement, interval, along)) for (const st of styles) sink.marker(st, p.at, layer.rotate === false ? 0 : p.angle);
 }
 
 // ── Fills ──────────────────────────────────────────────────────────────

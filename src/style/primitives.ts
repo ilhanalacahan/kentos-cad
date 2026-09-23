@@ -1,5 +1,5 @@
 import type { Vec2 } from '../model/geometry';
-import type { Anchor, Color, ShapeName } from './types';
+import type { Anchor, Color, ShapeName } from '../model/style';
 
 /**
  * What compiling a symbol on a geometry produces: drawing primitives in

@@ -1,5 +1,6 @@
-import type { FrameState, RenderBackend, RGBA, SceneLayer } from '../types';
+import type { AtlasSource, FrameState, RenderBackend, RGBA, SceneLayer } from '../types';
 import { WGSL } from './shaders';
+import { WebGPUStyledRenderer, type GpuStyledLayer } from './styledRenderer';
 
 /** One uploaded batch: its vertex buffer(s), vertex/instance count and style. */
 interface GpuBatch {
@@ -13,6 +14,7 @@ interface GpuLayer {
   lines: GpuBatch[];
   fills: GpuBatch[];
   points: GpuBatch[];
+  styled: GpuStyledLayer;
 }
 
 const SHAPES = { ring: 0, cross: 1, triangle: 2 } as const;
@@ -53,6 +55,7 @@ export class WebGPUBackend implements RenderBackend {
   private linePipe!: GPURenderPipeline;
   private fillPipe!: GPURenderPipeline;
   private pointPipe!: GPURenderPipeline;
+  private styled!: WebGPUStyledRenderer;
   private msaa: GPUTexture | null = null;
   private layers = new Map<string, GpuLayer>();
 
@@ -112,6 +115,11 @@ export class WebGPUBackend implements RenderBackend {
     this.linePipe = pipeline('lineVs', 'lineFs', [vec2(0), { arrayStride: 4, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32' }] }], 'line-list');
     this.fillPipe = pipeline('fillVs', 'fillFs', [vec2(0)], 'triangle-list');
     this.pointPipe = pipeline('pointVs', 'pointFs', [vec2(0, 'instance')], 'triangle-list');
+    this.styled = new WebGPUStyledRenderer(device, this.format, frameLayout, SAMPLES);
+  }
+
+  useAtlas(atlas: AtlasSource): void {
+    this.styled.useAtlas(atlas);
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -141,7 +149,7 @@ export class WebGPUBackend implements RenderBackend {
 
   upload(layer: SceneLayer): void {
     this.remove(layer.id);
-    const g: GpuLayer = { lines: [], fills: [], points: [] };
+    const g: GpuLayer = { lines: [], fills: [], points: [], styled: this.styled.upload(layer.styled ?? []) };
     for (const b of layer.lines) {
       if (!b.positions.length) continue;
       g.lines.push({ buffers: [this.vertexBuffer(b.positions), this.vertexBuffer(b.distances)], count: b.positions.length / 2, ...this.styleBind(b.color, b.dash) });
@@ -164,6 +172,7 @@ export class WebGPUBackend implements RenderBackend {
       b.buffers.forEach((buf) => buf.destroy());
       b.style.destroy();
     }
+    this.styled.release(g.styled);
     this.layers.delete(id);
   }
 
@@ -189,13 +198,18 @@ export class WebGPUBackend implements RenderBackend {
     pass.setBindGroup(0, this.frameBind);
     const drawPass = (ids: readonly string[]) => {
       const layers = ids.map((id) => this.layers.get(id)).filter((l): l is GpuLayer => !!l);
-      pass.setPipeline(this.fillPipe);
-      for (const l of layers)
-        for (const f of l.fills) {
-          pass.setBindGroup(1, f.bind);
-          pass.setVertexBuffer(0, f.buffers[0]);
-          pass.draw(f.count);
+      // Same order as WebGL2: per layer its plain fills then its styled symbols; then plain lines and points.
+      for (const l of layers) {
+        if (l.fills.length) {
+          pass.setPipeline(this.fillPipe);
+          for (const f of l.fills) {
+            pass.setBindGroup(1, f.bind);
+            pass.setVertexBuffer(0, f.buffers[0]);
+            pass.draw(f.count);
+          }
         }
+        this.styled.draw(pass, l.styled, frame.scaleDenominator);
+      }
       pass.setPipeline(this.linePipe);
       for (const l of layers)
         for (const ln of l.lines) {
@@ -223,6 +237,7 @@ export class WebGPUBackend implements RenderBackend {
     for (const id of [...this.layers.keys()]) this.remove(id);
     this.msaa?.destroy();
     this.frameBuffer?.destroy();
+    this.styled?.dispose();
     this.device?.destroy();
   }
 }

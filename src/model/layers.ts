@@ -1,5 +1,6 @@
 import { Emitter } from '../core/emitter';
 import { Signal } from '../core/signal';
+import type { LayerRenderer } from './style';
 
 export type LineType = 'continuous' | 'dashed' | 'dashdot' | 'dotted';
 
@@ -40,6 +41,11 @@ export interface LayerStyle {
    * Off for frames and reference outlines that enclose everything.
    */
   pickInterior?: boolean;
+  /**
+   * The layer's style (docs/STYLE.md): which symbols its objects get. When
+   * absent, the simple look above (colour, line type, weight, fill) is used.
+   */
+  renderer?: LayerRenderer;
 }
 
 export interface LayerNode {

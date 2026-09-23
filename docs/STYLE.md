@@ -164,18 +164,29 @@ type LayerRenderer =
 
 ```
 LayerRenderer + Entity ─► resolve (hangi sembol takımı) ─► compile (sembol × geometri → çizim ilkelleri)
-   ─► sceneBuilder (GPU toplulukları, katman başına) ─► RenderBackend (WebGL2 / WebGPU)
-                                                     └► önizleme ve lejant (Canvas2D, aynı ilkeller)
+   ─► StyledSink (GPU toplulukları, katman başına) ─► RenderBackend (WebGL2 / WebGPU)
+                                                  └► önizleme ve lejant (Canvas2D, aynı ilkeller)
 ```
 
-- **Derleme (`style/compile`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri CPU'da float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, desen, görüntü), işaret (şekil, SVG, yazı, raster).
-- **GPU:**
-  - Kalın çizgiler örneklenmiş dörtgenlerdir (her parça bir örnek); kalınlık, uç ve kesik gölgelendiricide piksel ya da dünya biriminde hesaplanır.
-  - Taramalar gölgelendiricide dünya koordinatından üretilir (üçgen başına ek geometri yok, her zoomda tam).
-  - İşaretler örneklenmiş dörtgenlerdir: geometrik şekiller mesafe alanıyla (SDF), SVG, yazı ve raster işaretler ile desen döşemeleri doku atlasından.
-  - Ölçek aralıkları topluluk düzeyindedir.
-  - WebGL2 ve WebGPU aynı çizimi üretir (CLAUDE.md §9.5).
-- **Performans:** sembol ve ifadeler bir kez derlenir; katman yalnız kirlenince yeniden kurulur; atlas girdileri içerikle anahtarlanır ve paylaşılır.
+- **Sembol seçimi (`render/styledLayer.ts`):** nesnenin kendi sembolü (`entity.symbol`), yoksa katmanın işleyicisi (`style.renderer`), yoksa katmanın basit görünüşü (`symbolsOfLayerStyle`: renk, çizgi tipi, kalınlık, dolgu, nokta simgesi). Kurallar:
+  - Hiçbir kurala ya da kategoriye uymayan nesne çizilmez (QGIS gibi).
+  - Uyan takımda nesnenin geometri türüne sembol yoksa ya da başvurulan sembol kitaplıkta yoksa basit görünüş çizilir; nesne sessizce kaybolmaz.
+  - Dolgu sembolü olmayan alan, takımın çizgi sembolüyle kenarından çizilir.
+  - Tarama nesneleri kendi desenini (`hatchSymbolOf`), ölçüler ince çizgilerini korur; yazılar üst katmandadır.
+- **Derleme (`style/compile.ts`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri CPU'da float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, döşeme), işaret (şekil, SVG, yazı, raster). İfadeler katman kurulumu başına bir kez derlenir (`ExprCache`).
+- **GPU toplulukları (`render/styledSink.ts`):** ilkeller stil ve ölçek aralığı anahtarıyla toplanır; sembol düzeyine, sonra türe (dolgu < vuruş < işaret) göre sıralanır.
+  - **Vuruş:** her parça bir örnek (`ax, ay, bx, by, dist, uç bayrakları`); kapsül SDF'si, yuvarlak birleşim, uçta düz/yuvarlak/kare kapak. Kesik deseni (en çok 8 değer) gölgelendiricide yol boyu mesafeden hesaplanır; desen dönemi 4 px'in altına inince çizgi, desenin dolu oranıyla soluklaşan düz çizgiye döner (titreşim yok).
+  - **Tarama:** üçgen başına ek geometri yok; çizgiler gölgelendiricide yerel orijine göre dünya koordinatından (ya da `px` biriminde ekrandan) üretilir, her yakınlıkta tam. Aralık 3 px'in altına inince taramanın ortalama rengine döner.
+  - **Döşeme (desen ve görüntü dolgusu):** atlas hücresi `textureGrad` ile tekrarlanır, dünya ızgarasına hizalıdır.
+  - **İşaret:** her işaret bir örnek (`x, y, açı, genişlik, yükseklik`); geometrik şekiller SDF ile, SVG, yazı ve raster işaretler atlastan çizilir. Doku ve işaretlerde önceden çarpılmış alfa karışımı kullanılır.
+  - **Ölçek aralıkları** her karede topluluk düzeyinde denetlenir (`FrameState.scaleDenominator`, 96 dpi).
+- **Doku atlası (`render/atlas.ts`):** iki arka ucun paylaştığı 2048² Canvas2D sayfası. Girdiler içerikle anahtarlanır (aynı SVG ve renk bir kez çizilir). SVG ve raster eşzamansız çözülür; hazır olunca görünüm yeniden çizilir. Çizimden önce topluluğun istediği bütün görüntüler yerleştirilir (`prefetch`), sonra doku yüklenir. Sayfa dolunca baştan kurulur. WebGPU için mip düzeyleri atlasın kendisinde küçültülerek üretilir.
+- **Eşitlik:** WebGL2 ve WebGPU aynı gölgelendirici mantığını taşır (`webgl2/styledShaders.ts`, `webgpu/styledShaders.ts`); birinde yapılan değişiklik ötekine de yapılır. Duman testi stilli sahnede iki motorun piksellerini karşılaştırır.
+- **Performans:** katman yalnız kirlenince yeniden kurulur (öznitelik değişince yalnız işleyicisi olan katmanlar); çizim ölçeği ya da kitaplık değişince bütün katmanlar kurulur. Vurgu katmanları (`__sel`, `__hover`) eski ince çizgi hattını kullanır.
+- **Bilinen sınırlar:**
+  - Birleşimler hep yuvarlaktır (`join` yok sayılır); saydam kalın çizgide parça uçları üst üste binip koyulaşır.
+  - Bulanık gölge ve parıltı gibi çizim efektleri yok.
+  - Atlas çözünürlüğü sabittir (yazı 48 px, SVG 128 px, döşeme 128 px); çok büyütülen SVG işaret yumuşar.
 
 ## 7. Tasarımcılar
 
@@ -186,8 +197,8 @@ LayerRenderer + Entity ─► resolve (hangi sembol takımı) ─► compile (se
 
 ## 8. Aşamalar
 
-1. **Çekirdek:** sembol ve işleyici türleri, kitaplık (kaynaklar, ağaç, kopyala-silinemez, dışa/içe aktar), çözümleme, derleme (vuruş, dolgu, işaret ilkelleri), testler.
-2. **GPU:** kalın ve kesikli çizgiler, taramalar, işaret örnekleri (SDF), doku atlası (SVG, yazı, raster, desen); katmanlara ve nesnelere bağlama; ölçek aralıkları; iki arka uçta eşit çizim.
+1. **Çekirdek (yapıldı):** sembol ve işleyici türleri, kitaplık (kaynaklar, ağaç, kopyala-silinemez, dışa/içe aktar), çözümleme, derleme (vuruş, dolgu, işaret ilkelleri), testler.
+2. **GPU (yapıldı):** kalın ve kesikli çizgiler, taramalar, işaret örnekleri (SDF), doku atlası (SVG, yazı, raster, desen); katmanlara ve nesnelere bağlama; ölçek aralıkları; iki arka uçta eşit çizim.
 3. **Stil yöneticisi ve sembol tasarımcısı**, katman stili penceresi.
 4. **SVG editörü** ve raster desenler.
 5. **MPYY sistem kitaplığı:** EK-1a, 1c, 1ç, 1d'nin bütün gösterimleri; değişken metinli sembollerin öznitelik şablonları; lejant üretimi.

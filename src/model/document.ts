@@ -5,6 +5,7 @@ import type { CrsDef } from '../geo/crs';
 import { ProjectSettings, type ProjectSettingsData } from './projectSettings';
 import { emptyBounds, isEmptyBounds, type Bounds, type Vec2 } from './geometry';
 import { LayerStore } from './layers';
+import type { ProjectStyles } from './style';
 
 type Op =
   | { type: 'add'; entity: Entity }
@@ -38,6 +39,8 @@ export class CadDocument {
   readonly settings: ProjectSettings;
   readonly layers: LayerStore;
   readonly origin: Vec2;
+  /** Symbols and assets that belong to this project (docs/STYLE.md §5), saved with the file. */
+  readonly styles = new Signal<ProjectStyles>({ items: [], categories: [] });
 
   private entities = new Map<number, Entity>();
   private nextId = 1;
@@ -55,6 +58,7 @@ export class CadDocument {
     // Project settings are part of the file: changing them is an edit.
     this.settings.changed.subscribe(() => this.dirty.set(true));
     this.name.subscribe(() => this.dirty.set(true));
+    this.styles.subscribe(() => this.dirty.set(true));
   }
 
   /**

@@ -10,7 +10,10 @@ import type { Bounds, Vec2 } from '../model/geometry';
 import { parseHex, readCanvasPalette, withAlpha, type CanvasPalette } from '../render/color';
 import { createBackend } from '../render/createBackend';
 import { buildGrid } from '../render/grid';
+import { Atlas } from '../render/atlas';
 import { buildSceneLayer } from '../render/sceneBuilder';
+import { buildStyledLayer } from '../render/styledLayer';
+import { ExprCache } from '../style/compile';
 import type { BackendKind, RenderBackend } from '../render/types';
 import type { ToolPointer } from '../tools/Tool';
 import { Camera } from './Camera';
@@ -79,6 +82,8 @@ export class ViewportController {
   private readonly d = new DisposableStore();
 
   private dirtyLayers = new Set<string>();
+  /** Images of styled symbols (SVG, text, raster, pattern tiles), shared by the backends. */
+  private readonly atlas = new Atlas();
   private allDirty = true;
   private highlightDirty = true;
   private gridKey = '';
@@ -113,6 +118,7 @@ export class ViewportController {
       const { backend, canvas, errors } = await createBackend(host, preferred);
       this.backend = backend;
       this.glCanvas = canvas;
+      backend.useAtlas(this.atlas);
       this.backendKind.set(backend.kind);
       this.backendLabel.set(backend.label);
       errors.forEach((e) => this.ctx.log.warn(`Çizim arka ucu atlandı: ${e}`));
@@ -166,6 +172,7 @@ export class ViewportController {
       const oldCanvas = this.glCanvas;
       this.backend = backend;
       this.glCanvas = canvas;
+      backend.useAtlas(this.atlas);
       backend.resize(this.size.w, this.size.h, this.dpr);
       this.allDirty = true;
       this.highlightDirty = true;
@@ -318,7 +325,31 @@ export class ViewportController {
         this.requestRender();
       }),
     );
-    d.add(doc.events.on('attrs', () => this.requestOverlay()));
+    // Attribute changes can change data-defined symbols (a rotation, a text from a field).
+    d.add(
+      doc.events.on('attrs', ({ ids }) => {
+        for (const id of ids) {
+          const e = doc.get(id);
+          if (e && doc.layers.get(e.layerId)?.style.renderer) this.dirtyLayers.add(e.layerId);
+        }
+        this.requestRender();
+      }),
+    );
+    // Paper-mm sizes follow the plot scale; library edits change symbols in use.
+    d.add(
+      doc.settings.plotScale.subscribe(() => {
+        this.allDirty = true;
+        this.requestRender();
+      }),
+    );
+    d.add(
+      this.ctx.styles.library.version.subscribe(() => {
+        this.allDirty = true;
+        this.requestRender();
+      }),
+    );
+    this.atlas.onChange = () => this.requestRender();
+    d.add(() => (this.atlas.onChange = null));
     d.add(
       doc.layers.events.on('state', ({ ids }) => {
         ids.forEach((id) => this.dirtyLayers.add(id));
@@ -655,6 +686,15 @@ export class ViewportController {
     const ids = this.allDirty ? doc.layers.leaves().map((l) => l.id) : [...this.dirtyLayers];
     this.allDirty = false;
     this.dirtyLayers.clear();
+    const style = {
+      origin: doc.origin,
+      palette: this.palette,
+      plotScale: doc.settings.plotScale.value,
+      library: this.ctx.styles.library,
+      exprs: new ExprCache(),
+      layerName: (id: string) => doc.layers.get(id)?.name ?? id,
+      clip: this.constructionClip(),
+    };
     for (const id of ids) {
       const node = doc.layers.get(id);
       if (!node || node.type !== 'layer') {
@@ -664,7 +704,7 @@ export class ViewportController {
       const list = doc.byLayer(id);
       if (list.some(isConstruction)) this.constructionLayers.add(id);
       else this.constructionLayers.delete(id);
-      backend.upload(buildSceneLayer(id, list, node.style, { origin: doc.origin, palette: this.palette, clip: this.constructionClip() }));
+      backend.upload(buildStyledLayer(id, list, node.style, style));
     }
     if (this.highlightDirty) {
       this.highlightDirty = false;
@@ -729,6 +769,8 @@ export class ViewportController {
       .reverse();
     this.backend!.render({
       view,
+      // 1:N on a 96 dpi screen (as in the status bar); rule scale ranges use it.
+      scaleDenominator: 1 / (cam.scale * 0.00026458),
       clearColor: this.palette.background,
       order,
       underlays: showGrid ? ['__grid'] : [],

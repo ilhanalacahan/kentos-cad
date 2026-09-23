@@ -2,7 +2,7 @@ import { entityOutline, isClosedOutline, polygonHoles, polygonRing, type Entity 
 import { tessellateArc } from '../model/geom/arc';
 import { catmullRom } from '../model/geom/spline';
 import { centroid, signedArea, type Bounds, type Vec2 } from '../model/geometry';
-import type { MarkerPlacement } from './types';
+import type { MarkerPlacement } from '../model/style';
 
 /**
  * Geometry as the style engine sees it: every object is a point, a set of

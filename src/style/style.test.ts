@@ -8,7 +8,7 @@ import { geometryClassOf, interiorPoint, MAX_MARKERS_PER_PATH, placeAlong, style
 import { StyleLibrary } from './library';
 import { PrimitiveList } from './primitives';
 import { resolveRenderer } from './resolve';
-import type { FillSymbol, LayerRenderer, LibraryItem, LineSymbol, MarkerSymbol } from './types';
+import type { FillSymbol, LayerRenderer, LibraryItem, LineSymbol, MarkerSymbol } from '../model/style';
 
 const v = (x: number, y: number): Vec2 => ({ x, y });
 const env = (plotScale = 1000): CompileEnv => ({ plotScale, exprs: new ExprCache(), layerName: (id) => ({ a: 'Parseller' })[id] ?? id });

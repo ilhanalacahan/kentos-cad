@@ -1,7 +1,7 @@
 import { Emitter } from '../core/emitter';
 import { Signal } from '../core/signal';
 import { foldTurkish } from '../core/text';
-import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySource, LibrarySymbol, Sourced, Symbol } from './types';
+import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySource, LibrarySymbol, Sourced, Symbol } from '../model/style';
 
 /**
  * The style library: symbols and assets from three sources. System items

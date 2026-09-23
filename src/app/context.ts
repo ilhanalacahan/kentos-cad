@@ -8,6 +8,7 @@ import type { Clipboard } from './clipboard';
 import type { Formatter } from './format';
 import type { ProcessingService } from './processing';
 import type { DraftingSettings, MessageLog, Preferences, UiState } from './state';
+import type { StyleService } from './styles';
 
 /**
  * The single dependency every feature module receives. Modules talk to each
@@ -31,4 +32,6 @@ export interface AppContext {
   readonly clipboard: Clipboard;
   /** İşlem araçları: registry, runner, last values (see docs/PROCESSING.md). */
   readonly processing: ProcessingService;
+  /** Style library: system, user and project symbols (see docs/STYLE.md). */
+  readonly styles: StyleService;
 }

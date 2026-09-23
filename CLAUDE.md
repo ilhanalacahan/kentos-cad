@@ -55,7 +55,7 @@ npx tsc --noEmit -p .     # yalnızca tip denetimi
 - Her değişiklikten sonra `tsc` temiz olmalı ve `pnpm test` geçmeli (bkz. §9.4).
 - Geliştirme modunda uygulama bağlamı `window.kentos` olarak açıktır (üretim derlemesinde yoktur). Tarayıcıda doğrulama yaparken durumu buradan okuyun, ör. `kentos.doc.size`, `kentos.tools.activeId.value`.
 - Arayüzü etkileyen her değişiklik **gerçek tarayıcıda** denenmelidir: tıklama, klavye, açık ve koyu tema, "Büyük" yazı boyutu.
-- Tercihler `localStorage`'da `kentos.ui.v1` (yerleşim), `kentos.prefs.v1` (uygulama ayarları) ve `kentos.processing.v1` (işlem araçlarının son değerleri) anahtarlarında durur. Temiz başlangıç için bu anahtarları silin.
+- Tercihler `localStorage`'da `kentos.ui.v1` (yerleşim), `kentos.prefs.v1` (uygulama ayarları) `kentos.processing.v1` (işlem araçlarının son değerleri ve kullanıcı modelleri) ve `kentos.styles.v1` (kullanıcının stil kitaplığı) anahtarlarında durur. Temiz başlangıç için bu anahtarları silin.
 
 ---
 
@@ -141,6 +141,7 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 | `view` | `ViewportController` | Kamera, seçme, çizim isteği |
 | `clipboard` | `Clipboard` | Kopyalanan nesneler (oturumluk; `app/clipboard.ts`) |
 | `processing` | `ProcessingService` | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`) |
+| `styles` | `StyleService` | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -153,8 +154,8 @@ Yeni bir ayar ya da durum eklemeden önce **hangi kapsama ait olduğuna** karar 
 | Kapsam | Nerede | Saklama | Kim görür | Örnekler |
 |---|---|---|---|---|
 | **Proje ayarları** | `model/projectSettings.ts` → `doc.settings` | Proje dosyası (.kcad) | Projeyi açan herkes | SRID, uzunluk ve alan hassasiyeti, alan birimi, açı birimi, çizim ölçeği, proje adı |
-| **Belge verisi** | `CadDocument`, `LayerStore` | Proje dosyası | Projeyi açan herkes | Varlıklar, katman ağacı ve stilleri, öznitelikler |
-| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)**; işlem araçlarının son değerleri (`kentos.processing.v1`) |
+| **Belge verisi** | `CadDocument`, `LayerStore` | Proje dosyası | Projeyi açan herkes | Varlıklar, katman ağacı ve stilleri (işleyiciler dahil), nesne sembolleri, öznitelikler, projenin stil kitaplığı (`doc.styles`) |
+| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)**; işlem araçlarının son değerleri (`kentos.processing.v1`); kullanıcının stil kitaplığı (`kentos.styles.v1`) |
 | **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme, sağ dok sekmesi (Katmanlar/İşlemler), İşlemler görünümü ve katlanan kategoriler |
 | **Oturum durumu** | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz | Bu oturum | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano, işlem geçmişi |
 
@@ -344,7 +345,8 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 CadDocument ──(changed/state olayları)──► ViewportController.dirtyLayers
                                                │ rAF
                                                ▼
-                          sceneBuilder.buildSceneLayer(layer) → SceneLayer (Float32Array)
+                          styledLayer.buildStyledLayer(layer) → SceneLayer (stil motoru toplulukları)
+                          sceneBuilder.buildSceneLayer(vurgu)  → SceneLayer (ince çizgi, dolgu, nokta)
                                                ▼
                           RenderBackend.upload(layer) / render(FrameState)
 ```
@@ -353,12 +355,13 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
   - WebGL2 (varsayılan) ve WebGPU tam olarak uygulanmıştır ve aynı çizimi üretir (bkz. §9.5).
   - Motor çalışırken değiştirilebilir: yeni arka uç kendi tuvalini alır, bütün katmanlar belgeden yeniden yüklenir ve eski tuval ancak ilk kare çizildikten sonra kaldırılır; boş kare görünmez.
   - Arka uca yalnızca `SceneLayer` ve `FrameState` gider; varlık, katman ağacı ya da DOM gitmez.
-- **`SceneLayer`:** katman başına çizgi, dolgu ve nokta topluları. Renk ve kesikli çizgi deseni topluya aittir.
+- **Belge katmanları stil motorundan geçer** (`render/styledLayer.ts`, ayrıntı [docs/STYLE.md](docs/STYLE.md) §6): her nesne kendi sembolüyle (`entity.symbol`), yoksa katmanın işleyicisiyle (`style.renderer`), yoksa katmanın basit görünüşüyle (renk, çizgi tipi, kalınlık, dolgu, nokta simgesi) çizilir. Semboller derlenip `SceneLayer.styled` topluluklarına dönüşür: kalın ve kesikli vuruşlar (örneklenmiş parçalar), dünya ızgarasına hizalı taramalar ve döşemeler, SDF ya da atlas görüntüsü işaretler. SVG, yazı, raster ve desen görüntüleri iki arka ucun paylaştığı doku atlasındadır (`render/atlas.ts`, `backend.useAtlas`). Çizim ölçeği ya da stil kitaplığı değişince bütün katmanlar, yalnız öznitelik değişince işleyicisi olan katmanlar yeniden kurulur.
+- **`SceneLayer`:** katman başına çizgi, dolgu ve nokta topluları (vurgu ve ızgara bunları kullanır) ile stilli topluluklar (`styled`). Renk ve kesikli çizgi deseni topluya aittir.
   - Çizgi: segment listesi ve kümülatif mesafe. Kesik desen parça gölgelendiricide piksel cinsinden hesaplanır.
   - Dolgu: kulak kırpma (ear clipping) ile üçgenlenir.
   - Nokta: gölgelendiricide çizilen simgeler (halka, artı, üçgen).
 - **Yerel orijin (RTC):** Dünya koordinatları CPU'da float64 ve mutlaktır. GPU'ya yalnızca `doc.origin`'e göre farklar float32 olarak gider. TM koordinatları 4,4 milyon metreye ulaşır; mutlak float32 santimetre titremesine yol açar. **GPU'ya asla mutlak koordinat yüklemeyin.**
-- **Çizim sırası:** alt katmanlar (ızgara), ağaçtaki yaprak sırasının tersi (listede üstteki en son, yani en üstte çizilir), üst katmanlar (`__hover`, `__sel`). Her geçişte önce dolgular, sonra çizgiler, sonra noktalar çizilir.
+- **Çizim sırası:** alt katmanlar (ızgara), ağaçtaki yaprak sırasının tersi (listede üstteki en son, yani en üstte çizilir), üst katmanlar (`__hover`, `__sel`). Her geçişte katman katman önce düz dolgular ve stilli topluluklar (sembol düzeyine göre), sonra bütün katmanların ince çizgileri, sonra noktalar çizilir.
 - **Yardımcı çizgiler** (`xline`, `ray`) GPU'ya görünüm alanının üç katı büyüklüğündeki bir kutuya kırpılarak gider (`BuildOptions.clip`); görünüm kutudan çıkınca ya da ölçek iki kattan fazla değişince bu çizgileri içeren katmanlar ve vurgular yeniden kurulur. Böylece GPU'ya hiçbir zaman uzak (float32'de titreyen) koordinat gitmez.
 - **Vurgu ayrı katmandır.** Seçim değişince yalnızca `__sel` ve `__hover` yeniden kurulur, belge katmanlarına dokunulmaz.
 - **`ViewportController`:**
@@ -599,7 +602,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
      - *Netcad'e özgü, eksik:* alanı verilen alana göre bölme (ifraz, topolojiyle); sembol ve blok yerleştirme; klotoid (spiral) nesnesi; poligon ve kutupsal ölçü hesapları (Hesap menüsü).
      - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (yay: teğet, açı, merkez, yarıçap, ikinci nokta, doğrultu; Uzunluk; Geri), DONUT (dolu tarama olarak), REVCLOUD (dikdörtgen, çokgen), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY, TTT), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, ölçüler (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap), HATCH; MOVE, COPY, ROTATE (Referans, Kopya), SCALE (Referans, Kopya), MIRROR, STRETCH, dikdörtgen ve kutupsal ARRAY, ALIGN, LENGTHEN, OFFSET (mesafe, noktadan geç), TRIM, EXTEND (sınır seçme, Shift ile öbür işlem), BREAK, JOIN, EXPLODE, FILLET ve CHAMFER (çoklu, kırpmasız), tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
      - *Eksik:* PLINE kalınlığı (genişlik; çizgi kalınlığı gelince); MTEXT; yol boyunca ARRAY.
-   - **Stil motoru (sürüyor, [docs/STYLE.md](docs/STYLE.md)):** 1. aşama (çekirdek: semboller, işleyiciler, kitaplık, .kstil, derleme) yapıldı; sıradaki GPU çizimi, stil yöneticisi ve sembol tasarımcısı, SVG editörü, MPYY sistem kitaplığı.
+   - **Stil motoru (sürüyor, [docs/STYLE.md](docs/STYLE.md)):** 1. aşama (çekirdek: semboller, işleyiciler, kitaplık, .kstil, derleme) ve 2. aşama (GPU çizimi: kalın/kesikli vuruş, tarama, döşeme, SDF ve atlas işaretleri, iki arka uçta eşit) yapıldı; sıradaki MPYY sistem kitaplığı, stil yöneticisi ve sembol tasarımcısı, SVG editörü.
    - **Sıradaki (B, semboloji):** sembol ve blok kütüphanesi (belgeye tanım kaydı, `insert` türü, ölçek/açı, patlatma); çizgi tipi kütüphanesi (desenli ve sembollü hatlar); Mekânsal Planlar Yapım Yönetmeliği gösterimleri ve lejant
    - **Sonra (C, D):** yatay/düşey, açı ve yarıçap ölçüsü; adalı ve ilişkisel tarama; nokta hesapları (dik ayak, doğrultu-mesafe, otomatik nokta numarası); kutupsal ve yol boyunca dizi; özellik eşle, yön ters çevir, benzerini seç; imleç yanında dinamik giriş kutusu
 2. **Veri modeli:**
@@ -664,17 +667,25 @@ src/
     clipboard.ts             Clipboard: kopyalanan nesneler ve taban noktası (oturumluk)
     format.ts                Formatter: sayıdan metne tek geçit
     processing.ts            ProcessingService: işlem kaydı, çalıştırıcı, son değerler; işlem komutları
+    styles.ts                StyleService: stil kitaplığı (sistem + kullanıcı localStorage + proje)
   core/                      Bağımsız temel yapılar (signal, emitter, disposable, commands, keymap)
   geo/crs.ts                 EPSG kaydı (TUREF/ED50 TM, UTM, WGS84), arama, dilim önerisi
   model/                     Belge, varlıklar, geometri, katmanlar, seçim, proje ayarları, örnek proje
     expression/              İfade dili (ayrıştırma, derleme, değerler, işlevler; işlem araçları ve stil motoru kullanır)
     geom/                    Saf geometri çekirdeği: afin, yay, bulge, kesişim, öteleme, teğet daire, düzlem bindirme ve alan cebiri (+ testler)
     ops/                     Nesne işlemleri: kenarlar, yol parametresi, dönüşüm, budama/uzatma, kır, birleştir, patlat, esnet, köşe, öteleme, köşe yuvarlama/pah, tutamaçlar (+ testler)
-  style/                     Stil motoru: types (semboller, işleyiciler, kitaplık öğeleri), geometry, compile, primitives, resolve, fromLayer, library, file (.kstil) (+ testler)
+  style/                     Stil motoru: geometry, compile, primitives, resolve, fromLayer, library, file (.kstil) (+ testler); türler model/style.ts'de
+    system/                  Sistem kitaplığı (salt okunur, kopyalanabilir): temel çizgi tipleri, işaretler, alanlar
   processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit (+ testler)
     worker/                  Web Worker çalıştırıcısı: protokol, iş yürütme, executor, worker girişi (+ testler)
     builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç; yerleşik modeller
   render/                    RenderBackend sözleşmesi, sahne kurucu, delikli üçgenleme, ızgara, renk; webgl2/ ve webgpu/
+    styledLayer.ts           Belge katmanı → stil motoru → GPU toplulukları (sembol seçimi ve geri düşüşler)
+    styledSink.ts            Çizim ilkellerini topluluklara toplar (vuruş örnekleri, üçgenlenmiş dolgu, işaret örnekleri)
+    atlas.ts                 Doku atlası: SVG, raster, yazı işaretleri ve desen döşemeleri (iki arka uç ortak)
+    canvasShapes.ts          İşaret şekillerinin Canvas2D çizimi (atlas döşemeleri ve önizlemeler)
+    webgl2/styled*.ts        Stilli toplulukların GLSL gölgelendiricileri ve çizicisi
+    webgpu/styled*.ts        Aynısının WGSL karşılığı
   viewport/                  Kamera, ViewportController, PickIndex, üst katman çizimi
   tools/                     Tool sözleşmesi, ToolManager, katalog, koordinat girişi, imleç kısıtlaması (tracking)
     drawTools.ts             PointInputTool ailesi: çizgi, nokta, sil

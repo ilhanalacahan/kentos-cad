@@ -15,6 +15,7 @@ import { registerCoreCommands } from './commands';
 import type { AppContext } from './context';
 import { registerDefaultKeybindings } from './keybindings';
 import { createProcessing, registerProcessingCommands } from './processing';
+import { createStyles } from './styles';
 import { Formatter } from './format';
 import { applyUiScale } from './commands';
 import { createPreferences, createUiState, DraftingSettings, MessageLog } from './state';
@@ -48,6 +49,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     clipboard: new Clipboard(),
     // The visible area is read lazily: the viewport exists only after the context.
     processing: createProcessing(doc, selection, () => ctx.view.camera.visibleBounds()),
+    styles: createStyles(doc),
   } as AppContext & { tools: ToolManager; view: ViewportController };
   ctx.tools = new ToolManager(ctx);
   ctx.view = new ViewportController(ctx);

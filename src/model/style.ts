@@ -293,3 +293,9 @@ export interface LibraryCategory {
   readonly order?: number;
   readonly description?: string;
 }
+
+/** A project's own library part, saved in the project file. */
+export interface ProjectStyles {
+  readonly items: readonly LibraryItem[];
+  readonly categories: readonly LibraryCategory[];
+}

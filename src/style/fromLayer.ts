@@ -1,6 +1,6 @@
 import type { Entity } from '../model/entities';
 import type { LayerStyle, LineType } from '../model/layers';
-import type { FillSymbol, LineSymbol, MarkerSymbol, ShapeName, SymbolSet } from './types';
+import type { FillSymbol, LineSymbol, MarkerSymbol, ShapeName, SymbolSet } from '../model/style';
 
 /**
  * The simple look of a layer (colour, line type, weight, fill, point

@@ -1,5 +1,6 @@
-import type { FrameState, LineBatch, RenderBackend, RGBA, SceneLayer } from '../types';
+import type { AtlasSource, FrameState, LineBatch, RenderBackend, RGBA, SceneLayer } from '../types';
 import { FILL_FS, FILL_VS, LINE_FS, LINE_VS, POINT_FS, POINT_VS } from './shaders';
+import { StyledRenderer, type GpuStyled } from './styledRenderer';
 
 interface Program {
   program: WebGLProgram;
@@ -21,6 +22,7 @@ interface GpuLayer {
   lines: GpuBatch[];
   fills: GpuBatch[];
   points: GpuBatch[];
+  styled: GpuStyled[];
 }
 
 const SHAPES = { ring: 0, cross: 1, triangle: 2 } as const;
@@ -34,6 +36,7 @@ export class WebGL2Backend implements RenderBackend {
   private line!: Program;
   private fill!: Program;
   private point!: Program;
+  private styled!: StyledRenderer;
   private layers = new Map<string, GpuLayer>();
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
@@ -44,11 +47,19 @@ export class WebGL2Backend implements RenderBackend {
     this.line = this.createProgram(LINE_VS, LINE_FS, ['a_pos', 'a_dist'], ['u_offset', 'u_scale', 'u_color', 'u_dash', 'u_pxPerUnit']);
     this.fill = this.createProgram(FILL_VS, FILL_FS, ['a_pos'], ['u_offset', 'u_scale', 'u_color']);
     this.point = this.createProgram(POINT_VS, POINT_FS, ['a_pos'], ['u_offset', 'u_scale', 'u_color', 'u_size', 'u_dpr', 'u_shape']);
+    this.styled = new StyledRenderer(gl, (vs, fs, a, u) => {
+      const p = this.createProgram(vs, fs, a, u);
+      return { program: p.program, a: p.attribs, u: p.uniforms };
+    });
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
     this.label = renderer ? `WebGL2 · ${renderer.replace(/^ANGLE \((.*)\)$/, '$1').split(',')[1]?.trim() ?? renderer}` : 'WebGL2';
+  }
+
+  useAtlas(atlas: AtlasSource): void {
+    this.styled.useAtlas(atlas);
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -60,7 +71,7 @@ export class WebGL2Backend implements RenderBackend {
   upload(layer: SceneLayer): void {
     this.remove(layer.id);
     const gl = this.gl;
-    const g: GpuLayer = { lines: [], fills: [], points: [] };
+    const g: GpuLayer = { lines: [], fills: [], points: [], styled: layer.styled?.length ? this.styled.upload(layer.styled) : [] };
     for (const b of layer.lines) {
       if (!b.positions.length) continue;
       g.lines.push(this.makeBatch(this.line, { a_pos: [b.positions, 2], a_dist: [b.distances, 1] }, b.positions.length / 2, b.color, b));
@@ -87,6 +98,7 @@ export class WebGL2Backend implements RenderBackend {
       this.gl.deleteVertexArray(b.vao);
       b.buffers.forEach((buf) => this.gl.deleteBuffer(buf));
     }
+    this.styled.release(g.styled);
     this.layers.delete(id);
   }
 
@@ -109,15 +121,27 @@ export class WebGL2Backend implements RenderBackend {
       gl.uniform2f(p.uniforms.u_scale, sx, sy);
     };
 
+    const styledFrame = {
+      cam: offset,
+      pxPerM: pxPerUnit,
+      dpr: this.dpr,
+      viewPx: [this.canvas.width, this.canvas.height] as const,
+      scaleDenominator: frame.scaleDenominator,
+    };
     const pass = (ids: readonly string[]) => {
       const layers = ids.map((id) => this.layers.get(id)).filter((l): l is GpuLayer => !!l);
-      setCommon(this.fill);
-      for (const l of layers)
-        for (const f of l.fills) {
-          gl.uniform4fv(this.fill.uniforms.u_color, f.color);
-          gl.bindVertexArray(f.vao);
-          gl.drawArrays(gl.TRIANGLES, 0, f.count);
+      // Each layer draws its styled symbols whole (symbol levels), under the plain lines and points.
+      for (const l of layers) {
+        if (l.fills.length) {
+          setCommon(this.fill);
+          for (const f of l.fills) {
+            gl.uniform4fv(this.fill.uniforms.u_color, f.color);
+            gl.bindVertexArray(f.vao);
+            gl.drawArrays(gl.TRIANGLES, 0, f.count);
+          }
         }
+        this.styled.draw(l.styled, styledFrame);
+      }
       setCommon(this.line);
       gl.uniform1f(this.line.uniforms.u_pxPerUnit, pxPerUnit);
       for (const l of layers)
@@ -149,6 +173,7 @@ export class WebGL2Backend implements RenderBackend {
   dispose(): void {
     for (const id of [...this.layers.keys()]) this.remove(id);
     for (const p of [this.line, this.fill, this.point]) if (p) this.gl.deleteProgram(p.program);
+    this.styled?.dispose();
   }
 
   private makeBatch(

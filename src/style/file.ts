@@ -1,5 +1,5 @@
 import { assetsOfSymbol, newItemId, type EditableSource, type StyleLibrary } from './library';
-import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySymbol, Symbol } from './types';
+import type { LibraryAsset, LibraryCategory, LibraryItem, LibrarySymbol, Symbol } from '../model/style';
 
 /**
  * The .kstil file: styles to export, import and share. Versioned JSON with

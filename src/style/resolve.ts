@@ -1,7 +1,7 @@
 import type { Entity } from '../model/entities';
 import { toNumber, toText, truthy } from '../model/expression/expressionLib';
 import type { ExprCache } from './compile';
-import type { LayerRenderer, Rule, Symbol, SymbolRef, SymbolSet } from './types';
+import type { LayerRenderer, Rule, Symbol, SymbolRef, SymbolSet } from '../model/style';
 
 /**
  * Which symbols an object gets from its layer's renderer. A rule-based

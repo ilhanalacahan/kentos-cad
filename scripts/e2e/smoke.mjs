@@ -574,6 +574,32 @@ try {
   const gridWasOn = await b.eval('window.kentos.settings.grid.value');
   await b.eval('window.kentos.settings.grid.set(false)');
   await sleep(100);
+
+  // Style engine: a layer renderer (hatch, centroid text from an expression)
+  // and a system library symbol on one object; the engine comparison below
+  // then runs on this styled scene.
+  const plainInk = await inked();
+  await b.eval(`(() => {
+    const L = window.kentos.doc.layers;
+    const txt = { type: 'marker', layers: [{ id: 't', type: 'text', text: { expr: "'P' || Parsel" }, size: 2.5, color: '#FFFFFF', weight: 600 }] };
+    L.setStyle('parsel', { renderer: { type: 'categorized', expr: 'Nitelik', categories: [
+      { value: 'Arsa', label: 'Arsa', symbols: { fill: { type: 'fill', layers: [
+        { id: 'h', type: 'hatchFill', angle: 45, spacing: 1.5, width: 0.1, color: '#C9A227' },
+        { id: 'o', type: 'simpleLine', color: '#E0E0E0', width: 0.2 },
+        { id: 'c', type: 'centroidMarker', marker: txt } ] } } } ],
+      other: { fill: { ref: 'temel.alan.capraz' } } } });
+  })()`);
+  const axis = await b.eval(`window.kentos.doc.byLayer('yol-ekseni').find((e) => e.kind === 'line' || e.kind === 'polyline').id`);
+  await b.eval(`window.kentos.doc.update(${axis}, { symbol: 'temel.cizgi.oklu' })`);
+  await sleep(300);
+  const styledInk = await inked();
+  check('style: renderer and symbol add ink (hatches, arrows, text)', styledInk > 1.3 * plainInk, `${styledInk} / ${plainInk} px`);
+  check('style: text markers are drawn into the atlas', (await b.eval('window.kentos.view.atlas.version')) > 1);
+  await key('z', { ctrl: true });
+  check('style: an object symbol is one undo step', (await b.eval(`window.kentos.doc.get(${axis}).symbol ?? null`)) === null);
+  await b.eval(`window.kentos.doc.update(${axis}, { symbol: 'temel.cizgi.oklu' })`);
+  await sleep(100);
+
   const glInk = await inked();
   const gpuReady = await b.eval('(async () => !!(await navigator.gpu?.requestAdapter()))()');
   if (!gpuReady) console.log('– WebGPU denetimleri atlandı: bu tarayıcıda WebGPU bağdaştırıcısı yok.');
@@ -591,6 +617,7 @@ try {
     check('switching back to WebGL2 keeps one canvas', (await b.eval(`window.kentos.view.backendKind.value + '|' + document.querySelectorAll('.viewport__gl').length`)) === 'webgl2|1');
   }
   await b.eval(`window.kentos.settings.grid.set(${gridWasOn})`);
+  await b.eval(`(() => { const k = window.kentos; k.doc.layers.setStyle('parsel', { renderer: undefined }); k.doc.update(${axis}, { symbol: undefined }); })()`);
 
   // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step
   {
