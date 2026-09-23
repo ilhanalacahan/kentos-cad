@@ -435,6 +435,29 @@ try {
   check('Shift+B: a click inside crossing lines makes the enclosed area', Math.abs((await netOf(faceId)) - 26 * 26) < 1e-6);
   await key('Escape');
 
+  // Paralel çizgi (Y): typed distances and axis; Dik çık (O) on its first leg.
+  await key('y');
+  await key('s');
+  await cmd('3');
+  await key('a');
+  await cmd('4');
+  await cmd(`${AX},${N - 40}`);
+  await cmd(`${AX + 20},${N - 40}`);
+  await cmd(`${AX + 20},${N - 20}`);
+  await key('Enter');
+  await sleep(100);
+  const [pl, pr] = await b.eval('[...window.kentos.doc.all()].slice(-3)');
+  const at0 = (p, x, y) => Math.abs(p.x - (AX + x)) < 1e-9 && Math.abs(p.y - (N + y)) < 1e-9;
+  check('Paralel çizgi: sides at 3 m and 4 m, mitred at the turn', at0(pl.pts[1], 17, -37) && at0(pr.pts[1], 24, -44), JSON.stringify([pl.pts[1], pr.pts[1]]));
+  await key('Escape');
+  await key('o');
+  await b.click(...(await toScreen(AX + 2, N - 40)));
+  await cmd('6');
+  await cmd('-5');
+  const perp = await newest();
+  check('Dik çık: 6 m from the clicked end, 5 m to the left', perp.kind === 'line' && at0(perp.a, 6, -40) && at0(perp.b, 6, -35), JSON.stringify(perp));
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');

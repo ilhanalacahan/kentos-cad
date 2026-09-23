@@ -58,7 +58,7 @@ export const MAIN_MENU: TopMenu[] = [
   {
     id: 'draw',
     label: 'Çizim',
-    items: ['tool.point', 'tool.divide', '-', 'tool.line', 'tool.polyline', 'tool.arc', 'tool.circle', 'tool.ellipse', 'tool.rectangle', 'tool.rectangle3', 'tool.regularPolygon', 'tool.polygon', 'tool.spline', '-', 'tool.xline', 'tool.ray', '-', 'tool.text', 'tool.dimension', 'tool.hatch'],
+    items: ['tool.point', 'tool.divide', '-', 'tool.line', 'tool.polyline', 'tool.parallel', 'tool.arc', 'tool.circle', 'tool.ellipse', 'tool.rectangle', 'tool.rectangle3', 'tool.regularPolygon', 'tool.polygon', 'tool.spline', '-', 'tool.perpIn', 'tool.perpOut', 'tool.xline', 'tool.ray', '-', 'tool.text', 'tool.dimension', 'tool.hatch'],
   },
   {
     id: 'modify',
