@@ -69,7 +69,8 @@ const report = {
   label,
   date: new Date().toISOString(),
   commit: execSync('git rev-parse --short HEAD').toString().trim(),
-  dirtyTree: execSync('git status --porcelain').toString().trim().length > 0,
+  // The reports themselves do not count: a re-run on the same commit is still a clean measurement.
+  dirtyTree: execSync("git status --porcelain -- . ':!docs/perf'").toString().trim().length > 0,
   initial: {
     js: sum(initialFiles.filter((f) => f.file.endsWith('.js'))),
     css: sum(initialFiles.filter((f) => f.file.endsWith('.css'))),

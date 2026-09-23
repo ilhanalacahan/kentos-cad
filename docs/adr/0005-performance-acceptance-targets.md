@@ -34,7 +34,7 @@ Günlük 2D çizim, demo katalogu olmadan açılır.
 | Aynı modülün ikinci açılışı | ≤ 150 ms |
 
 - İlk yük bugün demo projeyi ve bütün sistem sembol katalogunu içeriyor. Bu hedefler demo ayrıldıktan sonrası içindir.
-- **Bugünkü başlangıç ölçümü** (`docs/perf/baseline-2026-09.*`) yalnızca kayıttır. Hedefi geçmemesi bir hata değil, §20.4 adım 2'nin iş listesidir.
+- **Bugünkü başlangıç ölçümü** (`docs/perf/bundle-baseline-*` ve `docs/perf/startup-baseline-*`) yalnızca kayıttır. Hedefi geçmemesi bir hata değil, §20.4 adım 2'nin iş listesidir.
 
 ### Etkileşim (§6.1 korunur)
 
