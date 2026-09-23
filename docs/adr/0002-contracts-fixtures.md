@@ -40,7 +40,7 @@ Tarayıcı, WASM, API ve saklanan dosyalar aynı veriyi konuşacak. Tipler iki d
 - Aynı dosyayı okuyanlar:
   - TypeScript: `src/model/geom/golden.test.ts`;
   - yerel Rust: `crates/geometry-core/tests/golden.rs`;
-  - WASM: `src/wasm/golden.wasm.test.ts`, `pnpm test:rust` ile.
+  - WASM: `src/wasm/golden.wasm.test.ts`, `pnpm test:rust` ile. Bağımsız referanslar da (`reference.json`) aynı sınırlarla WASM'da sınanır.
 - **Tolerans:** `|gerçek − beklenen| ≤ 1e-9 + 1e-14·max(|gerçek|, |beklenen|)`.
   - Formüller ve işlem sırası iki dilde aynı olduğu için toplama ve çarpma aynı sonucu verir.
   - Fark yalnızca `atan2`, `sin`, `hypot` gibi kütüphane işlevlerinin son bitinden gelebilir.

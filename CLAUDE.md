@@ -92,7 +92,12 @@ pnpm build                # tsc (tip denetimi) + vite build
 pnpm test                 # Vitest birim testleri (geometri, işlemler, belge, biçimlendirici)
 pnpm e2e                  # Başsız Chrome'da uçtan uca duman testi (kendi Vite sunucusunu açar)
 npx tsc --noEmit -p .     # yalnızca tip denetimi
+pnpm rust:test            # Rust çalışma alanı: cargo test + clippy (-D warnings)
+pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → src/wasm/pkg (depoya girmez)
+pnpm test:rust            # rust:test + rust:wasm + WASM golden testleri
 ```
+
+- **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. `pnpm test` Rust gerektirmez; WASM testleri paket yoksa atlanır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
 
 - **Çizim motoru:** varsayılan WebGL2'dir; WebGPU isteğe bağlıdır.
   - Etkin motor durum çubuğunun sağ alt köşesinde yazar. Tıklayınca motor seçilir: seçim hemen uygulanır (`view.switchBackend`, sayfa yenilenmez) ve `prefs.rendererPreference` ile hatırlanır. Aynı seçim **Görünüm → Çizim motoru** menüsünde ve Uygulama ayarları → Çizim motoru bölümünde de vardır.

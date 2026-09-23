@@ -34,6 +34,7 @@ Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. F
   | tokio | 1.53.1 |
 
 - Araç zinciri `rust-toolchain.toml` ile 1.96.0'a sabitlenir; `wasm32-unknown-unknown` hedefi zincirle birlikte kurulur.
+- WASM paketi `wasm-bindgen-cli` 0.2.128 ile üretilir (`pnpm rust:wasm`, `--target web`, `src/wasm/pkg`). Komutun sürümü `wasm-bindgen` crate'iyle aynı olmak zorundadır; paket depoya girmez. `src/wasm/golden.wasm.test.ts` paketin çalışma alanı sürümüyle derlendiğini denetler, eski paket testte yakalanır.
 - **Derleme sınırı:** `.cargo/config.toml` derlemeyi 4 işle sınırlar. Geliştirici makinesi tarayıcı, Vite ve başsız Chrome ile paylaşılıyor. Paralel ağır süreçler makineyi bir kez kilitledi. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz.
 - Ana `pnpm test` Rust araç zincirine bağımlı değildir. Rust ve WASM denetimleri `pnpm test:rust` ile ayrıca çalışır.
 
