@@ -15,55 +15,95 @@ const paper = (ctx: AppContext, mm: number) => (mm / 1000) * ctx.doc.settings.pl
 
 // ── Yazı ────────────────────────────────────────────────────────────────
 
-/** Single-line text: insertion point → angle (click or type, Enter = 0°) → content. */
+/**
+ * Single-line text: click where it starts and type right there — a field
+ * opens in place (the drawing never sees the keystrokes). Height (Y, paper
+ * mm) and angle (A: typed degrees, or two clicks along an edge) are set
+ * before the click and kept for the next texts. Enter adds the text and
+ * waits for the next one; Esc drops the field.
+ */
 export class TextTool extends PointInputTool {
   readonly id = 'text';
   protected readonly label = 'Yazı';
   private static heightMm = 2.5;
-  private stage: 'pos' | 'height' | 'angle' | 'text' = 'pos';
+  private static angle = 0;
+  private stage: 'pos' | 'height' | 'angle' | 'typing' = 'pos';
   private at: Vec2 | null = null;
-  private angle = 0;
+  /** First of the two clicks that give the angle. */
+  private angleFrom: Vec2 | null = null;
 
   protected promptFor(): string {
     switch (this.stage) {
-      case 'pos':
-        return `yazının başlangıç noktasını belirtin [Yükseklik (Y): ${TextTool.heightMm} mm]`;
       case 'height':
         return 'kâğıt üzerindeki yazı yüksekliğini mm olarak yazın';
       case 'angle':
-        return 'yazı açısını yazın ya da doğrultu için bir nokta gösterin (Enter: 0°)';
+        return this.angleFrom ? 'doğrultunun ikinci noktasına tıklayın' : 'açıyı yazın (derece) ya da doğrultu için iki noktaya tıklayın';
+      case 'typing':
+        return 'yazıyı tıkladığınız yere yazın; Enter ekler, Esc vazgeçer';
       default:
-        return 'metni yazıp Enter’a basın';
+        return `yazının başlangıcına tıklayın [Yükseklik (Y): ${TextTool.heightMm} mm / Açı (A): ${+TextTool.angle.toFixed(4)}°]`;
     }
   }
 
   override snapFrom(): Vec2 | null {
-    return this.at;
-  }
-
-  protected onPoint(p: Vec2): void {
-    if (this.stage === 'pos') {
-      this.at = p;
-      this.stage = 'angle';
-    } else if (this.stage === 'angle' && this.at && dist(this.at, p) > 1e-9) {
-      this.angle = (Math.atan2(p.y - this.at.y, p.x - this.at.x) * 180) / Math.PI;
-      this.stage = 'text';
-    }
+    return this.angleFrom ?? this.at;
   }
 
   protected override get last(): Vec2 | null {
-    return this.stage === 'angle' ? this.at : null;
+    return this.stage === 'angle' ? this.angleFrom : null;
+  }
+
+  protected override option(key: string): boolean {
+    if (this.stage !== 'pos' || (key !== 'Y' && key !== 'A')) return false;
+    this.stage = key === 'Y' ? 'height' : 'angle';
+    this.angleFrom = null;
+    this.refreshPrompt();
+    return true;
+  }
+
+  protected onPoint(p: Vec2): void {
+    if (this.stage === 'angle') {
+      if (!this.angleFrom) return void (this.angleFrom = p);
+      if (dist(this.angleFrom, p) < 1e-9) return;
+      let a = (Math.atan2(p.y - this.angleFrom.y, p.x - this.angleFrom.x) * 180) / Math.PI;
+      // Keep text readable: a direction pointing left is turned around.
+      if (a > 90) a -= 180;
+      else if (a <= -90) a += 180;
+      TextTool.angle = a;
+      this.angleFrom = null;
+      this.stage = 'pos';
+      return;
+    }
+    if (this.stage !== 'pos') return;
+    this.at = p;
+    this.stage = 'typing';
+    const height = paper(this.ctx, TextTool.heightMm);
+    this.ctx.view.requestTextInput({
+      at: p,
+      height,
+      rotation: TextTool.angle,
+      commit: (text) => {
+        this.create({ kind: 'text', p, text, height, rotation: TextTool.angle });
+        this.ctx.log.success(`Yazı eklendi: “${text}”`);
+        this.afterTyping();
+      },
+      cancel: () => this.afterTyping(),
+    });
+  }
+
+  private afterTyping(): void {
+    this.at = null;
+    this.stage = 'pos';
+    this.refreshPrompt();
+    this.ctx.view.requestOverlay();
+    this.ctx.view.focus();
   }
 
   override input(text: string): boolean {
     const t = text.trim();
-    if (this.stage === 'pos' && t.toLocaleUpperCase('tr-TR') === 'Y') {
-      this.stage = 'height';
-      this.refreshPrompt();
-      return true;
-    }
+    if (this.option(t.toLocaleUpperCase('tr-TR'))) return true;
+    const n = parseNumber(t);
     if (this.stage === 'height') {
-      const n = parseNumber(t);
       if (n === null || n <= 0) return false;
       TextTool.heightMm = n;
       this.stage = 'pos';
@@ -71,59 +111,47 @@ export class TextTool extends PointInputTool {
       return true;
     }
     if (this.stage === 'angle') {
-      const n = parseNumber(t);
       if (n === null) return false;
-      this.angle = n;
-      this.stage = 'text';
+      TextTool.angle = n;
+      this.angleFrom = null;
+      this.stage = 'pos';
       this.refreshPrompt();
-      return true;
-    }
-    if (this.stage === 'text' && this.at) {
-      if (!t) return false;
-      this.create({ kind: 'text', p: this.at, text: t, height: paper(this.ctx, TextTool.heightMm), rotation: this.angle });
-      this.ctx.log.success(`Yazı eklendi: “${t}”`);
-      this.reset();
       return true;
     }
     return super.input(text);
   }
 
   override confirm(): void {
-    if (this.stage === 'angle') {
-      this.angle = 0;
-      this.stage = 'text';
-      return this.refreshPrompt();
-    }
     if (this.stage === 'pos') return this.ctx.tools.exit();
-    this.reset();
+    this.afterTyping();
   }
 
   protected override reset(): void {
     this.stage = 'pos';
     this.at = null;
-    this.angle = 0;
+    this.angleFrom = null;
     super.reset();
   }
 
-  override pointerDown(p: ToolPointer): void {
-    if (this.stage === 'pos' || this.stage === 'angle') super.pointerDown(p);
-  }
-
   override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (!this.at) return;
     const pal = this.ctx.view.palette;
-    const s = view.worldToScreen(this.at);
-    const deg = this.stage === 'angle' && this.hover ? (Math.atan2(this.hover.y - this.at.y, this.hover.x - this.at.x) * 180) / Math.PI : this.angle;
-    const rad = (-deg * Math.PI) / 180;
+    if (this.stage === 'angle' && this.angleFrom && this.hover) {
+      strokePath(g, view, [this.angleFrom, this.hover], { color: pal.accent, dash: [3, 3] });
+      drawTag(g, view.worldToScreen(this.hover), [`Açı ${((Math.atan2(this.hover.y - this.angleFrom.y, this.hover.x - this.angleFrom.x) * 180) / Math.PI).toFixed(2)}°`], pal.accent, pal.labelHalo);
+      return;
+    }
+    // Where the text will sit: a box of its height along its angle.
+    const at = this.stage === 'pos' ? this.hover : null;
+    if (!at) return;
+    const s = view.worldToScreen(at);
     const px = Math.max(8, paper(this.ctx, TextTool.heightMm) * view.scale);
     g.save();
     g.translate(s.x, s.y);
-    g.rotate(rad);
+    g.rotate((-TextTool.angle * Math.PI) / 180);
     g.strokeStyle = pal.accent;
     g.setLineDash([3, 3]);
     g.strokeRect(0, -px, px * 4, px);
     g.restore();
-    if (this.stage === 'angle' && this.hover) drawTag(g, view.worldToScreen(this.hover), [`Açı ${deg.toFixed(2)}°`], pal.accent, pal.labelHalo);
   }
 }
 

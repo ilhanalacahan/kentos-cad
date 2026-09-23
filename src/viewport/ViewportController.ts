@@ -22,6 +22,17 @@ export type ViewportMenuKind = 'select' | 'command' | 'snap';
 
 const isConstruction = (e: Entity) => e.kind === 'xline' || e.kind === 'ray';
 
+/** New text typed in place: where, how big and at what angle, and where the result goes. */
+export interface TextInputRequest {
+  at: Vec2;
+  /** Text height in metres. */
+  height: number;
+  /** Degrees, counter-clockwise from east. */
+  rotation: number;
+  commit(text: string): void;
+  cancel(): void;
+}
+
 /** Holding the right button this long opens the command menu instead of confirming. */
 const RIGHT_HOLD_MS = 300;
 /** Resting on a snap this long acquires (or releases) it as a tracking point. */
@@ -36,6 +47,8 @@ interface ViewportEvents {
   contextmenu: { clientX: number; clientY: number; world: Vec2; screen: Vec2; kind: ViewportMenuKind };
   /** A tool asks the UI to edit the text of an entity in place. */
   editText: { id: number };
+  /** A tool asks the UI for new text typed in place (see requestTextInput). */
+  textInput: TextInputRequest;
 }
 
 /**
@@ -180,6 +193,11 @@ export class ViewportController {
   /** Tools call this; the UI layer owns the actual editor (tools never touch the DOM). */
   requestTextEdit(id: number): void {
     this.events.emit('editText', { id });
+  }
+
+  /** Opens a text field at a point so typing goes into the drawing, not to shortcuts. */
+  requestTextInput(req: TextInputRequest): void {
+    this.events.emit('textInput', req);
   }
 
   /** Hide an entity's overlay text while an inline editor covers it. */
@@ -408,6 +426,10 @@ export class ViewportController {
     const d = this.d;
     d.add(
       listen<PointerEvent>(el, 'pointerdown', (e) => {
+        // We focus the canvas ourselves; the browser's own mousedown focus
+        // would come later and steal focus from a field a tool just opened
+        // (the text tool's in-place editor).
+        e.preventDefault();
         el.focus({ preventScroll: true });
         el.setPointerCapture(e.pointerId);
         if (e.button === 1) {

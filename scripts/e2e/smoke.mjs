@@ -62,12 +62,13 @@ try {
   await b.click(...(await at(90, -40)));
   await b.click(...(await at(45, -32)));
   await b.key('Escape');
+  // Text: click, type straight into the field that opens there, Enter.
   await b.key('t');
   await b.click(...(await at(0, -60)));
-  await b.key('Enter');
-  await b.key(' ');
+  const fieldOpen = await b.eval(`!document.querySelector('.inline-text').hidden && document.activeElement === document.querySelector('.inline-text__input')`);
   await b.type('Deneme');
   await b.key('Enter');
+  check('text tool opens a focused field where you click', fieldOpen);
   await b.key('Escape');
   const kinds = await b.eval(`[...window.kentos.doc.all()].slice(-3).map(e => e.kind).join(',')`);
   check('spline, dimension and text are created', kinds === 'spline,dimension,text', kinds);
@@ -92,7 +93,8 @@ try {
   check('double click opens the inline text editor', await b.eval(`!document.querySelector('.inline-text').hidden`));
   await b.type('Düzenlendi');
   await b.key('Enter');
-  check('inline edit commits the new text', (await b.eval(`window.kentos.doc.get(${tid}).text`)) === 'Düzenlendi');
+  const edited = await b.eval(`window.kentos.doc.get(${tid}).text`);
+  check('inline edit commits the new text', edited === 'Düzenlendi', edited);
 
   // Editing tools on exact, typed geometry (a second work area further east).
   const X = E + 200;
