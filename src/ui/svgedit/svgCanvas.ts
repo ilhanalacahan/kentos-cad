@@ -42,6 +42,10 @@ export interface CanvasHost {
   setTool(t: ToolId): void;
   editNodes(id: string | null): void;
   status(text: string): void;
+  /** Draws under the drawing, on the paper (the tracing reference), in drawing units. */
+  underlay?(world: SVGGElement): void;
+  /** The view's scale changed (fit, zoom buttons, wheel): the zoom label follows. */
+  zoomed?(scale: number): void;
 }
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -115,6 +119,7 @@ export class SvgCanvas {
     this.ox = (w - width * this.zoom) / 2;
     this.oy = (h - height * this.zoom) / 2;
     this.render();
+    this.host.zoomed?.(this.zoom);
   }
 
   zoomBy(f: number, at?: Pt): void {
@@ -125,6 +130,7 @@ export class SvgCanvas {
     this.oy = cy - ((cy - this.oy) * z) / this.zoom;
     this.zoom = z;
     this.render();
+    this.host.zoomed?.(this.zoom);
   }
 
   get scale(): number {
@@ -192,6 +198,7 @@ export class SvgCanvas {
     svg.replaceChildren();
     const world = el('g', { transform: `translate(${this.ox} ${this.oy}) scale(${this.zoom})` });
     world.append(el('rect', { x: 0, y: 0, width: doc.width, height: doc.height, fill: o.paper, class: 'svge__paper' }));
+    this.host.underlay?.(world as SVGGElement);
     if (o.grid > 0 && o.grid * this.zoom >= 5) {
       let d = '';
       for (let x = 0; x <= doc.width + 1e-9; x += o.grid) d += `M${x} 0V${doc.height}`;

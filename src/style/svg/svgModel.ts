@@ -42,6 +42,10 @@ export interface SvgDoc {
   width: number;
   height: number;
   shapes: SvgShape[];
+  /** Intended width of the drawing on the map in mm (document properties; "1 birim = … mm"). */
+  sizeMm?: number;
+  /** Preview background (paper) colour kept with the drawing; absent = the theme's paper. */
+  background?: string;
 }
 
 export const newDoc = (width = 100, height = 100): SvgDoc => ({ width, height, shapes: [] });

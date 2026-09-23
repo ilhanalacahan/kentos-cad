@@ -2,12 +2,15 @@ import type { AppContext } from '../../app/context';
 import type { LibraryAsset } from '../../model/style';
 import { resolveColor } from '../../render/color';
 import { sanitizeSvg, svgAsset } from '../../style/file';
-import { newDoc, serializeDoc, shapeId, transformShape, translate, type SvgDoc, type SvgShape } from '../../style/svg/svgModel';
+import { svgText } from '../../style/svg/exportSvg';
+import { importSummary } from '../../style/svg/importSvg';
+import { newDoc, shapeId, transformShape, translate, type SvgDoc, type SvgShape } from '../../style/svg/svgModel';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
 import { Dialog } from '../widgets/Dialog';
 import { readSvg } from './readSvg';
 import { SvgCanvas, type CanvasHost, type CanvasOptions, type ToolId } from './svgCanvas';
+import { SvgFiles, type FileHost } from './svgFile';
 import { actionMatrix, renderProps, type ActionName, type PropsHost } from './svgProps';
 
 /**
@@ -54,23 +57,24 @@ export function openSvgEditor(ctx: AppContext, opts: SvgEditorOptions = {}): voi
       return;
     }
     doc = read.doc;
-    skipped = read.skipped;
+    skipped = importSummary(read.report).lost;
   }
   new SvgEditor(ctx, doc, asset?.kind === 'asset' ? asset : null, opts, skipped);
 }
 
-class SvgEditor implements CanvasHost, PropsHost {
-  private readonly ctx: AppContext;
+class SvgEditor implements CanvasHost, PropsHost, FileHost {
+  readonly ctx: AppContext;
   doc: SvgDoc;
   selection = new Set<string>();
   tool: ToolId = 'select';
   nodeEdit: string | null = null;
   options: CanvasOptions;
-  private original: LibraryAsset | null;
+  original: LibraryAsset | null;
   private editable: boolean;
   private readonly opts: SvgEditorOptions;
   private readonly dialog: Dialog;
-  private readonly canvas: SvgCanvas;
+  readonly canvas: SvgCanvas;
+  private readonly files: SvgFiles;
   private readonly toolsEl: HTMLElement;
   private readonly listEl: HTMLElement;
   private readonly propsEl: HTMLElement;
@@ -95,6 +99,7 @@ class SvgEditor implements CanvasHost, PropsHost {
     this.savedJson = original ? JSON.stringify(doc) : '';
     this.canvas = new SvgCanvas(this);
     this.canvas.el.dataset.escape = 'local';
+    this.files = new SvgFiles(this);
     this.toolsEl = h('div', { class: 'svge__tools' });
     this.listEl = h('div', { class: 'svge__list' });
     this.propsEl = h('div', { class: 'svge__props' });
@@ -108,8 +113,6 @@ class SvgEditor implements CanvasHost, PropsHost {
       b.addEventListener('click', run);
       return b;
     };
-    const importBtn = h('button', { class: 'btn btn--small', type: 'button', title: 'Bir SVG dosyasının şekillerini bu çizime ekler' }, icon('import', 14), 'SVG dosyası ekle…');
-    importBtn.addEventListener('click', () => this.importFile());
     const cancel = h('button', { class: 'btn', type: 'button' }, 'Vazgeç');
     cancel.addEventListener('click', () => this.dialog.request());
     const save = h('button', { class: 'btn btn--primary', type: 'button' }, icon('check', 16), 'Kaydet');
@@ -121,22 +124,25 @@ class SvgEditor implements CanvasHost, PropsHost {
       h(
         'section',
         { class: 'svge__center' },
-        h('div', { class: 'sdes__pbar' }, importBtn, h('div', { class: 'dialog__foot-spacer' }), bar('Uzaklaş', '−', () => this.canvas.zoomBy(1 / 1.25)), this.zoomEl, bar('Yakınlaş', '+', () => this.canvas.zoomBy(1.25)), bar('Tuvale sığdır (0)', '⤢', () => this.canvas.fit())),
+        h('div', { class: 'sdes__pbar svge__pbar' }, ...this.files.buttons, h('div', { class: 'dialog__foot-spacer' }), bar('Uzaklaş', '−', () => this.canvas.zoomBy(1 / 1.25)), this.zoomEl, bar('Yakınlaş', '+', () => this.canvas.zoomBy(1.25)), bar('Tuvale sığdır (0)', '⤢', () => this.canvas.fit())),
+        this.files.reference.bar,
         this.canvas.el,
+        this.files.source.el,
       ),
       h('aside', { class: 'svge__right' }, this.propsEl),
     );
     root.addEventListener('keydown', (e) => this.key(e));
+    this.files.attach(root);
     this.dialog = new Dialog({
       title: 'SVG çizim düzenleyicisi',
       width: 1320,
       className: 'dialog--sdesign dialog--svge',
       content: [root],
-      footer: [h('label', { class: 'sdes__flabel' }, 'Ad', this.nameInput), h('label', { class: 'sdes__flabel sdes__flabel--path' }, 'Kategori', this.pathInput), this.statusEl, h('div', { class: 'dialog__foot-spacer' }), cancel, save],
+      footer: [h('label', { class: 'sdes__flabel' }, 'Ad', this.nameInput), h('label', { class: 'sdes__flabel sdes__flabel--path' }, 'Kategori', this.pathInput), this.statusEl, h('div', { class: 'dialog__foot-spacer' }), cancel, this.files.saveAsButton, save],
       beforeClose: () => this.confirmClose(),
       stack: true,
     });
-    if (skipped.length) this.status(`Alınamayan öğeler: ${skipped.join(', ')} (gradyan, görüntü ve kırpma desteklenmez).`, 'warn');
+    if (skipped.length) this.status(`Açılırken: ${skipped.join(', ')}.`, 'warn');
     else if (original && !this.editable) this.status('Sistem çizimi: kaydedince Kitaplığım\'a kopyası yazılır.');
     this.refresh();
     queueMicrotask(() => this.canvas.el.focus());
@@ -176,6 +182,7 @@ class SvgEditor implements CanvasHost, PropsHost {
     this.canvas.render();
     this.renderList();
     this.renderTitle();
+    this.files.refresh();
   }
 
   setOption(patch: Partial<CanvasOptions>): void {
@@ -287,8 +294,9 @@ class SvgEditor implements CanvasHost, PropsHost {
     this.renderTools();
     this.renderList();
     replaceChildren(this.propsEl, renderProps(this));
-    this.zoomEl.textContent = `%${Math.round(this.canvas.scale * 100)}`;
+    this.zoomed(this.canvas.scale);
     this.renderTitle();
+    this.files.refresh();
   }
 
   private renderTitle(): void {
@@ -369,7 +377,7 @@ class SvgEditor implements CanvasHost, PropsHost {
     if (tool) this.setTool(tool.id);
   }
 
-  private get dirty(): boolean {
+  get dirty(): boolean {
     return JSON.stringify(this.doc) !== this.savedJson;
   }
 
@@ -395,27 +403,53 @@ class SvgEditor implements CanvasHost, PropsHost {
     this.restore(next);
   }
 
-  private importFile(): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.svg,image/svg+xml';
-    input.addEventListener('change', () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      void f.text().then((text) => {
-        const read = readSvg(text);
-        if ('error' in read) return this.status(`“${f.name}”: ${read.error}`, 'warn');
-        // The file's drawing is fitted into this canvas.
-        const k = Math.min(this.doc.width / read.doc.width, this.doc.height / read.doc.height);
-        const dx = (this.doc.width - read.doc.width * k) / 2;
-        const dy = (this.doc.height - read.doc.height * k) / 2;
-        const added = read.doc.shapes.map((s) => transformShape(s, [k, 0, 0, k, dx, dy]));
-        this.change('import', () => (this.doc.shapes = [...this.doc.shapes, ...added]));
-        this.select(added.map((s) => s.id));
-        this.status(`${added.length} şekil eklendi${read.skipped.length ? `; alınamayan: ${read.skipped.join(', ')}` : ''}.`, read.skipped.length ? 'warn' : 'ok');
-      });
-    });
-    input.click();
+  // ── Files (svgFile.ts) ───────────────────────────────────────────────
+
+  get name(): string {
+    return this.nameInput.value.trim() || 'Adsız çizim';
+  }
+
+  get path(): string[] {
+    return this.pathInput.value.split('/').map((s) => s.trim()).filter(Boolean);
+  }
+
+  zoomed(scale: number): void {
+    this.zoomEl.textContent = `%${Math.round(scale * 100)}`;
+  }
+
+  underlay(world: SVGGElement): void {
+    // The canvas may draw before the files are set up.
+    this.files?.underlay(world);
+  }
+
+  /** Another drawing in the window: a file opened as new, or a library drawing; history starts anew. */
+  open(doc: SvgDoc, asset: LibraryAsset | null, name: string): void {
+    this.doc = doc;
+    this.past.length = 0;
+    this.future.length = 0;
+    this.pending = null;
+    this.lastKey = { key: '', at: 0 };
+    this.original = asset;
+    this.editable = !!asset && this.ctx.styles.library.canEdit(asset.id);
+    this.nameInput.value = name;
+    if (asset) this.pathInput.value = asset.path.join(' / ');
+    this.savedJson = asset ? JSON.stringify(doc) : '';
+    this.selection = new Set();
+    this.nodeEdit = null;
+    this.options = { ...this.options, grid: Math.max(1, Math.round(doc.width / 20)) };
+    this.refresh();
+    this.canvas.fit();
+  }
+
+  /** The drawing was saved as this library item (Farklı kaydet). */
+  adopt(asset: LibraryAsset): void {
+    this.original = asset;
+    this.editable = true;
+    this.nameInput.value = asset.name;
+    this.pathInput.value = asset.path.join(' / ');
+    this.savedJson = JSON.stringify(this.doc);
+    this.renderTitle();
+    this.opts.onSaved?.(asset.id);
   }
 
   private save(thenClose: boolean): boolean {
@@ -424,7 +458,7 @@ class SvgEditor implements CanvasHost, PropsHost {
       this.status('Boş çizim kaydedilmez: önce bir şekil çizin.', 'warn');
       return false;
     }
-    const svg = sanitizeSvg(serializeDoc(this.doc));
+    const svg = sanitizeSvg(svgText(this.doc, { reference: this.files.keptReference() }));
     const name = this.nameInput.value.trim() || 'Adsız çizim';
     const path = this.pathInput.value.split('/').map((s) => s.trim()).filter(Boolean);
     let id: string;

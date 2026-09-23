@@ -674,6 +674,59 @@ try {
     await b.key('Escape');
     await sleep(200);
     if (drawn) await b.eval(`window.kentos.styles.library.remove(${JSON.stringify(drawn?.id ?? '')})`);
+    // Closes the editor the way a user does: Esc (selection, then the window), without saving when asked.
+    const closeEditor = async () => {
+      for (let i = 0; i < 5 && (await b.eval(`!!document.querySelector('.dialog--svge')`)); i++) {
+        const leave = await center('.dialog--svge .sdes__status .btn', 'Kaydetmeden kapat');
+        if (leave) await b.click(...leave);
+        else {
+          await b.eval(`document.querySelector('.svge__stage')?.focus()`);
+          await b.key('Escape');
+        }
+        await sleep(150);
+      }
+    };
+    await closeEditor();
+
+    // SVG editor files: paste markup (group transform, CSS class), export and read back, trace a bitmap, edit the source.
+    await b.eval(`window.kentos.commands.execute('style.svgEditor')`);
+    await sleep(600);
+    await b.eval(`window.__blobs = []; { const o = URL.createObjectURL; URL.createObjectURL = (x) => { window.__blobs.push(x); return o.call(URL, x); }; }`);
+    const svgShapes = () => b.eval(`[...document.querySelectorAll('.svge__svg [data-id]')].map((e) => ({ tag: e.tagName, x: e.getAttribute('x'), w: e.getAttribute('width'), fill: e.getAttribute('fill'), d: e.getAttribute('d'), rule: e.getAttribute('fill-rule') }))`);
+    const pasteSvg = (text) => b.eval(`(() => { const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(text)}); const st = document.querySelector('.svge__stage'); st.focus(); st.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+    await pasteSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><style>.k { fill: #E0457B }</style><g transform="translate(10 5) scale(2)"><rect class="k" width="5" height="5"/><circle cx="10" cy="10" r="2"/></g></svg>`);
+    await sleep(200);
+    let sh = await svgShapes();
+    check('SVG editor pastes markup with a group transform and a CSS class', sh.length === 2 && sh[0].x === '20' && sh[0].w === '20' && sh[0].fill === '#E0457B', JSON.stringify(sh));
+    await press('.svge__pbar .btn', 'Dışa aktar');
+    await press('.dialog--svgfile .seg__opt', 'SVG (düz renk)');
+    await press('.dialog--svgfile .btn--primary', 'İndir');
+    const exported = await b.eval(`window.__blobs.at(-1)?.text() ?? ''`);
+    await pasteSvg(exported);
+    await sleep(200);
+    sh = await svgShapes();
+    check('SVG editor exports a plain SVG that reads back the same', !/currentColor|param\(/.test(exported) && sh.length === 4 && sh[2].x === '20' && sh[2].fill === '#E0457B', `${sh.length} şekil`);
+    await b.eval(`(async () => {
+      const c = document.createElement('canvas'); c.width = 100; c.height = 100; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, 100, 100); g.fillStyle = '#000'; g.fillRect(20, 20, 60, 60); g.fillStyle = '#fff'; g.fillRect(40, 40, 20, 20);
+      const blob = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      const dt = new DataTransfer(); dt.items.add(new File([blob], 'kare.png', { type: 'image/png' }));
+      const st = document.querySelector('.svge__stage'); const r = st.getBoundingClientRect();
+      st.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true, clientX: r.left + 100, clientY: r.top + 100 }));
+    })()`);
+    await sleep(300);
+    await press('.menu__item', 'Bitmap izle');
+    await sleep(500);
+    const traceStats = await b.eval(`document.querySelector('.svgt__stats')?.textContent ?? ''`);
+    await press('.dialog--svgtrace .btn--primary', 'Çizime ekle');
+    const traced = (await svgShapes()).at(-1);
+    check('SVG editor traces a bitmap into a path with its hole', /^1 parça, 1 delik, 8 düğüm/.test(traceStats) && traced?.tag === 'path' && (traced.d.match(/M/g) ?? []).length === 2 && traced.rule === 'evenodd', `${traceStats} ${traced?.d?.slice(0, 40)}`);
+    await press('.svge__pbar .btn', 'Kaynak');
+    await b.eval(`(() => { const t = document.querySelector('.svgs__text'); t.value = t.value.replace(/(<rect[^>]*?)width="20"/, '$1width="30"'); t.dispatchEvent(new Event('input')); })()`);
+    await press('.svgs__head .btn', 'Uygula');
+    check('SVG editor applies an edited source as one step', (await svgShapes())[0].w === '30');
+    await closeEditor();
+    check('SVG editor closes without saving when asked', !(await b.eval(`!!document.querySelector('.dialog--svge')`)));
   }
 
   // İşlem araçları: open from the İşlemler menu, run from the dialog, one undo step

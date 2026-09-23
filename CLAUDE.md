@@ -5,6 +5,14 @@ kuralları ve mimariyi anlatır. Görsel dil, renkler ve bileşen kuralları iç
 [DESIGN.md](DESIGN.md) dosyasına bakın. Kod ile bu belge çelişirse önce kodu
 doğrulayın, sonra belgeyi güncelleyin; belge güncel tutulmak zorundadır.
 
+**Yeni hedef (23 Eylül 2026):** §13 ve sonrası Rust/WASM ortak çekirdek, Rust
+backend, yerel mekânsal veri motoru, tenant, worker ve bulut dağıtımının
+bağlayıcı mimarisidir. §1–12 mevcut tarayıcı uygulamasını ve eski yol haritasını
+anlatır. Gelecek veri katmanında çelişki varsa §13 ve sonrası geçerlidir.
+Rust backend, Rust/WASM çekirdek, sunucu worker ve kalıcı veri motoru **henüz
+bu depoda uygulanmış değildir**. Bu dosyadaki hedefleri çalışan özellik diye
+raporlamayın.
+
 ---
 
 ## 1. Ürün
@@ -24,13 +32,13 @@ profesyoneller.
 KentOS ne saf bir CAD (AutoCAD) ne de saf bir GIS (QGIS) olacak. Kullanıcının
 günlük işi hassas çizimdir, verisi ise coğrafi ve özniteliklidir.
 
-| Konu | CAD tarafı (nasıl çizilir) | GIS tarafı (veri ne anlama gelir) |
-|---|---|---|
-| Geometri | Hassas nokta girişi, kenetleme, orto, komut satırı, tutamaçlar | Her nesne bir koordinat sisteminde (SRID) yaşar |
-| Nesne | Çizgi, çoklu çizgi, yay, daire, yazı, ölçü | Öznitelikli detay (ada, parsel, nitelik, tapu alanı) |
-| Katman | Renk, çizgi tipi, kalınlık, kilit | Tipli öznitelik şeması, sorgu, tematik gösterim (planlı) |
-| Doğruluk | Geri alınabilir düzenleme, toleranslar | Topoloji: komşu parseller ortak sınır paylaşır (planlı) |
-| Çıktı | Pafta, yazdırma, DXF | GeoJSON, Shapefile, WFS, PostGIS (planlı) |
+| Konu     | CAD tarafı (nasıl çizilir)                                     | GIS tarafı (veri ne anlama gelir)                        |
+| -------- | -------------------------------------------------------------- | -------------------------------------------------------- |
+| Geometri | Hassas nokta girişi, kenetleme, orto, komut satırı, tutamaçlar | Her nesne bir koordinat sisteminde (SRID) yaşar          |
+| Nesne    | Çizgi, çoklu çizgi, yay, daire, yazı, ölçü                     | Öznitelikli detay (ada, parsel, nitelik, tapu alanı)     |
+| Katman   | Renk, çizgi tipi, kalınlık, kilit                              | Tipli öznitelik şeması, sorgu, tematik gösterim (planlı) |
+| Doğruluk | Geri alınabilir düzenleme, toleranslar                         | Topoloji: komşu parseller ortak sınır paylaşır (planlı)  |
+| Çıktı    | Pafta, yazdırma, DXF                                           | GeoJSON, Shapefile, WFS, PostGIS (planlı)                |
 
 Karar verirken sorulacak soru şu: **"Bir harita mühendisi bunu Netcad'de nasıl
 yapıyor ve biz bunu verinin anlamını bozmadan nasıl daha iyi yaparız?"**
@@ -92,18 +100,18 @@ içe aktarabilir. `app/context.ts` içindeki `AppContext` **tipi** her yerden
 `import type` ile kullanılabilir; somut servisler yalnızca `app/createApp.ts`
 içinde kurulur.
 
-| Klasör | Sorumluluk | İçe aktarabileceği | Asla |
-|---|---|---|---|
-| `core/` | Signal, Emitter, Disposable, CommandRegistry, Keymap | Yalnızca DOM tipleri | model, ui |
-| `geo/` | EPSG/CRS kaydı; ileride dönüşümler, geodezik hesaplar | core | DOM, model |
-| `model/` | Belge, varlıklar, katman ağacı, geometri, seçim, proje ayarları, geri alma | core, geo | DOM, render, ui |
-| `style/` | Stil motoru: semboller ve sembol katmanları, katman stilleri (işleyiciler), kitaplık (sistem/kullanıcı/proje, kategori ağacı), .kstil dosyaları, sembol × geometri → çizim ilkelleri (bkz. [docs/STYLE.md](docs/STYLE.md)) | core, geo, model | DOM, render, viewport, tools, ui, app |
-| `processing/` | İşlem araçları: bildirimsel tanım, parametreler, kayıt, çalıştırıcı, modeller (bkz. [docs/PROCESSING.md](docs/PROCESSING.md)) | core, geo, model | DOM, render, viewport, tools, ui, app |
-| `render/` | `RenderBackend` sözleşmesi, sahne verisi, WebGL2 ve WebGPU arka uçları | core, model (tip + stil) | ui, tools, viewport |
-| `viewport/` | Kamera, seçme ve kenetleme dizini, 2B üst katman, çizim döngüsü | core, model, render, tools (tip), app (tip) | ui |
-| `tools/` | Etkileşimli araçlar ve araç kataloğu | core, model, viewport (tip), app (tip) | ui |
-| `ui/` | Bileşenler, paneller, pencereler, widget'lar | hepsi (servisler `AppContext` üzerinden) | model'i doğrudan değiştirmek (bkz. §8) |
-| `app/` | Kompozisyon kökü, komutlar, menüler, kısayollar, durum depoları, biçimlendirici | hepsi | — |
+| Klasör        | Sorumluluk                                                                                                                                                                                                                 | İçe aktarabileceği                          | Asla                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------- |
+| `core/`       | Signal, Emitter, Disposable, CommandRegistry, Keymap                                                                                                                                                                       | Yalnızca DOM tipleri                        | model, ui                              |
+| `geo/`        | EPSG/CRS kaydı; ileride dönüşümler, geodezik hesaplar                                                                                                                                                                      | core                                        | DOM, model                             |
+| `model/`      | Belge, varlıklar, katman ağacı, geometri, seçim, proje ayarları, geri alma                                                                                                                                                 | core, geo                                   | DOM, render, ui                        |
+| `style/`      | Stil motoru: semboller ve sembol katmanları, katman stilleri (işleyiciler), kitaplık (sistem/kullanıcı/proje, kategori ağacı), .kstil dosyaları, sembol × geometri → çizim ilkelleri (bkz. [docs/STYLE.md](docs/STYLE.md)) | core, geo, model                            | DOM, render, viewport, tools, ui, app  |
+| `processing/` | İşlem araçları: bildirimsel tanım, parametreler, kayıt, çalıştırıcı, modeller (bkz. [docs/PROCESSING.md](docs/PROCESSING.md))                                                                                              | core, geo, model                            | DOM, render, viewport, tools, ui, app  |
+| `render/`     | `RenderBackend` sözleşmesi, sahne verisi, WebGL2 ve WebGPU arka uçları                                                                                                                                                     | core, model (tip + stil)                    | ui, tools, viewport                    |
+| `viewport/`   | Kamera, seçme ve kenetleme dizini, 2B üst katman, çizim döngüsü                                                                                                                                                            | core, model, render, tools (tip), app (tip) | ui                                     |
+| `tools/`      | Etkileşimli araçlar ve araç kataloğu                                                                                                                                                                                       | core, model, viewport (tip), app (tip)      | ui                                     |
+| `ui/`         | Bileşenler, paneller, pencereler, widget'lar                                                                                                                                                                               | hepsi (servisler `AppContext` üzerinden)    | model'i doğrudan değiştirmek (bkz. §8) |
+| `app/`        | Kompozisyon kökü, komutlar, menüler, kısayollar, durum depoları, biçimlendirici                                                                                                                                            | hepsi                                       | —                                      |
 
 Bağımlılık yönünü bozan bir içe aktarma gerekiyorsa tasarım yanlıştır. Bu
 durumda bir arayüz ya da olay ekleyin, döngüsel bağımlılık kurmayın.
@@ -126,22 +134,22 @@ Başka hiçbir modül servis oluşturmaz.
 
 Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 
-| Servis | Tür | Görev |
-|---|---|---|
-| `commands` | `CommandRegistry` | Kullanıcının tetikleyebildiği her şey |
-| `keymap` | `Keymap` | Kısayol → komut eşlemesi |
-| `doc` | `CadDocument` | Açık proje: varlıklar, katmanlar, proje ayarları, geçmiş |
-| `selection` | `Selection` | Seçili ve üzerine gelinen varlık kimlikleri |
-| `settings` | `DraftingSettings` | Oturumluk çizim yardımcıları (kenet, ızgara, orto, geçerli renk ve tip) |
-| `prefs` | `Preferences` | Uygulama ayarları (kalıcı, kullanıcıya özel) |
-| `ui` | `UiState` | Çalışma alanı yerleşimi (kalıcı) |
-| `format` | `Formatter` | Sayıdan metne tek geçit (proje birimlerini kullanır) |
-| `log` | `MessageLog` | Komut geçmişi, uyarılar, durum çubuğu mesajı |
-| `tools` | `ToolManager` | Etkin araç, istem metni |
-| `view` | `ViewportController` | Kamera, seçme, çizim isteği |
-| `clipboard` | `Clipboard` | Kopyalanan nesneler (oturumluk; `app/clipboard.ts`) |
-| `processing` | `ProcessingService` | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`) |
-| `styles` | `StyleService` | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
+| Servis       | Tür                  | Görev                                                                                                                                     |
+| ------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `commands`   | `CommandRegistry`    | Kullanıcının tetikleyebildiği her şey                                                                                                     |
+| `keymap`     | `Keymap`             | Kısayol → komut eşlemesi                                                                                                                  |
+| `doc`        | `CadDocument`        | Açık proje: varlıklar, katmanlar, proje ayarları, geçmiş                                                                                  |
+| `selection`  | `Selection`          | Seçili ve üzerine gelinen varlık kimlikleri                                                                                               |
+| `settings`   | `DraftingSettings`   | Oturumluk çizim yardımcıları (kenet, ızgara, orto, geçerli renk ve tip)                                                                   |
+| `prefs`      | `Preferences`        | Uygulama ayarları (kalıcı, kullanıcıya özel)                                                                                              |
+| `ui`         | `UiState`            | Çalışma alanı yerleşimi (kalıcı)                                                                                                          |
+| `format`     | `Formatter`          | Sayıdan metne tek geçit (proje birimlerini kullanır)                                                                                      |
+| `log`        | `MessageLog`         | Komut geçmişi, uyarılar, durum çubuğu mesajı                                                                                              |
+| `tools`      | `ToolManager`        | Etkin araç, istem metni                                                                                                                   |
+| `view`       | `ViewportController` | Kamera, seçme, çizim isteği                                                                                                               |
+| `clipboard`  | `Clipboard`          | Kopyalanan nesneler (oturumluk; `app/clipboard.ts`)                                                                                       |
+| `processing` | `ProcessingService`  | İşlem araçları kaydı, çalıştırıcı ve geçmişi, araçların son değerleri (`app/processing.ts`)                                               |
+| `styles`     | `StyleService`       | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -151,13 +159,13 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 
 Yeni bir ayar ya da durum eklemeden önce **hangi kapsama ait olduğuna** karar verin:
 
-| Kapsam | Nerede | Saklama | Kim görür | Örnekler |
-|---|---|---|---|---|
-| **Proje ayarları** | `model/projectSettings.ts` → `doc.settings` | Proje dosyası (.kcad) | Projeyi açan herkes | SRID, uzunluk ve alan hassasiyeti, alan birimi, açı birimi, çizim ölçeği, proje adı |
-| **Belge verisi** | `CadDocument`, `LayerStore` | Proje dosyası | Projeyi açan herkes | Varlıklar, katman ağacı ve stilleri (işleyiciler dahil), nesne sembolleri, öznitelikler, projenin stil kitaplığı (`doc.styles`) |
-| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, sembol boyutu (çizim ölçeğinde / ekranda sabit), **yeni proje varsayılan SRID'si (5256)**; işlem araçlarının son değerleri (`kentos.processing.v1`); kullanıcının stil kitaplığı (`kentos.styles.v1`) |
-| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme, sağ dok sekmesi (Katmanlar/İşlemler), İşlemler görünümü ve katlanan kategoriler |
-| **Oturum durumu** | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz | Bu oturum | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano, işlem geçmişi |
+| Kapsam                      | Nerede                                                      | Saklama                          | Kim görür                           | Örnekler                                                                                                                                                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------- | -------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Proje ayarları**          | `model/projectSettings.ts` → `doc.settings`                 | Proje dosyası (.kcad)            | Projeyi açan herkes                 | SRID, uzunluk ve alan hassasiyeti, alan birimi, açı birimi, çizim ölçeği, proje adı                                                                                                                                                                                                   |
+| **Belge verisi**            | `CadDocument`, `LayerStore`                                 | Proje dosyası                    | Projeyi açan herkes                 | Varlıklar, katman ağacı ve stilleri (işleyiciler dahil), nesne sembolleri, öznitelikler, projenin stil kitaplığı (`doc.styles`)                                                                                                                                                       |
+| **Uygulama ayarları**       | `app/state.ts` → `ctx.prefs`                                | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, sembol boyutu (çizim ölçeğinde / ekranda sabit), **yeni proje varsayılan SRID'si (5256)**; işlem araçlarının son değerleri (`kentos.processing.v1`); kullanıcının stil kitaplığı (`kentos.styles.v1`) |
+| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui`                                   | `localStorage` `kentos.ui.v1`    | Yalnızca bu kullanıcı               | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme, sağ dok sekmesi (Katmanlar/İşlemler), İşlemler görünümü ve katlanan kategoriler                                                                                                                |
+| **Oturum durumu**           | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz                        | Bu oturum                           | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano, işlem geçmişi                                                                                                                                                                                                                   |
 
 Kurallar:
 
@@ -213,17 +221,17 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 - **Araçlar DOM'a dokunmaz.** Görünüm alanına `ctx.view` üzerinden erişir: `pick`, `pickEdge`, `pickRect`, `edgesIn`, `gripAt`, `worldTolerance`, `requestOverlay`, `camera`.
 - **Araç aileleri** (yeni araç yazarken birine dahil edin):
 
-  | Aile | Dosya | Akış |
-  |---|---|---|
-  | `PointInputTool` | `tools/drawTools.ts`, `tools/curveTools.ts`, `tools/shapeTools.ts`, `tools/parallelTool.ts`, `tools/annotateTools.ts` | Nokta dizisi: çizgi (G geri, K kapat), çoklu çizgi (`tools/pathTool.ts`; Y yay parçası: teğet ya da tek parça için A açı, M merkez, R yarıçap, İ ikinci nokta, T doğrultu; D düz; U son doğrultuda uzunluk), halka ve revizyon bulutu (`tools/markupTools.ts`), paralel çizgi (eksen noktaları; S sol, A sağ mesafe yazılır ya da iki tıkla gösterilir, E eksen, U alan olarak, K kapat), alan, nokta, ölçüm, parsel; dikdörtgen (köşe yuvarla/pah, döndür, boyutlar), döndürülmüş dikdörtgen (kenar → genişlik), düzgün çokgen (içten, dıştan, kenardan); daire (merkez-yarıçap/çap, 2N, 3N, TTY, TTT), yay (AutoCAD'in tüm yöntemleri, bkz. §10), eğri; yazı, ölçü |
-  | Ölçü | `tools/dimensionTool.ts` | Tür başta tek tuşla seçilir: Hizalı (H), Doğrusal (D; yön imlecin yerinden, `Y` yatay ΔY, `X` düşey ΔX sabitler, `O` serbest bırakır), Açı (A; iki kenara tıklanır ya da `K` ile köşe ve iki kol; yayın konduğu bölge açıyı seçer), Yarıçap (R), Çap (Ç). Yerleştirme adımında yazılan sayı ötelenmeyi (açıda yarıçapı) tam verir |
-  | Referans hat | `tools/perpTools.ts` | Önce bir hatta tıklanır (başlangıç A, tıklamaya yakın uç), sonra ona göre çalışılır: dik in (her nokta hatta dik iner; yay ve dairede merkeze), dik çık (dik ayak tıklanır ya da yazılır, dik boy gösterilir ya da yazılır, sağa artı) |
-  | Tek tık | `tools/hatchTool.ts`, `tools/areaTools.ts` | Tarama: “Sınır: kapalı nesne” (varsayılan, Netcad gibi) tıklanan yeri çevreleyen en küçük kapalı nesneyi doldurur; içindeki ya da kenarına taşan, ondan küçük kapalı nesneler (parseldeki bina) ada olur ve taranmaz. “Sınır: çizgiler” (B, AutoCAD gibi) görünür çizgilerin kapattığı yüzü doldurur, içteki gruplar ada olur; sınır tek katmana daraltılabilir (K). “Adalar” (A) adaları kapatır. İçine tıklayarak alan aynı yüzleri kullanır (`tools/visibleFaces.ts`: görünüm, çizim ya da katman görünürlüğü değişince yeniden kurulan önbellek) |
-  | `SelectionFirstTool` | `tools/modifyTools.ts`, `tools/arrangeTools.ts` | Seçim yoksa önce seçtirir, Enter ile aşamalara geçer, sonucu **afin dönüşümle** uygular: taşı, kopyala, döndür (R referans doğrultu: iki nokta ya da açı, sonra yeni doğrultu; K kopya), ölçekle (R referans uzunluk: iki nokta ya da değer, sonra yeni uzunluk; K kopya), aynala, dizi; kutupsal dizi (merkez; N adet, A doldurma açısı, D nesneleri döndür; önizlemeli, sağ tık uygular), hizala (iki kaynak-hedef çifti, Ö ölçekle; ilk çiftten sonra sağ tık yalnız taşır) |
-  | `SelectionActionTool` | `tools/editTools.ts`, `tools/areaTools.ts` | Seçim varsa hemen çalışır, yoksa seçtirip Enter bekler: birleştir, patlat; alan birleştir, alan kesiştir, alana çevir, çizgiye çevir |
-  | Alan işlemleri | `tools/areaTools.ts` | Alan çıkar (iki seçim: kesilecekler, sonra çıkarılacaklar), alan böl (alanları seç, sonra kesme çizgisini çiz ya da “Çizgiyle kes” ile göster; parçalar ve alanları canlı görünür), içine tıklayarak alan (tek tık; oluşacak bölge önceden boyanır) |
-  | `EdgePickTool` | `tools/edgeTools.ts`, `tools/pathEditTools.ts`, `tools/cornerTools.ts`, `tools/lengthenTool.ts` | İmlecin altındaki kenara doğrudan etki eder: ötele, buda, uzat; uzat-kısalt (uca tıklanır; dinamikte yeni uç fareyle gösterilir ya da toplam boy yazılır, fark/yüzde/toplam kiplerinde tıklanan uç hemen değişir); kır, böl, köşe ekle/sil; `CornerTool` alt ailesi iki çizgiye ya da çoklu çizginin komşu iki kenarına etki eder: köşe yuvarla, pah |
-  | Diğer | `tools/SelectTool.ts`, `tools/editTools.ts` | Seçim (pencere/kesişim, tutamaçla düzenleme), kaydırma, pencere yakınlaştırma; esnet (kesişim penceresi → temel → hedef); yapıştır |
+  | Aile                  | Dosya                                                                                                                 | Akış                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+  | --------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `PointInputTool`      | `tools/drawTools.ts`, `tools/curveTools.ts`, `tools/shapeTools.ts`, `tools/parallelTool.ts`, `tools/annotateTools.ts` | Nokta dizisi: çizgi (G geri, K kapat), çoklu çizgi (`tools/pathTool.ts`; Y yay parçası: teğet ya da tek parça için A açı, M merkez, R yarıçap, İ ikinci nokta, T doğrultu; D düz; U son doğrultuda uzunluk), halka ve revizyon bulutu (`tools/markupTools.ts`), paralel çizgi (eksen noktaları; S sol, A sağ mesafe yazılır ya da iki tıkla gösterilir, E eksen, U alan olarak, K kapat), alan, nokta, ölçüm, parsel; dikdörtgen (köşe yuvarla/pah, döndür, boyutlar), döndürülmüş dikdörtgen (kenar → genişlik), düzgün çokgen (içten, dıştan, kenardan); daire (merkez-yarıçap/çap, 2N, 3N, TTY, TTT), yay (AutoCAD'in tüm yöntemleri, bkz. §10), eğri; yazı, ölçü |
+  | Ölçü                  | `tools/dimensionTool.ts`                                                                                              | Tür başta tek tuşla seçilir: Hizalı (H), Doğrusal (D; yön imlecin yerinden, `Y` yatay ΔY, `X` düşey ΔX sabitler, `O` serbest bırakır), Açı (A; iki kenara tıklanır ya da `K` ile köşe ve iki kol; yayın konduğu bölge açıyı seçer), Yarıçap (R), Çap (Ç). Yerleştirme adımında yazılan sayı ötelenmeyi (açıda yarıçapı) tam verir                                                                                                                                                                                                                                                                                                                                    |
+  | Referans hat          | `tools/perpTools.ts`                                                                                                  | Önce bir hatta tıklanır (başlangıç A, tıklamaya yakın uç), sonra ona göre çalışılır: dik in (her nokta hatta dik iner; yay ve dairede merkeze), dik çık (dik ayak tıklanır ya da yazılır, dik boy gösterilir ya da yazılır, sağa artı)                                                                                                                                                                                                                                                                                                                                                                                                                               |
+  | Tek tık               | `tools/hatchTool.ts`, `tools/areaTools.ts`                                                                            | Tarama: “Sınır: kapalı nesne” (varsayılan, Netcad gibi) tıklanan yeri çevreleyen en küçük kapalı nesneyi doldurur; içindeki ya da kenarına taşan, ondan küçük kapalı nesneler (parseldeki bina) ada olur ve taranmaz. “Sınır: çizgiler” (B, AutoCAD gibi) görünür çizgilerin kapattığı yüzü doldurur, içteki gruplar ada olur; sınır tek katmana daraltılabilir (K). “Adalar” (A) adaları kapatır. İçine tıklayarak alan aynı yüzleri kullanır (`tools/visibleFaces.ts`: görünüm, çizim ya da katman görünürlüğü değişince yeniden kurulan önbellek)                                                                                                                 |
+  | `SelectionFirstTool`  | `tools/modifyTools.ts`, `tools/arrangeTools.ts`                                                                       | Seçim yoksa önce seçtirir, Enter ile aşamalara geçer, sonucu **afin dönüşümle** uygular: taşı, kopyala, döndür (R referans doğrultu: iki nokta ya da açı, sonra yeni doğrultu; K kopya), ölçekle (R referans uzunluk: iki nokta ya da değer, sonra yeni uzunluk; K kopya), aynala, dizi; kutupsal dizi (merkez; N adet, A doldurma açısı, D nesneleri döndür; önizlemeli, sağ tık uygular), hizala (iki kaynak-hedef çifti, Ö ölçekle; ilk çiftten sonra sağ tık yalnız taşır)                                                                                                                                                                                       |
+  | `SelectionActionTool` | `tools/editTools.ts`, `tools/areaTools.ts`                                                                            | Seçim varsa hemen çalışır, yoksa seçtirip Enter bekler: birleştir, patlat; alan birleştir, alan kesiştir, alana çevir, çizgiye çevir                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+  | Alan işlemleri        | `tools/areaTools.ts`                                                                                                  | Alan çıkar (iki seçim: kesilecekler, sonra çıkarılacaklar), alan böl (alanları seç, sonra kesme çizgisini çiz ya da “Çizgiyle kes” ile göster; parçalar ve alanları canlı görünür), içine tıklayarak alan (tek tık; oluşacak bölge önceden boyanır)                                                                                                                                                                                                                                                                                                                                                                                                                  |
+  | `EdgePickTool`        | `tools/edgeTools.ts`, `tools/pathEditTools.ts`, `tools/cornerTools.ts`, `tools/lengthenTool.ts`                       | İmlecin altındaki kenara doğrudan etki eder: ötele, buda, uzat; uzat-kısalt (uca tıklanır; dinamikte yeni uç fareyle gösterilir ya da toplam boy yazılır, fark/yüzde/toplam kiplerinde tıklanan uç hemen değişir); kır, böl, köşe ekle/sil; `CornerTool` alt ailesi iki çizgiye ya da çoklu çizginin komşu iki kenarına etki eder: köşe yuvarla, pah                                                                                                                                                                                                                                                                                                                 |
+  | Diğer                 | `tools/SelectTool.ts`, `tools/editTools.ts`                                                                           | Seçim (pencere/kesişim, tutamaçla düzenleme), kaydırma, pencere yakınlaştırma; esnet (kesişim penceresi → temel → hedef); yapıştır                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 - **Şeffaf araçlar** (`ctx.tools.nest(child)` / `unnest(point)`): çalışan komutu bitirmeden üstünde açılır (AutoCAD 'CAL gibi). Sonuç noktası üst araca `acceptPoint(p)` ile, tıklanmış gibi verilir; Esc yalnızca şeffaf aracı kapatır. Nokta alan her araç ailesi `acceptPoint`'i uygular (`PointInputTool`, `SelectionFirstTool`, seçim aracında sıcak tutamaç, esnet, yapıştır).
 - **Alan işlemleri** (Netcad "Alan işlemleri"; toolbox'ta "Alan" grubu, Değiştir → Alan işlemleri): içine tıklayarak alan (`Shift+B`), alana çevir (`Alt+G`), alan birleştir (`Alt+B`), alan kesiştir (`Alt+K`), alan çıkar (`Alt+C`), alan böl (`Alt+L`), çizgiye çevir. Geometri `model/geom/region.ts`'tedir (bkz. §4.8.1); araçlar yalnızca seçer, önizler ve tek geri alma adımı kaydeder. Kurallar:
@@ -254,12 +262,12 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 - **Köşe yuvarla ve pah** (`tools/cornerTools.ts`): imleç bir köşeye (çoklu çizgi köşesi ya da iki çizginin birleştiği uç) 12 px yaklaşınca köşe halkayla işaretlenir. Tıklayınca köşe kilitlenir; imleç bir kenar boyunca çekildikçe teğet/kesim mesafesi canlı büyür (yakınlığa göre yuvarlanmış adımla), ikinci tık uygular. Yazılan değer tam uygular, sağ tık son değeri kullanır. Birleşmeyen iki çizgide sırayla iki çizgiye tıklanır. Araç uygulamadan sonra bir sonraki köşeyi bekler (AutoCAD'in Çoklu kipi). “Kırp (K)” iki araçta ortaktır: kapalıyken kenarlar olduğu gibi kalır, yalnızca yay ya da pah çizgisi eklenir (TRIMMODE=0).
 - **Semantik:**
 
-  | Tuş | Davranış |
-  |---|---|
-  | Esc | Araçtan çıkar, seçime döner. Seçim aracındaysa seçimi temizler. |
-  | Enter / sağ tık | Geçerli nesneyi bitirir; araçta kalınır. Bekleyen bir şey yoksa araçtan çıkar. |
-  | Seçim aracında Enter | Son aracı tekrarlar. |
-  | Boşluk | Komut satırına gider. |
+  | Tuş                  | Davranış                                                                       |
+  | -------------------- | ------------------------------------------------------------------------------ |
+  | Esc                  | Araçtan çıkar, seçime döner. Seçim aracındaysa seçimi temizler.                |
+  | Enter / sağ tık      | Geçerli nesneyi bitirir; araçta kalınır. Bekleyen bir şey yoksa araçtan çıkar. |
+  | Seçim aracında Enter | Son aracı tekrarlar.                                                           |
+  | Boşluk               | Komut satırına gider.                                                          |
 
 - **Koordinat girişi** (`tools/coordinateInput.ts`):
   - `Y,X` mutlak
@@ -307,33 +315,33 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 
 CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bilmez, her fonksiyonun birim testi vardır.**
 
-| Dosya | İçerik |
-|---|---|
-| `geom/affine.ts` | `Affine` (`[a,b,c,d,e,f]`), öteleme, döndürme, ölçekleme, aynalama, birleştirme, `isReflection` |
-| `geom/arc.ts` | Açı normalleştirme, süpürme açısı, üç noktadan çember ve yay, yay parçalama (tessellation) |
-| `geom/bulge.ts` | Çoklu çizgi yay parçaları: bulge → merkez/yarıçap/işaretli açı, üç noktadan ve teğetten bulge, kenar ortası ve teğeti, kenarlar, çevre, alan (shoelace + daire parçaları), ters çevirme, sıfır uzunluklu kenar temizliği |
-| `geom/intersect.ts` | **`Edge`** (doğru parçası ya da yay/daire) ve kesişimler: parça-parça, parça-yay, yay-yay, ışın-kenar; en yakın nokta, dik ayak. Yay kenarının `sweep`'i **işaretlidir** (negatif = saat yönü), böylece çoklu çizgi yaylarında yol yönü korunur; yay üzerinde olma testi `onEdgeArc` ile yapılır |
-| `geom/offset.ts` | Gönyeli (miter) yol öteleme, keskin köşede pah; yaylı yolda yaylar merkezleri etrafında büyür/küçülür, komşular taşıyıcı doğru/çember kesişiminde birleşir; noktanın hangi tarafta olduğu |
-| `geom/shapes.ts` | Dikdörtgen (kenardan, döndürülmüş köşelerden, boyuttan), düzgün çokgen (içten, dıştan, kenardan), AutoCAD yay yöntemleri (başlangıç-merkez-bitiş/açı/kiriş, başlangıç-bitiş-açı/yön/yarıçap/merkez), revizyon bulutu (`cloudOf`: kenarlar yay boyunda kirişlere bölünür, hepsi dışa bombeli) |
-| `geom/ellipse.ts` | Elips ve eliptik yay: nokta, türev, parametre (afin dönüşümle birim çembere), yay uzunluğu (Simpson), alan, en yakın parametre (Newton), doğru kesişimi (tam), teğet noktaları (tam), eksenden/merkezden kurulum |
-| `geom/parallel.ts` | Paralel çizgi: eksenin sol ve sağ mesafedeki gönyeli yanları (`parallelSides`), aradaki koridor alanı (`corridorArea`; kapalı eksende delikli halka) |
-| `geom/survey.ts` | Ölçmecilik yapıları: yan nokta (dik ayak/dik boy, sağa artı), kenar kesişimi, doğru kesişimi, hat üzerinde nokta, açı-mesafe (saat yönünde) |
-| `geom/tangentCircle.ts` | İki nesneye teğet, verilen yarıçaplı daire (TTY): paralel doğru ve çemberlerin kesişimleri; üç nesneye teğet daire (TTT, Apollonius): her kenar için bir teğetlik denklemi (doğru ±r, çember R+r, R−r, r−R), her yön birleşimi çözülür (üç doğru tam, çember içerende Newton; seçilen noktaların ortasına taşınmış koordinatlarda). İkisinde de teğet noktaları tıklanan yerlere en yakın çözüm alınır |
-| `geom/arrangement.ts`, `geom/overlay.ts` | **Düzlem bindirme motoru:** kenarlar (doğru parçası ve yay) kesiştikleri, dokundukları ve örtüştükleri yerde kesilir; üst üste binen parçalar (komşu parsellerin ortak sınırı) tek parça olur ve hangi kaynağın hangi yönde geçtiği sayılır; bir kural iki yandaki sarım sayılarından parçanın sonuç sınırı olup olmadığına karar verir; kalan parçalar sonuç hep solda kalacak biçimde halkalara bağlanır, tek noktada değen halkalar ayrılır, delikler en küçük dış halkaya verilir. Yaylar yay kalır; girdi köşeleri koordinatlarını bit bit korur (`Source.points`); köşe birleştirme toleransı `TOL = 1e-6` m; kesişim noktasında doğrusal devam eden ve girdi köşesi olmayan noktalar birleştirilir |
-| `geom/region.ts` | Alan cebiri: `unionAreas`, `intersectAreas`, `subtractAreas`, `splitArea` (kesme çizgisi alanı baştan başa geçmeli), `faceIndex` / `faceAt` / `allFaces` (çizgilerin kapattığı yüzler, içteki gruplar delik), `insideArea`, `netArea` |
-| `geom/spline.ts` | Merkezcil Catmull-Rom (Barry–Goldman), açık ve kapalı |
-| `geom/hatch.ts` | Tarama çizgilerini halkaya ve adalarına kırpma (tek-çift kuralı, yarı açık tepe kuralı, dünya ızgarasına hizalı, en çok 20 000 çizgi) |
-| `geom/dimension.ts` | Ölçü yerleşimi (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap): uzatma çizgileri, eğik uçlar, her zaman okunur yazı, değer ve birimi, seçme kenarları, tutamaç yeri; `dimensionOffsetAt` (bir noktadan geçen ötelenme), `linearAngleFor` (yatay mı düşey mi, AutoCAD gibi yerleşimden), `sectorArms` (iki doğrunun, yayın konduğu bölgedeki açısı) |
-| `ops/edgeLabels.ts` | Kenar ölçüsü yazılarının yeri: kenar ortası, halkanın dışı, okunur açı |
-| `ops/edges.ts` | Nesne → `Edge[]`. **Yeni nesne türü yalnızca kenarlarını vererek** kesişim, budama, uzatma ve kenetlemeye katılır. |
-| `ops/transform.ts` | Her nesne türüne afin dönüşüm. Yazı aynalanınca okunur kalır (MIRRTEXT = 0). |
-| `ops/curveCuts.ts` | Yol olmayan eğriler için budama, kırma, uzatma, öteleme: elips (parametre uzayında, kesimler doğruda tam, yayda alternatif izdüşümle) ve yardımcı çizgiler (parçalar ışın ya da çizgi; kesimler taban noktasından çözülür) |
-| `ops/path.ts` | Nesneyi uzunluk parametreli yol (`s ∈ [0, L]`) olarak görür: noktası, teğeti, en yakın `s`, kesimler, alt yol (yay parçaları tam kesilir), eşit bölme ve aralık parametreleri. Buda, kır ve böl bunu kullanır. |
-| `ops/trim.ts` | Hızlı budama ve uzatma. Kapalı şekiller açılır, daire yaya dönüşür; yayla biten çoklu çizgi kendi çemberi boyunca uzar. |
-| `ops/break.ts`, `ops/join.ts`, `ops/explode.ts`, `ops/stretch.ts`, `ops/vertex.ts` | Kır (iki nokta arası ya da tek noktadan; kapalıda saat yönünün tersine), birleştir (uç toleranslı zincir; kapanırsa alan), patlat (çizgi/yay, eğri → çoklu çizgi, ölçü → çizgi + yazı), esnet (penceredeki köşeler), köşe ekle/sil (yay kenarı aynı çember üzerinde ikiye bölünür) |
-| `ops/areas.ts` | Nesne ↔ alan: `areaOfEntity` (alan ve daire tam; tam elips ve kapalı eğri 1 mm içinde çokgen; ilk ve son noktası aynı çoklu çizgi), `polygonOfArea`, `polylinesOfPolygon`, `lineSource` |
-| `ops/lengthen.ts` | Uzat-kısalt: yeni toplam boy bir uçtan; kısaltma yolu keser (yay tam), uzatma son parçayı sürdürür (düz parça doğrultusunda, yay kendi çemberinde, tam turu geçemez); `lengthToward` imleçten boy |
-| `ops/offset.ts`, `ops/fillet.ts`, `ops/grips.ts` | Nesne öteleme; iki çizgi için köşe yuvarlama ve pah, çoklu çizgi köşesinde yuvarlama (yay parçası) ve pah (`cornerOfPath`); tutamaç anlamları |
+| Dosya                                                                              | İçerik                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geom/affine.ts`                                                                   | `Affine` (`[a,b,c,d,e,f]`), öteleme, döndürme, ölçekleme, aynalama, birleştirme, `isReflection`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `geom/arc.ts`                                                                      | Açı normalleştirme, süpürme açısı, üç noktadan çember ve yay, yay parçalama (tessellation)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `geom/bulge.ts`                                                                    | Çoklu çizgi yay parçaları: bulge → merkez/yarıçap/işaretli açı, üç noktadan ve teğetten bulge, kenar ortası ve teğeti, kenarlar, çevre, alan (shoelace + daire parçaları), ters çevirme, sıfır uzunluklu kenar temizliği                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `geom/intersect.ts`                                                                | **`Edge`** (doğru parçası ya da yay/daire) ve kesişimler: parça-parça, parça-yay, yay-yay, ışın-kenar; en yakın nokta, dik ayak. Yay kenarının `sweep`'i **işaretlidir** (negatif = saat yönü), böylece çoklu çizgi yaylarında yol yönü korunur; yay üzerinde olma testi `onEdgeArc` ile yapılır                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `geom/offset.ts`                                                                   | Gönyeli (miter) yol öteleme, keskin köşede pah; yaylı yolda yaylar merkezleri etrafında büyür/küçülür, komşular taşıyıcı doğru/çember kesişiminde birleşir; noktanın hangi tarafta olduğu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `geom/shapes.ts`                                                                   | Dikdörtgen (kenardan, döndürülmüş köşelerden, boyuttan), düzgün çokgen (içten, dıştan, kenardan), AutoCAD yay yöntemleri (başlangıç-merkez-bitiş/açı/kiriş, başlangıç-bitiş-açı/yön/yarıçap/merkez), revizyon bulutu (`cloudOf`: kenarlar yay boyunda kirişlere bölünür, hepsi dışa bombeli)                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `geom/ellipse.ts`                                                                  | Elips ve eliptik yay: nokta, türev, parametre (afin dönüşümle birim çembere), yay uzunluğu (Simpson), alan, en yakın parametre (Newton), doğru kesişimi (tam), teğet noktaları (tam), eksenden/merkezden kurulum                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `geom/parallel.ts`                                                                 | Paralel çizgi: eksenin sol ve sağ mesafedeki gönyeli yanları (`parallelSides`), aradaki koridor alanı (`corridorArea`; kapalı eksende delikli halka)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `geom/survey.ts`                                                                   | Ölçmecilik yapıları: yan nokta (dik ayak/dik boy, sağa artı), kenar kesişimi, doğru kesişimi, hat üzerinde nokta, açı-mesafe (saat yönünde)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `geom/tangentCircle.ts`                                                            | İki nesneye teğet, verilen yarıçaplı daire (TTY): paralel doğru ve çemberlerin kesişimleri; üç nesneye teğet daire (TTT, Apollonius): her kenar için bir teğetlik denklemi (doğru ±r, çember R+r, R−r, r−R), her yön birleşimi çözülür (üç doğru tam, çember içerende Newton; seçilen noktaların ortasına taşınmış koordinatlarda). İkisinde de teğet noktaları tıklanan yerlere en yakın çözüm alınır                                                                                                                                                                                                                                                                                                    |
+| `geom/arrangement.ts`, `geom/overlay.ts`                                           | **Düzlem bindirme motoru:** kenarlar (doğru parçası ve yay) kesiştikleri, dokundukları ve örtüştükleri yerde kesilir; üst üste binen parçalar (komşu parsellerin ortak sınırı) tek parça olur ve hangi kaynağın hangi yönde geçtiği sayılır; bir kural iki yandaki sarım sayılarından parçanın sonuç sınırı olup olmadığına karar verir; kalan parçalar sonuç hep solda kalacak biçimde halkalara bağlanır, tek noktada değen halkalar ayrılır, delikler en küçük dış halkaya verilir. Yaylar yay kalır; girdi köşeleri koordinatlarını bit bit korur (`Source.points`); köşe birleştirme toleransı `TOL = 1e-6` m; kesişim noktasında doğrusal devam eden ve girdi köşesi olmayan noktalar birleştirilir |
+| `geom/region.ts`                                                                   | Alan cebiri: `unionAreas`, `intersectAreas`, `subtractAreas`, `splitArea` (kesme çizgisi alanı baştan başa geçmeli), `faceIndex` / `faceAt` / `allFaces` (çizgilerin kapattığı yüzler, içteki gruplar delik), `insideArea`, `netArea`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `geom/spline.ts`                                                                   | Merkezcil Catmull-Rom (Barry–Goldman), açık ve kapalı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `geom/hatch.ts`                                                                    | Tarama çizgilerini halkaya ve adalarına kırpma (tek-çift kuralı, yarı açık tepe kuralı, dünya ızgarasına hizalı, en çok 20 000 çizgi)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `geom/dimension.ts`                                                                | Ölçü yerleşimi (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap): uzatma çizgileri, eğik uçlar, her zaman okunur yazı, değer ve birimi, seçme kenarları, tutamaç yeri; `dimensionOffsetAt` (bir noktadan geçen ötelenme), `linearAngleFor` (yatay mı düşey mi, AutoCAD gibi yerleşimden), `sectorArms` (iki doğrunun, yayın konduğu bölgedeki açısı)                                                                                                                                                                                                                                                                                                                                                            |
+| `ops/edgeLabels.ts`                                                                | Kenar ölçüsü yazılarının yeri: kenar ortası, halkanın dışı, okunur açı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `ops/edges.ts`                                                                     | Nesne → `Edge[]`. **Yeni nesne türü yalnızca kenarlarını vererek** kesişim, budama, uzatma ve kenetlemeye katılır.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `ops/transform.ts`                                                                 | Her nesne türüne afin dönüşüm. Yazı aynalanınca okunur kalır (MIRRTEXT = 0).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `ops/curveCuts.ts`                                                                 | Yol olmayan eğriler için budama, kırma, uzatma, öteleme: elips (parametre uzayında, kesimler doğruda tam, yayda alternatif izdüşümle) ve yardımcı çizgiler (parçalar ışın ya da çizgi; kesimler taban noktasından çözülür)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `ops/path.ts`                                                                      | Nesneyi uzunluk parametreli yol (`s ∈ [0, L]`) olarak görür: noktası, teğeti, en yakın `s`, kesimler, alt yol (yay parçaları tam kesilir), eşit bölme ve aralık parametreleri. Buda, kır ve böl bunu kullanır.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `ops/trim.ts`                                                                      | Hızlı budama ve uzatma. Kapalı şekiller açılır, daire yaya dönüşür; yayla biten çoklu çizgi kendi çemberi boyunca uzar.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `ops/break.ts`, `ops/join.ts`, `ops/explode.ts`, `ops/stretch.ts`, `ops/vertex.ts` | Kır (iki nokta arası ya da tek noktadan; kapalıda saat yönünün tersine), birleştir (uç toleranslı zincir; kapanırsa alan), patlat (çizgi/yay, eğri → çoklu çizgi, ölçü → çizgi + yazı), esnet (penceredeki köşeler), köşe ekle/sil (yay kenarı aynı çember üzerinde ikiye bölünür)                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `ops/areas.ts`                                                                     | Nesne ↔ alan: `areaOfEntity` (alan ve daire tam; tam elips ve kapalı eğri 1 mm içinde çokgen; ilk ve son noktası aynı çoklu çizgi), `polygonOfArea`, `polylinesOfPolygon`, `lineSource`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `ops/lengthen.ts`                                                                  | Uzat-kısalt: yeni toplam boy bir uçtan; kısaltma yolu keser (yay tam), uzatma son parçayı sürdürür (düz parça doğrultusunda, yay kendi çemberinde, tam turu geçemez); `lengthToward` imleçten boy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `ops/offset.ts`, `ops/fillet.ts`, `ops/grips.ts`                                   | Nesne öteleme; iki çizgi için köşe yuvarlama ve pah, çoklu çizgi köşesinde yuvarlama (yay parçası) ve pah (`cornerOfPath`); tutamaç anlamları                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 - **İşlemler geometri döndürür, belgeyi değiştirmez.** Sonuç `EntityGeometry` ya da `{ error }` olur. Kaydı araç yapar (`doc.transact`); böylece her değişiklik tek adımda geri alınır.
 - **Hata dili kullanıcıya yöneliktir** (`{ error: 'Yarıçap bu çizgiler için çok büyük.' }`). Araç bunu doğrudan `log.warn` ile gösterir.
@@ -426,13 +434,13 @@ Toplu işlemler (QGIS Processing gibi) için ayrı bir çatıdır; ayrıntılar 
 
 ### 6.1 Bütçeler (hedef)
 
-| Senaryo | Hedef |
-|---|---|
-| Kaydırma ve yakınlaştırma | 1 milyon segmentte 60 fps (16 ms kare) |
-| İmleç hareketinde seçme ve kenet | 100 bin varlıkta her olayda < 2 ms |
-| Bir katmanı yeniden kurma | 100 bin segmentte < 50 ms (gerekirse worker) |
-| İlk açılış (örnek proje) | < 1 s |
-| Açık panelde seçim değişikliği | < 8 ms |
+| Senaryo                          | Hedef                                        |
+| -------------------------------- | -------------------------------------------- |
+| Kaydırma ve yakınlaştırma        | 1 milyon segmentte 60 fps (16 ms kare)       |
+| İmleç hareketinde seçme ve kenet | 100 bin varlıkta her olayda < 2 ms           |
+| Bir katmanı yeniden kurma        | 100 bin segmentte < 50 ms (gerekirse worker) |
+| İlk açılış (örnek proje)         | < 1 s                                        |
+| Açık panelde seçim değişikliği   | < 8 ms                                       |
 
 Bugünkü uygulama örnek proje ölçeğinde (yüzlerce varlık) rahattır. Aşağıdaki
 kurallar büyük veriye geçerken kodun yeniden yazılmasını önlemek içindir.
@@ -530,34 +538,37 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 
 **Vitest** (`pnpm test`). Test dosyaları kodun yanında `*.test.ts` olarak durur ve yalnızca saf katmanları sınar:
 
-| Dosya | Kapsam |
-|---|---|
-| `model/geom/geom.test.ts` | Afin dönüşüm (büyük TM koordinatında hassasiyet dahil), yay, kesişimler, öteleme |
-| `model/ops/ops.test.ts` | Nesne dönüşümü, budama (kapalı şekil ve daire dahil), uzatma, öteleme, köşe yuvarlama, tutamaçlar |
-| `model/geom/curves.test.ts` | Eğri, tarama kırpma, ölçü yerleşimi (tüm türler, doğrusal yön seçimi, açı bölgesi), teğet noktaları, kenar ölçüleri |
-| `model/document.test.ts` | Geri alma ve yineleme, `transact`, await arasında gruplama ve grubu iptal, katman stilinin geri alınması, katman devralma, proje ayarları, `Formatter` |
-| `model/geom/ellipse.test.ts` | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum |
-| `model/ops/curves2.test.ts` | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme) |
-| `model/geom/parallel.test.ts` | Paralel çizgi yanları, gönye köşeleri, sıfır mesafe, koridor alanı, kapalı eksen |
-| `model/geom/survey.test.ts` | Ölçmecilik yapıları ve işaret kuralları |
-| `model/geom/shapes.test.ts` | Dikdörtgen ve düzgün çokgen yapıları, yay yöntemleri |
-| `model/geom/bulge.test.ts` | Bulge yardımcıları, teğet devam, ters çevirme, TTY ve TTT daireleri (üçgenin iç teğet dairesi, üç daire, TM koordinatında doğru-doğru-daire) |
-| `ui/promptOptions.test.ts` | İstem ayrıştırma: araç, adım, seçenekler, değerler, notlar |
-| `viewport/objectTracking.test.ts` | Nesne izleme: tek hiza, kesişim, son noktayla kesişim, kutupsal açılar, hiza boyunca mesafe |
-| `model/geom/region.test.ts` | Alan cebiri: örtüşen, komşu (ortak kenar), T-bağlantılı, köşede değen, delikli alanlar; daire ve yay kenarları; TM koordinatında girdi köşelerinin bit bit korunması; bölme, yüzler, adalar, sarkan çizgi |
-| `model/ops/areas.test.ts` | Nesne ↔ alan dönüşümleri; adalı alanda alan, çevre, kenar, aynalama, tutamaç, esnet, patlat ve belgenin deliği düşürmesi |
-| `render/triangulate.test.ts` | Delikli halkaların üçgenlenmesi (köprü, iç bükey köşe), toplam alan |
+| Dosya                                 | Kapsam                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `model/geom/geom.test.ts`             | Afin dönüşüm (büyük TM koordinatında hassasiyet dahil), yay, kesişimler, öteleme                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `model/ops/ops.test.ts`               | Nesne dönüşümü, budama (kapalı şekil ve daire dahil), uzatma, öteleme, köşe yuvarlama, tutamaçlar                                                                                                                                                                                                                                                                                                                                                                                          |
+| `model/geom/curves.test.ts`           | Eğri, tarama kırpma, ölçü yerleşimi (tüm türler, doğrusal yön seçimi, açı bölgesi), teğet noktaları, kenar ölçüleri                                                                                                                                                                                                                                                                                                                                                                        |
+| `model/document.test.ts`              | Geri alma ve yineleme, `transact`, await arasında gruplama ve grubu iptal, katman devralma, proje ayarları, `Formatter`                                                                                                                                                                                                                                                                                                                                                                    |
+| `model/geom/ellipse.test.ts`          | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum                                                                                                                                                                                                                                                                                                                                                                                  |
+| `model/ops/curves2.test.ts`           | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme)                                                                                                                                                                                                                                                                                                                                                            |
+| `model/geom/parallel.test.ts`         | Paralel çizgi yanları, gönye köşeleri, sıfır mesafe, koridor alanı, kapalı eksen                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `model/geom/survey.test.ts`           | Ölçmecilik yapıları ve işaret kuralları                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `model/geom/shapes.test.ts`           | Dikdörtgen ve düzgün çokgen yapıları, yay yöntemleri                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `model/geom/bulge.test.ts`            | Bulge yardımcıları, teğet devam, ters çevirme, TTY ve TTT daireleri (üçgenin iç teğet dairesi, üç daire, TM koordinatında doğru-doğru-daire)                                                                                                                                                                                                                                                                                                                                               |
+| `ui/promptOptions.test.ts`            | İstem ayrıştırma: araç, adım, seçenekler, değerler, notlar                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `viewport/objectTracking.test.ts`     | Nesne izleme: tek hiza, kesişim, son noktayla kesişim, kutupsal açılar, hiza boyunca mesafe                                                                                                                                                                                                                                                                                                                                                                                                |
+| `model/geom/region.test.ts`           | Alan cebiri: örtüşen, komşu (ortak kenar), T-bağlantılı, köşede değen, delikli alanlar; daire ve yay kenarları; TM koordinatında girdi köşelerinin bit bit korunması; bölme, yüzler, adalar, sarkan çizgi                                                                                                                                                                                                                                                                                  |
+| `model/ops/areas.test.ts`             | Nesne ↔ alan dönüşümleri; adalı alanda alan, çevre, kenar, aynalama, tutamaç, esnet, patlat ve belgenin deliği düşürmesi                                                                                                                                                                                                                                                                                                                                                                   |
+| `render/triangulate.test.ts`          | Delikli halkaların üçgenlenmesi (köprü, iç bükey köşe), toplam alan                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `render/batches.test.ts` | Uzak görünümde okunamayacak kadar küçük yazının atlanması (dünya ve ekran birimi, dpr) |
-| `model/ops/edit.test.ts` | Uzat-kısalt (çizgi, yay, köşeleri aşan kısaltma, yayla biten çoklu çizgi, imleçten boy); yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
-| `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
-| `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama, denetim ve tür uyumu, model çalıştırma (zincir, tek geri alma, hatada geri alma), model düzenleme (adlandırma, zincirleme, uygun kaynaklar, silme, dizme) |
-| `processing/worker/worker.test.ts` | Worker'da çalıştırma (sahte worker, yapılandırılmış kopya): sayfayla aynı sonuç ve tek geri alma, worker'da ifade derleme, Otomatik seçim eşiği, bilinmeyen araç, çöken worker, Durdur ve yeni worker |
+| `model/ops/edit.test.ts`              | Uzat-kısalt (çizgi, yay, köşeleri aşan kısaltma, yayla biten çoklu çizgi, imleçten boy); yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme                                                                                                                                                                                                                                                                |
+| `tools/coordinateInput.test.ts`       | Mutlak, göreli, kutupsal ve mesafe girişi                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `processing/processing.test.ts`       | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama, denetim ve tür uyumu, model çalıştırma (zincir, tek geri alma, hatada geri alma), model düzenleme (adlandırma, zincirleme, uygun kaynaklar, silme, dizme)                                                 |
+| `processing/worker/worker.test.ts`    | Worker'da çalıştırma (sahte worker, yapılandırılmış kopya): sayfayla aynı sonuç ve tek geri alma, worker'da ifade derleme, Otomatik seçim eşiği, bilinmeyen araç, çöken worker, Durdur ve yeni worker                                                                                                                                                                                                                                                                                      |
 | `style/svg/svg.test.ts` | SVG çizim modeli: yol verisi (bütün komutlar, bitişik yay bayrakları, yay → kübik, geri yazma), kutular, türü koruyan dönüşümler, gruplu ve parametreli SVG çıktısı, düzgün çokgen/yıldız, içe alma (dönüşümler, boyalar, atlananlar) |
 | `style/legend.test.ts` | Lejant: işleyicisiz katman, kategoriler ve diğer değerler, kapalı kategori ve kurallar, üst kural adıyla alt kurallar, nesnelerin kendi sembolleri |
-| `style/classify.test.ts` | Katman stili sınıflama: ifade değerleri, benzersiz değerler ve doğal sıra, eşit aralık ve eşit sayı, renk rampası, geometriye göre basit semboller |
-| `style/system/system.test.ts` | Sistem kitaplığı: benzersiz kimlikler, her sembolün doğrulanması, kullanılan çizimlerin varlığı, her öğenin kategorisi |
-| `style/style.test.ts` | Stil motoru: birimler, alan halkalarının yönü, çizgi boyunca işaret yerleşimi, alanın iç noktası, derleme (kesik ve kaydırma, dönüşümlü işaretler, içe kaydırılmış kenar, tarama, öznitelikten yazı, veriye bağlı boyut/açı/renk/görünürlük, desen döşemesi), işleyiciler (kategorili, aralıklı, iç içe kurallar ve ölçek aralığı), kitaplık (sistem salt okunur, kopya, ağaç ve arama, projeye varlıklarıyla kopya), .kstil (dışa/içe aktarma, çakışma kipleri, doğrulama, SVG temizliği) |
-| `model/expression/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme |
+| `style/classify.test.ts`              | Katman stili sınıflama: ifade değerleri, benzersiz değerler ve doğal sıra, eşit aralık ve eşit sayı, renk rampası, geometriye göre basit semboller                                                                                                                                                                                                                                                                                                                                         |
+| `style/system/system.test.ts`         | Sistem kitaplığı: benzersiz kimlikler, her sembolün doğrulanması, kullanılan çizimlerin varlığı, her öğenin kategorisi                                                                                                                                                                                                                                                                                                                                                                     |
+| `style/style.test.ts`                 | Stil motoru: birimler, alan halkalarının yönü, çizgi boyunca işaret yerleşimi, alanın iç noktası, derleme (kesik ve kaydırma, dönüşümlü işaretler, içe kaydırılmış kenar, tarama, öznitelikten yazı, veriye bağlı boyut/açı/renk/görünürlük, desen döşemesi), işleyiciler (kategorili, aralıklı, iç içe kurallar ve ölçek aralığı), kitaplık (sistem salt okunur, kopya, ağaç ve arama, projeye varlıklarıyla kopya), .kstil (dışa/içe aktarma, çakışma kipleri, doğrulama, SVG temizliği) |
+| `style/svg/importSvg.test.ts`         | SVG içe alma: renk sözdizimleri ve alfa, bütün dönüşümler, viewBox ve preserveAspectRatio, CSS sınıf/kimlik/torun seçicileri ve devralma, `<use>`/`<symbol>`/`<defs>`, birimler (mm → çizim birimi, sembol boyu), iç içe `<svg>`, bütün ilkeller, saydamlık, kesik, uç, köşe, dolgu kuralı, degrade ve desenin düz renge inmesi, kırpma/maske/görüntü sayımı, `<tspan>` satırları, renk eşleme (siyah, baskın, ikinci renk), düzenleyicinin kendi kaynağı (kimlik, ad, grup, gizli, altlık) |
+| `style/svg/exportSvg.test.ts`         | SVG dışa aktarma: sembol SVG (parametreler, mm boyu, zemin) ve geri okuma, düz SVG (önizleme renkleri, alfa → opacity, mm), seçime kırpma, `<defs>` içinde altlık, kaynak görünümü (kimlik, ad, gizli, öğe aralıkları, kararlı gidiş-dönüş), PNG boyu (piksel, DPI) ve pHYs parçası (CRC) |
+| `style/svg/trace.test.ts`             | Bitmap izleme: parlaklık ve alfa, tek piksel halkası, keskin köşeli kare, delikli halka ve içindeki ada, çapraz şeridin merdiveni, benek temizliği (gürültü), yumuşak düğümlü disk ve alanı, kapalı halkada Douglas–Peucker |
+| `model/expression/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme                                                                                                                                                                                                                                                                                                                               |
 
 Kurallar:
 
@@ -619,7 +630,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - öznitelik tablosu (alt panelde, seçimle eşlenik), sorgu ve filtre, tematik stil
    - raster, WMS ve XYZ altlık (yeni `SceneLayer` türü)
    - CRS dönüşümleri: TUREF ↔ ED50 7 parametre ve grid; TM ve UTM dilimleri
-   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı, modeller (çalıştırıcı, kitaplık, akış diyagramı tasarımcısı) yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç; Parsel ölçü yazıları modeli). Sıradaki: daha çok araç (sadeleştir, çift nesneleri temizle, parsel numaralandır, alan çizelgesi), modellerin proje dosyasında saklanması ve dışa aktarımı; sunucu ve PostGIS çalıştırıcıları sunucu tarafıyla birlikte
+   - **İşlem araçları:** çatı, pencere, araç kutusu ve geçmiş; ifade dili, alan ve ifade parametreleri, tür süzgeci, Web Worker çalıştırıcısı, modeller (çalıştırıcı, kitaplık, akış diyagramı tasarımcısı) yapıldı (köşe numaralandırma, kenar uzunlukları, öznitelik hesapla, ifadeyle seç; Parsel ölçü yazıları modeli). Sıradaki: daha çok araç (sadeleştir, çift nesneleri temizle, parsel numaralandır, alan çizelgesi), modellerin proje dosyasında saklanması ve dışa aktarımı; Rust sunucu çalıştırıcısı §13–20 kapsamında. PostGIS yalnızca isteğe bağlı içe/dışa aktarma ve karşılaştırma adaptörü olabilir.
 4. **Harita işleri:**
    - ifraz, tevhid, aplikasyon (istasyondan semt ve mesafe)
    - kot noktası ve TIN, eşyükselti, boy kesit, hacim
@@ -627,7 +638,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 5. **Kalıcılık:**
    - `.kcad` biçimi: JSON manifest (proje ayarları, katmanlar, şemalar) ve ikili geometri parçaları
    - IndexedDB otomatik kayıt
-   - ileride sunucu eşitleme ve PostGIS
+   - ileride §13–20'deki bulut projesine eşitleme; PostGIS ana depolama değildir
 6. GPU metin (SDF) ve kalın çizgiler (örneklenmiş dörtgen); iki arka uçta birlikte. WebGPU arka ucu yapıldı.
 7. **Eklenti API'si:** komut, araç, panel ve IO bağdaştırıcısı katkıları; mevcut kayıtlar bu API'nin ilk kullanıcılarıdır.
 
@@ -683,9 +694,9 @@ src/
   style/                     Stil motoru: geometry, compile, primitives, resolve, fromLayer, library, file (.kstil) (+ testler); türler model/style.ts'de
     classify.ts              Katman stili sınıflama (benzersiz değer, eşit aralık/sayı, rampalar)
     legend.ts                Lejant satırları (katman, sınıf, nesne sembolleri)
-    svg/                     SVG çizim modeli: yol verisi, şekiller ve dönüşümler, SVG çıktısı, içe alma (+ testler)
     showcase.ts              Gösterim kataloğu: her sistem sembolü örnek geometride (demo projede paftanın altı)
     system/                  Sistem kitaplığı (salt okunur, kopyalanabilir): temel çizgi tipleri, işaretler, alanlar; mpyy/ (MPYY gösterimleri: dsl.ts yardımcılar, pictograms.ts + pictogramDrawings.ts piktogramlar, uip/ nip/ cdp/ msp/ ortak/ kademe bölümleri)
+    svg/                     SVG çizim modeli (yol verisi, şekiller, dönüşümler, SVG çıktısı); svgValues (renk, dönüşüm, uzunluk, CSS), importSvg (içe alma: stil, <use>, birimler, renk eşleme, özet), exportSvg (sembol/düz SVG, kaynak görünümü, PNG boyu ve DPI), trace (bitmap izleme) (+ testler)
   processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit (+ testler)
     worker/                  Web Worker çalıştırıcısı: protokol, iş yürütme, executor, worker girişi (+ testler)
     builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç; yerleşik modeller
@@ -738,8 +749,8 @@ src/
     bottom/                  Komut satırı ve alt panel (geçmiş, koordinat listesi, uyarılar)
     statusbar/               Durum çubuğu
     settings/                SettingsShell, crsPicker, Proje ve Uygulama ayarları pencereleri
-    style/                   Stil yöneticisi, sembol tasarımcısı (katman formları, alanlar), katman stili (kurallar, sembol yuvası), resimler, .kstil ve görüntü dosyaları
-    svgedit/                 SVG çizim düzenleyicisi: pencere, çizim yüzeyi (araçlar, tutamaçlar, düğümler, kenetleme), özellikler
+    style/                   Stil yöneticisi, sembol tasarımcısı (katman formları, alanlar), katman stili (kurallar, sembol yuvası), resimler, .kstil dosyaları
+    svgedit/                 SVG çizim düzenleyicisi: pencere, çizim yüzeyi, özellikler; svgFile (Dosya menüsü, aç/ekle, pano ve sürükle-bırak, kitaplıktan aç, farklı kaydet), svgImport, svgExport, svgDocProps, svgReference (izleme altlığı), svgTrace (bitmap izle), svgSource (XML kaynağı), readSvg
     widgets/                 Genel parçalar (menü, açılır liste, ağaç, özellik ızgarası, pencere, kontroller)
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
@@ -748,3 +759,385 @@ scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smo
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanları, birimler, işleyiciler, kitaplık, çizim hattı, aşamalar
 ```
+
+---
+
+## 13. Rust backend hedefi ve uygulama emri
+
+Bu bölüm **mevcut koda bakılarak** yazıldı; temel alınan commit:
+`c7450a748c3b0d673ba2676490fedfc339b7cf2a` (23 Eylül 2026).
+Bu commit'te uygulama Vite/TypeScript tarayıcı uygulamasıdır. Rust crate'i,
+Cargo workspace, HTTP sunucusu, tenant kataloğu ve kalıcı veri dosyası yoktur.
+`processing/worker` bir **tarayıcı Web Worker**'ıdır; sunucu job worker'ı değildir.
+WebGL2/WebGPU arka uçları ve `SceneLayer` sözleşmesi çalışır. Bu gerçekliği
+koruyarak **çalışan dikey dilimler** halinde geliştirin.
+
+Amaç: TypeScript arayüzü + native/WASM'da ortak Rust CAD/GIS çekirdeği +
+Rust API/tile sunucusu + Rust yoğun iş worker'ı + PostgreSQL zorunluluğu
+olmayan, özel mekânsal veri motoru. Kurumsal çoklu tenant, tenant'a üye
+kullanıcılar, bulutta kalıcı veri, izinli MCP/komut akışı, Martin sınıfında
+MVT sunumu, mevcut stil sistemi ve WebGPU ile çalışmalıdır. Bu bir
+performans/ürün hedefidir; ölçülmüş eşdeğerlik iddiası değildir.
+
+### 13.1 Kod tabanına bağlanan kararlar
+
+| Mevcut kod                                                                                 | Korunacak değer                                           | Gerekli dönüşüm                                                                                                   |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `src/model/document.ts`: `Map<number, Entity>`, `transact`, 200 undo                       | Hızlı yerel çizim ve komut geçmişi                        | Sunucu kimliği, sürüm, optimistic edit, uzak commit/undo; yerel geçici ID'leri kalıcı ID sanma                    |
+| `src/model/entities.ts`: f64 koordinatlar, `attrs: Record<string,string>`, yay/bulge/delik | Analitik CAD şekli ve hassasiyet                          | Sürümlü serileştirme, tipli öznitelikler, CRS/Z/M politikası; eğrileri kayıpsız sakla                             |
+| `src/core/commands.ts`: `run(args?: unknown): void`                                        | Menü/kısayol/komut satırı tek giriş                       | Kalıcı değişikliklerde sürümlü schema, async sonuç, yetki, iptal, preview ve idempotency olan application command |
+| `src/processing/runner.ts`, `worker/workerExecutor.ts`                                     | Deklaratif araç, `RunJob`, `ChangeSet`, tarayıcı worker'ı | Sunucu executor; snapshot/reference + maliyet kotası; tenant job'ı; tam belge kopyasını sunucuya gönderme         |
+| `src/style/*`, `docs/STYLE.md`                                                             | MPYY sembolizmi, `.kstil`, sembol derleyici               | Stil formatını sürümle; Rust ortak expression altkümesi, sunucu/istemci uyumluluk testi; stil revizyonları        |
+| `src/render/types.ts`, `src/render/webgpu/*`                                               | `SceneLayer` ve çalışan WebGPU                            | Tile akışı ve feature ID/picking; değişen tile için seçili nesne overlay'i; düşük donanımda WebGL2 fallback       |
+| `src/geo/crs.ts`                                                                           | SRID kataloğu ve dönüştürme uyarısı                       | Gerçek dönüşüm için sürümlü CRS/grid kaynağı; tarayıcı ile sunucuda aynı sonuç/tolerans                           |
+
+İlk iş, `CadDocument.transact` hata verdiğinde `finally` üzerinden kısmi
+işlemleri commit etme davranışını ele almak ve testle sabitlemektir; şu an
+`transact` bir sunucu ACID transaction'ı sayılmaz. `beginGroup.cancel()`
+geri alma ve `dirty` durumunu da regresyonla sınayın. Uzak kaydetme
+gelince eski `dirty=false` kısayolunu gerçek başarılı commit sonucuna bağlayın.
+
+### 13.2 Öncelikler ve sınırlar
+
+1. **Önce doğruluk:** f64 kaynak geometri, deterministik komut, tenant sınırı,
+   çökme sonrası tutarlılık, geri yüklenebilir veri.
+2. İlk sürüm **2D**; mevcut analitik CAD nesnelerini koruyun. Render için
+   örnekleme/LOD kaynak geometrinin yerini almaz. Z/M ve 3D destek kararını
+   sürümlü veri formatında ileride kırmadan genişletin.
+3. Yeni sistemin ana veri katmanı Postgres/PostGIS'e bağlı olmayacak. Bunlar
+   daha sonra import/export, karşılaştırma veya harici provider olabilir.
+   Mevcut çalışan çizim ve stil özelliklerini yeniden yazıp kaybetmeyin.
+4. WebGPU mevcut kodda **zaten var**; performans ve sahne sözleşmesi sınırlarını
+   koruyarak tile'lı, büyük veri iş yüküne uyarlayın. WebGL2 desteği sürer.
+5. `DESIGN.md` ve `docs/STYLE.md` görsel dilin kaynağıdır. Yeni sunucu
+   sözleşmesi, bu dosyaların tasarım kararlarını sessizce geçersiz kılamaz.
+
+## 14. Hedef çalışma alanı ve bağımlılık sınırları
+
+Mevcut `src/` ağacını toplu taşımayın. İlk dikey dilimde şu hedef yapıyı
+gerektikçe oluşturun; crate sayısını yapay biçimde şişirmeyin:
+
+```text
+src/                       mevcut TypeScript uygulaması
+apps/api/                   Axum HTTP, SSE/WS, oturum ve tile gateway
+apps/worker/                aynı iş tanımlarını kullanan sunucu job modu
+apps/kentosd/               API + worker tek süreçli geliştirici modu
+crates/contracts/           ID, sürüm, API/command şeması ve TS üretimi
+crates/geometry-core/       saf Rust analitik CAD geometri ve test fixture'ları
+crates/spatial-core/        CRS, bbox, indeks anahtarları, topoloji ve LOD
+crates/style-core/          sürümlü ifade/semantik stil IR
+crates/spatial-store/       tenant veri dosyası, transaction, index, revision
+crates/catalog/             tenant, üyelik, proje, layer, stil ve publication
+crates/application/         use case, politika, command, job tanımları
+crates/tiles/               MVT ve sonra özel sahne tile üretimi
+crates/cloud/               obje depolama, snapshot/manifest, geri yükleme
+crates/wasm/                saf çekirdeğin dar wasm-bindgen sınırı
+docs/adr/                   ölçümlü tasarım kararları
+benchmarks/                 Martin/PostGIS karşılaştırma ve uzun ömürlü veri setleri
+```
+
+Rust `geometry-core` ve `style-core` platform bağımsızdır: dosya sistemi,
+Tokio, ağ, Auth, HTTP veya WebGPU'ya bağımlı olamaz. WASM için desteklenmeyen
+kodları özellik kapılarıyla değil net crate sınırlarıyla ayırın.
+`application` veri motoru trait'lerine bağımlıdır; HTTP/MCP/worker aynı use
+case'leri çağırır. Tek tanımlı şemadan Rust ve TypeScript istemci tipleri
+üretin; `unknown` girişini sınırda parse edip sürümü doğrulayın.
+
+WebGPU/TypeScript tarafına Rust çekirdeği parça parça alınır: önce
+geometri fixture'ları ve köşe/delik/bulge golden testleri, sonra seçili
+geometri işlemleri. Aynı semantiği iki dilde uzun süre paralel geliştirmeyin.
+WASM hesaplaması arayüz deneyimi içindir; sunucuda commit öncesi yetkili
+geometri, kural ve izin kontrolleri tekrar çalışır.
+
+## 15. Mekânsal veri motoru: dosya, transaction, indeks
+
+### 15.1 İlk sürüm: Rust uygulama motoru + doğrulanmış disk motoru
+
+`spatial-store` altında dar `StorageEngine` arayüzü kullanın. İlk uygulama
+adayı `redb`: gömülü transaction/MVCC, eşzamanlı okuyucular ve **bir
+write transaction**. Sürümü pinleyin, lisans/sürüm ve crash semantiğini PoC'de
+ölçün; benchmark olmadan kesin seçim ilan etmeyin. WAL, page manager, fsync,
+MVCC ve crash recovery'yi ilk sürümde sıfırdan yazmayın. GIS/CAD'ye özgü
+nesne, indeks, sorgu, yayın, stil ve revision modeli bize aittir.
+
+Önerilen tenant başına mantıksal ağaçlar:
+
+```text
+meta/{tenant,project,layer,schema,style,publication}
+object/{project,layer,feature_id} -> envelope + canonical geometry + attrs + version
+spatial/{project,layer,partition,cell,feature_id} -> bbox + revision
+attribute/{project,layer,index_id,typed_value,feature_id}
+revision/{project,sequence} -> actor, command, before/after refs, changed bbox
+event/{project,sequence} -> durable committed notification
+job/{tenant,job_id} -> state, lease token, checkpoint, output refs
+```
+
+Fiziksel key encoding sıralanabilir, sürümlü ve sınanabilirdir. Bir projede
+nesne kimliği UUIDv7 benzeri kararlı küresel ID olabilir; yalnızca numarayı
+JS `Number` veya MVT ID'sine sığdırmak için asıl kimliği daraltmayın. MVT
+feature ID için tile başına kararlı 64 bit eşleme ve identify API'sinde tam
+kimlik kullanın. `Entity.attrs` şu an string; yeni şema null/boolean/
+integer/decimal/date/text/enum'u tipli saklar. Eski veri için migration açık
+bir versiyon ve hata raporu taşır. Katman tanımı izin verilen geometri
+türünü, CRS'yi ve koordinat toleransını tutar.
+
+Her yazma **tek mantıksal commit** içinde nesneyi, eski indeks anahtarlarının
+silinmesini, yeni indeks anahtarlarını, revision kaydını ve outbox olayını
+değiştirir. Olayı commit'ten önce yayınlamayın. Analitik şekil kaynak kayıt,
+basitleştirilmiş geometri ve MVT/scene tile türev kayıttır; türevler
+yeniden üretilebilir. İndeks onarımında tam tarama ve veri doğrulama yolu
+sağlayın. Segment/hilbert packed R-tree gibi hibrit indeksleri ancak güncelleme
+ve sorgu benchmark'ı haklı çıkarınca ekleyin; önce kalıcı bbox/cell aday
+indeksi + kesin geometrik filtre kurun. Uzun çizgiler ve dateline/CRS sınırları
+için tek centroid cell yeterli değildir; kapsadığı hücreleri veya overflow
+postings'i ele alın.
+
+### 15.2 Veri bütünlüğü ve eşzamanlılık
+
+- Eşzamanlı okuma snapshot'ları; katman ve nesne için `expected_version`
+  kontrolü. 409 yanıtı güncel sürümü ve çatışma özetini taşır.
+- Bir tenant shard'ı için aynı anda **tek aktif writer**. Process'ler arasında
+  dosyayı ağ diski üzerinden çoklu yazıcı olarak açmayın. Lease + monoton
+  fencing epoch ile liderlik verin; yazma kapısı sahipliği kaybında reddetsin.
+- İzolasyon ihtiyacı proje/tenant sınırlarında ADR ile seçilir. Tenant başına
+  dosya veya az sayıda tenant'ın aynı shard'ı paylaşması benchmark ile
+  belirlenir; tek büyük dosyanın tek writer'ı bütün tenant'ları kilitlememeli.
+- Export/snapshot uzun süren read transaction ile compaction'ı kilitlemesin;
+  zaman/byte kotası ve açılıp kapanan snapshot politikası uygulayın.
+- Kısmi hata, elektrik kesintisi, disk dolması, yetersiz alan, yarım upload,
+  stale writer ve bozuk snapshot senaryolarını yeniden başlatma testleriyle
+  doğrulayın. Başarısız komut hiçbir iz/indeks yarım değişikliği bırakmaz.
+
+## 16. Bulut kalıcılığı ve dağıtım
+
+**Nesne depolamayı canlı `redb` veritabanı dosyasının çoklu yazıcılı
+diskinin yerine koymayın.** Aktif shard'ın database dosyası kalıcı yerel
+SSD/volume üzerinde durur. S3 uyumlu bulut obje depolama (KentOS'ta MinIO
+uyarlanabilir) sürümlü yedek, değişmez snapshot, log arşivi, attachment,
+import/export ve uzun iş çıktısı içindir. Bu ayrım veri tutarlılığı şartıdır.
+
+API stateless ölçeklenebilir; tenant router o tenant'ın aktif veri shard'ına
+gider. Shard'ı writer'la aynı host/süreçte konumlandırın; query ve tile okumayı
+aynı snapshot'tan yapın. İlk üretim sürümünde bir shard için sıcak bekleyen
+kopya otomatik promotion vaat etmeyin: önce crash recovery, yedekleme,
+geri yükleme ve kontrollü failover; sonra ölçülmüş replika protokolü.
+Nesne deposuna snapshot yüklemede manifest içeriği hash, format sürümü,
+son commit sequence, şifreleme ve önceki manifest bağı taşır. Snapshot +
+ardışık journal/WAL arşivini geri oynatma protokolü ve RPO/RTO ile doğrulayın.
+**Commit başarısı** fsync ve seçilen durability seviyesine bağlanır;
+asenkron bulut kopyasının gecikmesi ve veri kaybı penceresi SLO'da açık yazılır.
+S3 ETag'ini her sağlayıcıda içerik hash'i sanmayın; kendi checksum'unuzu tutun.
+
+Tenant/kaynak bazında prefix, IAM benzeri sınırlı erişim, TLS, dinlenimde
+şifreleme, anahtar rotasyonu, dosya boyutu/ücret kotası, retention ve silme
+politikası uygula. Obje yollarında tenant ID'si bulunsa bile her okuma/yazma
+sunucu tarafında yetki denetiminden geçer. Dosya ekleri iki aşamalı yazılıp
+DB referansı commit edilince görünür olur; yetim dosyalar temizlenir.
+Compose geliştirici kurulumu; üretimde API, shard ve worker ayrı süreç modları.
+
+## 17. Çoklu tenant, kullanıcı tahsisi ve güvenlik
+
+Global katalogda `Tenant`, `User(issuer,subject)`, `Membership`,
+`Invitation`, `SeatAllocation`, `Project`, `ProjectGrant`,
+`ServiceAccount` ve `Quota` tanımlayın. **Üyelik** ile **lisans/koltuk
+tahsisi** farklıdır: tenant yöneticisi kimleri eklediğini, davet durumunu,
+aktif/deaktif erişimi ve tahsis edilmiş/boş koltuk sayısını yönetebilir.
+Bir gerçek kullanıcı birden çok tenant'a ayrı üyelikle katılabilir. E-posta
+kimlik anahtarı değildir; `(issuer, subject)` kullanılır. Keycloak OIDC
+entegrasyonu uyarlanabilir olsun; token audience, issuer, süre, tenant
+bağlamı doğrulanır. Tenant'ı client header veya JWT içindeki serbest role
+güvenerek seçmeyin: istenen tenant için aktif membership ve proje grant
+sunucuda doğrulanır.
+
+İlk roller: tenant sahibi, tenant yöneticisi, proje yöneticisi, editör,
+görüntüleyici; servis hesapları ayrı yetkilerle. Fine-grained işlemler
+`feature.read/write`, `layer.publish`, `style.manage`, `job.run`,
+`data.export`, `member.manage` gibi capability ile denetlenir.
+Katman/satır/alan bazlı kısıtlar yayın, identify, tile, export, event ve
+MCP yollarında **aynı politika kararı** üretir. Tile sonuçlarının
+paylaşılan cache anahtarı güvenli policy-scope/revision olmadan kurulmaz.
+Üyelik iptalinde eski link/cache'in ne zaman hükümsüzleşeceği açık olsun.
+
+Kota tanımları: aktif kullanıcı/koltuk, projeler, depolama byte'ı, istek hızı,
+eşzamanlı job, CPU saniyesi, bellek, tile üretim bütçesi. Hesaplamayı
+tenant sınırına göre izleyin; ortak havuz bir tenant'ın pahalı sorgusuyla
+kilitlenmesin. Her API ve worker yürütmesinde tenant ID, user ID, proje ID,
+policy revision, request ID ve audit actor bağlamı bulunur. Loglara
+geometri/özlük verisi/token koymayın.
+
+## 18. Tile, stil ve anlık düzenleme
+
+**Kaynak veri MVT değildir.** Yerel CAD nesneleri analitik ve tam hassasiyetli
+saklanır. MVT, MapLibre/standart istemci için kayıplı, tile koordinatlarında
+sunumdur. Sıra:
+
+```text
+tile(z,x,y) -> tamponlu bbox'u kaynak CRS'ye dönüştür
+  -> yetkili bbox adayları -> kesin filtre -> ölçeğe göre örnekle
+  -> clip -> quantize -> ring/yön/topoloji düzelt -> attribute encode
+  -> MVT PBF -> ETag/cache
+```
+
+`ST_AsMVTGeom` ile `ST_AsMVT` eşdeğer davranışını ayrı test edin:
+extent/buffer, sınırdaki geometriler, delikler, invalid/empty geometriler,
+çok geniş nesneler, benzersiz attribute sözlüğü ve feature ID. Yay, daire,
+elips, spline ve tarama stilini kaynakta koruyun; tile zoom'a bağlı
+toleransla sunum segmentlerine çevirin. Metre/derece karışıklığına izin
+vermeyin. İlk endpoint'ler:
+
+```text
+GET /v1/tenants/{tenant}/projects/{project}/publications/{pub}/tilejson.json
+GET /v1/tenants/{tenant}/projects/{project}/publications/{pub}/tiles/{z}/{x}/{y}.mvt
+GET /v1/tenants/{tenant}/projects/{project}/styles/{style}/style.json
+GET /v1/tenants/{tenant}/projects/{project}/features/{feature}
+```
+
+Sonraki sürüm kendi WebGPU sahnesi için sürümlü binary scene tile sağlar:
+feature ID tablosu, buffer offsets, koordinat kaynağı, LOD ve stil IR.
+Gerçek CAD edit için yetkili ve hassas `feature` endpoint'i kullanılır.
+MapLibre uyumlu stil JSON ile mevcut `.kstil` sembolleri ayrı sözleşmedir:
+destek matrisi ve bilinçli extension/export kaybı raporu tutun. Vektör
+tile, stil JSON, sprite ve glyph endpoint'leri ihtiyaca göre yayınlanır;
+stil değişikliği veri tile'ını gereksiz yeniden yazmaz.
+
+Publication wizard draft -> validate -> immutable revision -> activate
+akışıyla layer, CRS, geometri tipi, alanlar, izinler, zoom/extent/buffer,
+stil ve cache politikasını seçer. Yayın esnasında dizini doğrular, örnek
+tile üretir, yetkisiz erişimi test eder. Ortak cache key en az tenant,
+publication revision, dataset generation, policy scope/revision, z/x/y,
+format/encoding taşır. Commit eski/yeni bbox, değişen öznitelik ve zoom
+kapsamından etkilenen tile'ları kirletir; belirsiz bağımlılıkta güvenli
+geniş invalidation uygula. Outbox olayı revizyon taşır; istemci yeni tile
+revizyonu gelene kadar yerel edit overlay'ini ve silme tombstone'unu korur.
+Anlık kullanıcı geri bildirimi sunucu cache süresine bağlanamaz.
+
+## 19. API, komut, MCP ve sunucu worker modu
+
+Arayüz `CommandRegistry` komutları şu anda senkron ve yereldir. Kalıcı
+işlemler için uygulama komut zarfı:
+
+```json
+{
+  "name": "feature.update",
+  "version": 1,
+  "tenant_id": "...",
+  "project_id": "...",
+  "request_id": "...",
+  "idempotency_key": "...",
+  "expected_versions": { "feature-id": 7 },
+  "input": {}
+}
+```
+
+Sunucu aktörü oturumdan çıkarır. Parse -> authenticate -> authorize ->
+validate -> preview/execute -> transaction -> outbox -> response.
+UI, REST, CLI, chat ve MCP aynı `application` handler'ına bağlanır.
+İstemci komutları (`map.zoomTo` gibi) sunucuya taşınmaz; hangi komutun
+headless çalışabildiğini capability tanımı belirtir. Uzun işlem anında
+`202 + job_id` döndürür; job'ın sonucu ve izinleri ayrıca sorgulanır.
+MCP araç listesi yetkiye göre daralır; çağrıda tekrar denetim yapılır.
+AI planı için preview/diff, riskli toplu işlemler için onay ve audit tutulur;
+serbest SQL/FS/shell ağ erişimi MCP'ye verilmez.
+
+Sunucu yürütme modu:
+
+```text
+kentosd --mode api       # auth, REST, MVT, event ve hafif komutlar
+kentosd --mode worker    # import/export, analitik, TIN, indeks, tile warmup
+kentosd --mode all       # tek süreçli yerel geliştirme
+```
+
+`processing/worker` (Web Worker) arayüzün donmaması için kalır; dağıtık
+sunucu worker'ı farklı yaşam döngüsüdür. İkisi aynı tool schema ve mümkünse
+aynı Rust fonksiyonlarını kullanır. İş kaydı state:
+`queued -> leased -> running -> succeeded|failed|canceled`. Job tenant,
+actor, command/tool version, input refs/snapshot sequence, quota reservation,
+retry policy, dedupe key, checkpoint, progress, lease expiry ve fencing
+token taşır. Worker başlatırken yetkiyi/tenant durumunu tekrar doğrular;
+lease yenileyemezse sonucu commit edemez. Retry at-least-once olabilir:
+her çıktı ve side effect idempotent/fenced olmalı. Ağır CPU görevleri
+Tokio async reaktörünü bloke etmez; sınırlı CPU pool/ayrı süreç kullanın.
+İptal cooperative; iptal edilemeyen FFI için süreç izolasyonu/zaman aşımı
+uygulayın. Adil tenant kuyrukları ve bellek/CPU/eşzamanlılık kotaları şarttır.
+
+`RunJob` protokolündeki `entities: [...doc.all()]` kopyası büyük belgelerde
+CPU/bellek maliyeti doğurur. Yerel worker'da seçili nesne snapshot'ı veya
+aktarılabilir buffer; sunucu worker'ında `tenant/project/snapshot/selection`
+referansları kullanın. Sayfadaki tüm belgeyi backend'e taşımayın.
+Worker sonucu beklenen veri revision'ına göre doğrulanıp transaction ile
+uygulanır; bir kullanıcı arada veriyi değiştirmişse conflict veya açık
+rebase politikası gerekir.
+
+## 20. Uygulama sırası, kabul ve ölçüm
+
+### Faz A — Gerçek taban ve sözleşmeler
+
+- Repo envanteri; TypeScript `Entity`, `LayerStore`, `CadDocument`,
+  `StyleFile`, `RunJob`, `SceneLayer` için sürümlü sözleşme ve fixture.
+- `transact` hata davranışını düzelt; başarısız işlemde kısmi commit yok.
+- Cargo workspace + native/WASM aynı analitik geometri işleminde golden test.
+- Rust API `health`; tarayıcı mevcut çizim akışı bozulmadan bağlanır.
+
+**Kabul:** TS ve Rust aynı fixture'da koordinat/tolerans/ring/bulge sonucunu
+üretir; mevcut `pnpm build`, `pnpm test`, `pnpm e2e` geçer.
+
+### Faz B — Bir tenant, bir proje, gerçek kayıt
+
+- Tenant/user/membership/rol; OIDC doğrulama ve yerel test issuer.
+- Gömülü depolama PoC, sürümlü feature schema, bbox indeks, commit/revision.
+- Bir çizginin oluştur/güncelle/oku/sil akışı; başka kullanıcıda revision 409;
+  gerçek Save/Open; sunucu commit sonucu `dirty` senkronu.
+- Backup/restore ve crash injection testleri.
+
+**Kabul:** Sunucu öldürülüp açılınca nesneler, indeks ve audit tutarlıdır;
+tenant B, tenant A nesnesini ID veya tile URL tahminiyle göremez.
+
+### Faz C — MVT ve yayın
+
+- Bir katmanın MVT/TileJSON endpoint'i, publish wizard'ın asgari sürümü,
+  stil revizyonu, yetkili/private tile, ETag ve generation invalidation.
+- MapLibre uyumluluk fixture'ları, PostGIS/Martin karşılaştırma veri seti.
+
+**Kabul:** Standart MVT istemcisi yetkili yayını açar, edit sonrası doğru
+tile gelir, eski yetkiyle cache/API/MCP veri sızdırmaz.
+
+### Faz D — Worker ve ağır analiz
+
+- `kentosd --mode worker`, kalıcı job/lease/fencing, ilerleme, iptal,
+  tenant kota; örnek gerçek GIS analizi ve import.
+- Worker yeniden başlatma, çift yürütme, aynı kayıt üstünde çakışma testleri.
+
+**Kabul:** Worker ölürse iş kaybolmaz; iki worker aynı etkiyi iki kez
+commit edemez; API yoğun işlem sırasında yanıt verir.
+
+### Faz E — Ölçekleme ve bulut
+
+- Snapshot + log arşivi + geri yükleme tatbikatı; tenant shard routing,
+  public/private CDN politikası; metadata/feature/scene tile optimizasyonu.
+- Düşük donanım WebGL2 ve WebGPU profilleri, yoğun MPYY katmanı benchmark'ı.
+
+**Kabul:** Tanımlı veri ve donanımda p50/p95/p99 tile gecikmesi, QPS,
+cache hit, build/render frame time, RSS, writer kuyruk ve RPO/RTO raporlanır.
+Martin karşılaştırması aynı kaynak veri, benzer kalite, indeks, donanım,
+warm/cold cache ve eşit güvenlik maliyetiyle yapılır. Ölçüm yoksa
+"Martin kadar hızlı" veya "sıfır kopya" iddiası yazılmaz.
+
+### Claude Opus için çalışma kuralı
+
+Bu dosyayı okuduğunda önce depoyu ve kodu incele; burada yazan gelecek
+sınıflarını mevcut sanma. Faz A'dan başla ve en küçük çalışan dilimi
+tamamla. Her PR'da: değişen sözleşme, migration, erişim kontrolü,
+başarısızlık kurtarma, ilgili test/benchmark sonucu ve açık kalan risk.
+Yüksek hacimli dosyaları veya mevcut stil motorunu topluca yeniden yazma.
+Mimari seçimleri `docs/adr/` içinde gerekçelendir. Gerekli doğrulamayı
+yapmadan performans/ACID/tenant izolasyonu iddiasında bulunma. Projenin
+mevcut kod politikası gereği yeni runtime dependency seçimini kullanıcıyla
+değerlendir; onay alınan tasarımı somut öneri ve sürüm bilgisiyle sun.
+
+Resmî teknik referanslar (uygularken erişilen sürümü sabitle):
+redb transaction API: https://docs.rs/redb/latest/redb/struct.WriteTransaction.html ;
+PostGIS karşılaştırma: https://postgis.net/docs/ST_AsMVTGeom.html ve
+https://postgis.net/docs/ST_AsMVT.html ;
+Martin endpoint davranışı: https://maplibre.org/martin/using/ ;
+MapLibre stil: https://maplibre.org/maplibre-style-spec/ ;
+S3 uyumlu obje arayüzü adayı: https://docs.rs/object_store/latest/object_store/ .

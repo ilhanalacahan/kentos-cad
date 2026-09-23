@@ -7,6 +7,7 @@ import './styles/settings.css';
 import './styles/processing.css';
 import './styles/model.css';
 import './styles/style.css';
+import './styles/svgfile.css';
 import { createApp } from './app/createApp';
 
 createApp(document.getElementById('app')!)

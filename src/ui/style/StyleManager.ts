@@ -26,8 +26,8 @@ import { symbolOfItem, Thumbs } from './thumbs';
 export type KindFilter = 'all' | Symbol['type'] | 'asset';
 
 export interface PickOptions {
-  /** Kind shown first (the geometry the symbol is for); the user may widen it. */
-  kind?: Symbol['type'];
+  /** Kind shown first (the geometry the symbol is for, or 'asset' to pick an SVG drawing); the user may widen it. */
+  kind?: Symbol['type'] | 'asset';
   title?: string;
   current?: string;
   onPick(id: string): void;
@@ -279,7 +279,7 @@ class StyleManager implements DetailsHost {
 
   refreshDetails(): void {
     const item = this.selected ? this.ctx.styles.library.get(this.selected) : undefined;
-    if (this.pickBtn) this.pickBtn.disabled = !item || item.kind !== 'symbol';
+    if (this.pickBtn) this.pickBtn.disabled = !item || !this.pickable(item);
     replaceChildren(this.details, renderDetails(this, item));
   }
 
@@ -341,9 +341,15 @@ class StyleManager implements DetailsHost {
     this.design({ id: copy.id });
   }
 
+  /** What the pick mode may choose: symbols, or SVG drawings when it picks a drawing. */
+  private pickable(item: Sourced): boolean {
+    return this.pick?.kind === 'asset' ? item.kind === 'asset' && item.format === 'svg' : item.kind === 'symbol';
+  }
+
   choose(): void {
     const id = this.selected;
-    if (!this.pick || !id || this.ctx.styles.library.get(id)?.kind !== 'symbol') return;
+    const item = id ? this.ctx.styles.library.get(id) : undefined;
+    if (!this.pick || !id || !item || !this.pickable(item)) return;
     this.pick.onPick(id);
     this.dialog.close();
   }
