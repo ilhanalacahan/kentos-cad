@@ -1,0 +1,326 @@
+{
+  "label": "baseline",
+  "date": "2026-09-23T20:23:56.841Z",
+  "commit": "85be871",
+  "machine": {
+    "cpu": "11th Gen Intel(R) Core(TM) i5-11300H @ 3.10GHz",
+    "threads": 8,
+    "memoryGb": 15,
+    "chrome": "Google Chrome 153.0.8010.36"
+  },
+  "runs": 3,
+  "cold": {
+    "interactiveMs": 557.2000000001863,
+    "requests": 6,
+    "transferred": 284933,
+    "js": 266455,
+    "css": 16654,
+    "wasm": 0,
+    "scriptMs": 177,
+    "taskMs": 1049,
+    "jsHeapMb": 10,
+    "interactiveRange": [
+      553.5,
+      1789.2000000001863
+    ]
+  },
+  "warm": {
+    "interactiveMs": 288.29999999981374,
+    "requests": 5,
+    "transferred": 667,
+    "js": 360,
+    "css": 180,
+    "wasm": 0,
+    "scriptMs": 49,
+    "taskMs": 283,
+    "jsHeapMb": 16,
+    "interactiveRange": [
+      198.19999999925494,
+      774.7000000001863
+    ]
+  },
+  "loads": [
+    {
+      "warm": false,
+      "interactiveMs": 1789.2000000001863,
+      "requests": 6,
+      "transferred": 284933,
+      "js": 266455,
+      "css": 16654,
+      "wasm": 0,
+      "scriptMs": 1394,
+      "taskMs": 1577,
+      "jsHeapMb": 9,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 1180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 200,
+          "bytes": 16654,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 200,
+          "bytes": 13314,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 200,
+          "bytes": 253141,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        },
+        {
+          "path": "/favicon.svg",
+          "status": 200,
+          "bytes": 644,
+          "encoding": ""
+        }
+      ]
+    },
+    {
+      "warm": true,
+      "interactiveMs": 774.7000000001863,
+      "requests": 5,
+      "transferred": 667,
+      "js": 360,
+      "css": 180,
+      "wasm": 0,
+      "scriptMs": 147,
+      "taskMs": 773,
+      "jsHeapMb": 16,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 127,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        }
+      ]
+    },
+    {
+      "warm": false,
+      "interactiveMs": 557.2000000001863,
+      "requests": 6,
+      "transferred": 284933,
+      "js": 266455,
+      "css": 16654,
+      "wasm": 0,
+      "scriptMs": 177,
+      "taskMs": 985,
+      "jsHeapMb": 10,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 1180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 200,
+          "bytes": 16654,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 200,
+          "bytes": 13314,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 200,
+          "bytes": 253141,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        },
+        {
+          "path": "/favicon.svg",
+          "status": 200,
+          "bytes": 644,
+          "encoding": ""
+        }
+      ]
+    },
+    {
+      "warm": true,
+      "interactiveMs": 288.29999999981374,
+      "requests": 5,
+      "transferred": 667,
+      "js": 360,
+      "css": 180,
+      "wasm": 0,
+      "scriptMs": 49,
+      "taskMs": 283,
+      "jsHeapMb": 17,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 127,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        }
+      ]
+    },
+    {
+      "warm": false,
+      "interactiveMs": 553.5,
+      "requests": 6,
+      "transferred": 284933,
+      "js": 266455,
+      "css": 16654,
+      "wasm": 0,
+      "scriptMs": 154,
+      "taskMs": 1049,
+      "jsHeapMb": 10,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 1180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 200,
+          "bytes": 16654,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 200,
+          "bytes": 13314,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 200,
+          "bytes": 253141,
+          "encoding": "gzip"
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        },
+        {
+          "path": "/favicon.svg",
+          "status": 200,
+          "bytes": 644,
+          "encoding": ""
+        }
+      ]
+    },
+    {
+      "warm": true,
+      "interactiveMs": 198.19999999925494,
+      "requests": 5,
+      "transferred": 667,
+      "js": 360,
+      "css": 180,
+      "wasm": 0,
+      "scriptMs": 49,
+      "taskMs": 195,
+      "jsHeapMb": 12,
+      "list": [
+        {
+          "path": "/",
+          "status": 200,
+          "bytes": 127,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DsB-wuvL.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/index-DjdBx8ZX.css",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/assets/color-C4jILryO.js",
+          "status": 304,
+          "bytes": 180,
+          "encoding": ""
+        },
+        {
+          "path": "/v1/health",
+          "status": 503,
+          "bytes": 0,
+          "encoding": ""
+        }
+      ]
+    }
+  ]
+}

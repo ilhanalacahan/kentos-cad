@@ -1,0 +1,351 @@
+{
+  "label": "baseline",
+  "date": "2026-09-23T20:23:45.322Z",
+  "commit": "85be871",
+  "dirtyTree": false,
+  "initial": {
+    "js": {
+      "raw": 837778,
+      "gzip": 264611,
+      "brotli": 215739
+    },
+    "css": {
+      "raw": 90392,
+      "gzip": 16202,
+      "brotli": 14369
+    },
+    "files": [
+      "assets/index-DsB-wuvL.js",
+      "assets/color-C4jILryO.js",
+      "assets/index-DjdBx8ZX.css"
+    ]
+  },
+  "lazy": [
+    {
+      "file": "assets/LayerStyleDialog-CgiPDJ0-.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 16735,
+        "gzip": 5897,
+        "brotli": 5417
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/LayerStyleDialog.ts",
+          "size": 14747
+        },
+        {
+          "id": "src/ui/style/rulesEditor.ts",
+          "size": 5258
+        },
+        {
+          "id": "src/ui/style/symbolSlot.ts",
+          "size": 3199
+        }
+      ]
+    },
+    {
+      "file": "assets/LegendDialog-CRcpGpOM.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 5097,
+        "gzip": 2309,
+        "brotli": 2068
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/LegendDialog.ts",
+          "size": 5041
+        },
+        {
+          "id": "src/style/legend.ts",
+          "size": 2162
+        }
+      ]
+    },
+    {
+      "file": "assets/ModelDesigner-WYkgOjSo.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 33074,
+        "gzip": 10945,
+        "brotli": 9960
+      },
+      "topModules": [
+        {
+          "id": "src/ui/processing/model/modelInspector.ts",
+          "size": 15661
+        },
+        {
+          "id": "src/ui/processing/model/ModelDesigner.ts",
+          "size": 12047
+        },
+        {
+          "id": "src/ui/processing/model/ModelCanvas.ts",
+          "size": 11260
+        },
+        {
+          "id": "src/processing/modelEdit.ts",
+          "size": 6066
+        },
+        {
+          "id": "src/ui/processing/model/modelPalette.ts",
+          "size": 3004
+        }
+      ]
+    },
+    {
+      "file": "assets/StyleManager-CUmotXiO.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 18268,
+        "gzip": 6636,
+        "brotli": 6095
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/StyleManager.ts",
+          "size": 16127
+        },
+        {
+          "id": "src/ui/style/managerDetails.ts",
+          "size": 9578
+        }
+      ]
+    },
+    {
+      "file": "assets/SvgEditor-DhpkQUC1.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 228358,
+        "gzip": 78842,
+        "brotli": 68011
+      },
+      "topModules": [
+        {
+          "id": "src/style/svg/importSvg.ts",
+          "size": 22508
+        },
+        {
+          "id": "src/ui/svgedit/SvgEditor.ts",
+          "size": 20161
+        },
+        {
+          "id": "src/ui/svgedit/svgCanvas.ts",
+          "size": 17946
+        },
+        {
+          "id": "src/style/svg/nodeOps.ts",
+          "size": 17027
+        },
+        {
+          "id": "src/ui/svgedit/svgProps.ts",
+          "size": 15870
+        },
+        {
+          "id": "src/style/svg/pathBool.ts",
+          "size": 15585
+        },
+        {
+          "id": "src/ui/svgedit/svgNodeTool.ts",
+          "size": 14274
+        },
+        {
+          "id": "src/ui/svgedit/svgFile.ts",
+          "size": 14005
+        }
+      ]
+    },
+    {
+      "file": "assets/SymbolDesigner-B1ogTTPb.js",
+      "dynamicEntry": true,
+      "size": {
+        "raw": 27474,
+        "gzip": 9718,
+        "brotli": 8873
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/layerForms.ts",
+          "size": 19506
+        },
+        {
+          "id": "src/ui/style/SymbolDesigner.ts",
+          "size": 17924
+        }
+      ]
+    },
+    {
+      "file": "assets/classify-Q9rmCxkY.js",
+      "dynamicEntry": false,
+      "size": {
+        "raw": 2587,
+        "gzip": 1381,
+        "brotli": 1247
+      },
+      "topModules": [
+        {
+          "id": "src/style/classify.ts",
+          "size": 4032
+        }
+      ]
+    },
+    {
+      "file": "assets/designerFields-QXQegggm.js",
+      "dynamicEntry": false,
+      "size": {
+        "raw": 4321,
+        "gzip": 1846,
+        "brotli": 1674
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/designerFields.ts",
+          "size": 6439
+        }
+      ]
+    },
+    {
+      "file": "assets/styleFiles-C_mhsWP6.js",
+      "dynamicEntry": false,
+      "size": {
+        "raw": 1354,
+        "gzip": 823,
+        "brotli": 699
+      },
+      "topModules": [
+        {
+          "id": "src/ui/style/styleFiles.ts",
+          "size": 1834
+        }
+      ]
+    },
+    {
+      "file": "assets/thumbs-Dd7zaBhY.js",
+      "dynamicEntry": false,
+      "size": {
+        "raw": 10048,
+        "gzip": 4373,
+        "brotli": 3966
+      },
+      "topModules": [
+        {
+          "id": "src/render/symbolPreview.ts",
+          "size": 14888
+        },
+        {
+          "id": "src/ui/style/thumbs.ts",
+          "size": 1541
+        }
+      ]
+    }
+  ],
+  "total": {
+    "raw": 1313433,
+    "gzip": 417627,
+    "brotli": 350998
+  },
+  "entryTopModules": [
+    {
+      "id": "src/style/system/mpyy/pictogramDrawings.ts",
+      "size": 35541
+    },
+    {
+      "id": "src/tools/catalog.ts",
+      "size": 27953
+    },
+    {
+      "id": "src/viewport/ViewportController.ts",
+      "size": 20799
+    },
+    {
+      "id": "src/style/system/mpyy/nip/09-teknik-altyapi.ts",
+      "size": 16901
+    },
+    {
+      "id": "src/render/webgl2/styledShaders.ts",
+      "size": 16463
+    },
+    {
+      "id": "src/ui/processing/ToolDialog.ts",
+      "size": 16375
+    },
+    {
+      "id": "src/ui/properties/PropertiesPanel.ts",
+      "size": 15641
+    },
+    {
+      "id": "src/tools/areaTools.ts",
+      "size": 15607
+    },
+    {
+      "id": "src/render/webgpu/styledShaders.ts",
+      "size": 14841
+    },
+    {
+      "id": "src/tools/curveTools.ts",
+      "size": 14760
+    },
+    {
+      "id": "src/tools/modifyTools.ts",
+      "size": 14581
+    },
+    {
+      "id": "src/tools/cornerTools.ts",
+      "size": 13654
+    },
+    {
+      "id": "src/app/commands.ts",
+      "size": 13590
+    },
+    {
+      "id": "src/style/compile.ts",
+      "size": 12826
+    },
+    {
+      "id": "src/model/geom/arrangement.ts",
+      "size": 12126
+    },
+    {
+      "id": "src/render/webgl2/styledRenderer.ts",
+      "size": 12111
+    },
+    {
+      "id": "src/ui/processing/paramFields.ts",
+      "size": 11523
+    },
+    {
+      "id": "src/render/styledSink.ts",
+      "size": 11496
+    },
+    {
+      "id": "src/model/sampleProject.ts",
+      "size": 11442
+    },
+    {
+      "id": "src/style/system/mpyy/ortak/02-sit.ts",
+      "size": 11162
+    },
+    {
+      "id": "src/style/file.ts",
+      "size": 10899
+    },
+    {
+      "id": "src/tools/shapeTools.ts",
+      "size": 10793
+    },
+    {
+      "id": "src/viewport/picking.ts",
+      "size": 10772
+    },
+    {
+      "id": "src/viewport/overlay.ts",
+      "size": 10521
+    },
+    {
+      "id": "src/style/system/mpyy/ortak/01-sinirlar.ts",
+      "size": 10490
+    }
+  ],
+  "fileCount": 14
+}
