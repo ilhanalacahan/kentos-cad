@@ -94,7 +94,7 @@ Her katmanın ortak alanları: `enabled` (ifadeyle de olabilir), `opacity`, `uni
 
 | Tür | Özellikler |
 |---|---|
-| `shape` | `shape`: circle, square, rectangle, diamond, triangle, pentagon, hexagon, octagon, star, cross (+), x, line (—), arrow, arrowhead, semicircle, quartercircle, ring; `size`, `width`/`height` (dikdörtgen), `fill`, `stroke`, `strokeWidth`, `rotation`, `offset`, `anchor` |
+| `shape` | `shape`: circle, square, rectangle, diamond, triangle (eşkenar, ağırlık merkezinde), pentagon, hexagon, octagon, star, cross (+), x, line (—), arrow, arrowhead, chevron (açık V), semicircle, quartercircle, ring; dışbükey şekillerin kalın çerçevesi sivri köşelidir; `size`, `width`/`height` (dikdörtgen), `fill`, `stroke`, `strokeWidth`, `rotation`, `offset`, `anchor` |
 | `svg` | `asset` (kitaplıktaki SVG), `size`, `rotation`, `offset`, `anchor`; SVG içindeki `param(fill)`/`param(stroke)` renkleri sembolden verilir (tek SVG farklı renklerle kullanılır) |
 | `text` | `text` (sabit ya da ifade: `Parsel`, `'E=' \|\| Emsal`), `font` (ui, serif, mono), `weight`, `italic`, `size`, `color`, `halo`, `rotation`, `offset`, `anchor` |
 | `raster` | `asset` (PNG/JPEG), `size`, `rotation`, `offset`, `opacity` |
@@ -103,8 +103,8 @@ Her katmanın ortak alanları: `enabled` (ifadeyle de olabilir), `opacity`, `uni
 
 | Tür | Özellikler |
 |---|---|
-| `simpleLine` | `color`, `width`, `dash` (açık/kapalı uzunluklar dizisi), `dashOffset`, `cap` (butt, round, square), `join` (miter, round, bevel), `offset` (paralel kaydırma; çizgide sol artı, alan kenarında içe artı) |
-| `markerLine` | `marker` (işaret sembolü), `placement` (interval, vertex, innerVertex, first, last, center, segmentCenter), `interval`, `offsetAlong` (ilk işaretin başa uzaklığı), `offset` (dik kaydırma), `rotate` (çizgiyle dönsün mü) |
+| `simpleLine` | `color`, `width`, `dash` (açık/kapalı uzunluklar dizisi), `dashOffset`, `cap` (butt, round, square), `join` (miter, round, bevel), `offset` (paralel kaydırma; çizgide sol artı, alan kenarında içe artı; ifadeyle de verilir: yol kenarı `varsayılan([Genişlik], 16) / 2 * 1000 / $ölçek` mm) |
+| `markerLine` | `marker` (işaret sembolü), `placement` (interval, vertex, innerVertex, first, last, center, segmentCenter), `interval`, `offsetAlong` (ilk işaretin başa uzaklığı), `offset` (dik kaydırma, ifadeyle de), `rotate` (çizgiyle dönsün mü; dönen yazı ters okunacağı yerde yarım tur çevrilir, kutusu aynı yanda kalır) |
 
 Tırnaklı (hashed) çizgi, `line` şekilli ve dönen bir `markerLine`'dır; ayrı tür gerekmez.
 
@@ -173,7 +173,7 @@ LayerRenderer + Entity ─► resolve (hangi sembol takımı) ─► compile (se
   - Uyan takımda nesnenin geometri türüne sembol yoksa ya da başvurulan sembol kitaplıkta yoksa basit görünüş çizilir; nesne sessizce kaybolmaz.
   - Dolgu sembolü olmayan alan, takımın çizgi sembolüyle kenarından çizilir.
   - Tarama nesneleri kendi desenini (`hatchSymbolOf`), ölçüler ince çizgilerini korur; yazılar üst katmandadır.
-- **Derleme (`style/compile.ts`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri CPU'da float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, döşeme), işaret (şekil, SVG, yazı, raster). İfadeler katman kurulumu başına bir kez derlenir (`ExprCache`).
+- **Derleme (`style/compile.ts`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri CPU'da float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, döşeme), işaret (şekil, SVG, yazı, raster). İfadeler katman kurulumu başına bir kez derlenir (`ExprCache`); sembol ifadeleri çizim ölçeğinin paydasını `$ölçek` ile okur. Bir çizgi ya da alan katmanının içindeki işaret sembolünün katmanları kendi alt seviyelerini alır (seviye + j/256): çizici aynı görünüşlü işaretleri bir CAD katmanındaki bütün nesnelerde tek topluda birleştirdiği için, bir nesnenin kâğıt dolgulu çerçevesi başka bir nesnenin çerçevesinin üstündeki işareti örtmez.
 - **GPU toplulukları (`render/styledSink.ts`):** ilkeller stil ve ölçek aralığı anahtarıyla toplanır; sembol düzeyine, sonra türe (dolgu < vuruş < işaret) göre sıralanır.
   - **Vuruş:** her parça bir örnek (`ax, ay, bx, by, dist, uç bayrakları`); kapsül SDF'si, yuvarlak birleşim, uçta düz/yuvarlak/kare kapak. Kesik deseni (en çok 8 değer) gölgelendiricide yol boyu mesafeden hesaplanır; desen dönemi 4 px'in altına inince çizgi, desenin dolu oranıyla soluklaşan düz çizgiye döner (titreşim yok).
   - **Tarama:** üçgen başına ek geometri yok; çizgiler gölgelendiricide yerel orijine göre dünya koordinatından (ya da `px` biriminde ekrandan) üretilir, her yakınlıkta tam. Aralık 3 px'in altına inince taramanın ortalama rengine döner.
