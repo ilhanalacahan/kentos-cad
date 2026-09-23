@@ -46,6 +46,11 @@
   --c-popover: #27303b;
   --c-field: #171c23;
   --c-tooltip: #2f3945;
+  /* Tooltips stay dark in both themes; their ink is set here, not from --c-text. */
+  --c-tooltip-text: #e8edf2;
+  --c-tooltip-text-2: #b7c1cc;
+  --c-tooltip-line: rgba(255, 255, 255, 0.14);
+  --c-tooltip-accent: #f2b632;
 
   --c-line: #2d3641;
   --c-line-soft: rgba(255, 255, 255, 0.045);
@@ -70,6 +75,8 @@
 
   --canvas-bg: #141a21;
   --canvas-fg: #e4eaf0;
+  /* CAD colour 7: black on a light sheet, white on a dark one. */
+  --canvas-ink: #ffffff;
   --canvas-fg-dim: #a3afbc;
   --canvas-grid-minor: #ffffff0a;
   --canvas-grid-major: #ffffff17;
@@ -91,6 +98,11 @@
   --c-popover: #fbfcfd;
   --c-field: #ffffff;
   --c-tooltip: #222a33;
+  /* Tooltips stay dark in both themes; their ink is set here, not from --c-text. */
+  --c-tooltip-text: #e8edf2;
+  --c-tooltip-text-2: #b7c1cc;
+  --c-tooltip-line: rgba(255, 255, 255, 0.14);
+  --c-tooltip-accent: #f2b632;
 
   --c-line: #d3d9df;
   --c-line-soft: rgba(20, 30, 40, 0.06);
@@ -115,6 +127,7 @@
 
   --canvas-bg: #f8f9fa;
   --canvas-fg: #1e2833;
+  --canvas-ink: #000000;
   --canvas-fg-dim: #5e6b78;
   --canvas-grid-minor: #0000000a;
   --canvas-grid-major: #00000017;

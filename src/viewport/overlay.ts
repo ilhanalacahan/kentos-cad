@@ -5,9 +5,10 @@ import { entityGrips, midGripSegment } from '../model/ops/grips';
 import type { Bounds, Vec2 } from '../model/geometry';
 import { layoutDimension } from '../model/geom/dimension';
 import type { LabelStyle } from '../model/layers';
-import type { CanvasPalette } from '../render/color';
+import { resolveColor, type CanvasPalette } from '../render/color';
 import type { ToolCursor } from '../tools/Tool';
 import type { Camera } from './Camera';
+import type { TrackHit } from './objectTracking';
 import { SNAP_LABEL, type SnapHit } from './picking';
 
 /** Screen-space annotation layer drawn with Canvas2D above the GPU canvas. */
@@ -68,7 +69,7 @@ export function drawLabels(
       g.textAlign = 'center';
       g.textBaseline = 'alphabetic';
       const color = e.color ?? layers.get(e.layerId)?.style.color;
-      haloText(g, e.text || formatLength(l.length), 0, 0, color === 'fg' || color === 'fg-dim' || !color ? pal.label : color, pal.labelHalo);
+      haloText(g, e.text || formatLength(l.length), 0, 0, !color || color === 'fg' || color === 'fg-dim' ? pal.label : resolveColor(color, pal), pal.labelHalo);
       g.restore();
       continue;
     }
@@ -351,4 +352,49 @@ export function midGripVisible(e: Entity, index: number, grips: readonly Vec2[],
   const a = cam.worldToScreen(grips[seg]);
   const b = cam.worldToScreen(grips[(seg + 1) % n]);
   return Math.hypot(b.x - a.x, b.y - a.y) >= 28;
+}
+
+/**
+ * Object tracking: acquired points as small crosses, the alignment line(s)
+ * the cursor is locked to (dashed, through the whole view) and a tag with
+ * the distance and angle from the tracked point.
+ */
+export function drawObjectTracking(g: CanvasRenderingContext2D, acquired: readonly Vec2[], track: TrackHit | null, cam: Camera, pal: CanvasPalette, formatLength: (m: number) => string): void {
+  if (!acquired.length) return;
+  g.save();
+  g.strokeStyle = pal.snap;
+  g.lineWidth = 1.5;
+  for (const p of acquired) {
+    const s = cam.worldToScreen(p);
+    const x = Math.round(s.x) + 0.5;
+    const y = Math.round(s.y) + 0.5;
+    g.beginPath();
+    g.moveTo(x - 5, y);
+    g.lineTo(x + 5, y);
+    g.moveTo(x, y - 5);
+    g.lineTo(x, y + 5);
+    g.stroke();
+  }
+  if (track) {
+    g.lineWidth = 1;
+    g.globalAlpha = 0.85;
+    g.setLineDash([3, 4]);
+    for (const l of track.lines) {
+      const o = cam.worldToScreen(l.origin);
+      const r = (l.angle * Math.PI) / 180;
+      g.beginPath();
+      g.moveTo(o.x, o.y);
+      g.lineTo(o.x + Math.cos(r) * 1e4, o.y - Math.sin(r) * 1e4);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    g.globalAlpha = 1;
+    const at = cam.worldToScreen(track.point);
+    const l = track.lines[0];
+    const text = track.lines.length > 1 ? 'İzleme: kesişim' : `İzleme ${formatLength(Math.hypot(track.point.x - l.origin.x, track.point.y - l.origin.y))} < ${l.angle}°`;
+    g.font = `500 10.5px ${FONT}`;
+    g.textBaseline = 'bottom';
+    haloText(g, text, Math.round(at.x) + 9, Math.round(at.y) - 7, pal.snap, pal.labelHalo);
+  }
+  g.restore();
 }

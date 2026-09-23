@@ -58,7 +58,8 @@ export function explodeEntity(e: Entity, valueText: (length: number) => string):
       return { pieces: segs.map(([a, b]) => ({ kind: 'line', a, b })) };
     }
     case 'circle':
-      return { error: 'Daire patlatılamaz; parçalamak için Kır (B) kullanın.' };
+    case 'ellipse':
+      return { error: `${e.kind === 'circle' ? 'Daire' : 'Elips'} patlatılamaz; parçalamak için Kır (B) kullanın.` };
     default:
       return { error: 'Bu nesne zaten temel bir nesne; patlatılacak bir şey yok.' };
   }

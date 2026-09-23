@@ -1,6 +1,7 @@
 import type { AppContext } from '../app/context';
 import type { Vec2 } from '../model/geometry';
 import type { ViewTransform } from '../viewport/Camera';
+import { parsePointInput } from './coordinateInput';
 import { drawTag } from './preview';
 import type { ToolPointer } from './Tool';
 
@@ -18,7 +19,8 @@ const CAPTURE_PX = 10;
  * ortho (Shift inverts it), then polar tracking to the nearest increment.
  */
 export function constrainPoint(ctx: AppContext, from: Vec2 | null, p: ToolPointer): { point: Vec2; tracking: Tracking | null } {
-  if (!from || p.snap) return { point: p.world, tracking: null };
+  // Object snaps and object tracking are exact; ortho and polar never move them.
+  if (!from || p.snap || p.track) return { point: p.world, tracking: null };
   const dx = p.world.x - from.x;
   const dy = p.world.y - from.y;
   if (ctx.settings.ortho.value !== p.shift) {
@@ -53,4 +55,13 @@ export function drawTracking(g: CanvasRenderingContext2D, view: ViewTransform, t
   g.restore();
   const s = view.worldToScreen(at);
   drawTag(g, { x: s.x - 8, y: s.y - 44 }, [`Kutupsal ${t.angle.toFixed(0)}°`], color, bg);
+}
+
+/**
+ * Typed point input for tools. Like parsePointInput, but while object
+ * tracking holds the cursor on an alignment a bare number is the distance
+ * from the tracked point along that line.
+ */
+export function pointFromText(ctx: AppContext, text: string, last: Vec2 | null, cursor: Vec2 | null): Vec2 | null {
+  return parsePointInput(text, last, cursor, (d) => ctx.view.trackAlong(d));
 }

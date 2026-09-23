@@ -1,4 +1,5 @@
-import type { Entity } from '../entities';
+import { CONSTRUCTION_REACH, type Entity } from '../entities';
+import { isFullEllipse, tessellateEllipse } from '../geom/ellipse';
 import type { Vec2 } from '../geometry';
 import { sweep } from '../geom/arc';
 import { bulgePathEdges } from '../geom/bulge';
@@ -27,6 +28,16 @@ export function entityEdges(e: Entity): Edge[] {
       return [fullCircle(e.c, e.r)];
     case 'arc':
       return [{ kind: 'arc', c: e.c, r: e.r, a0: e.a0, sweep: sweep(e.a0, e.a1) }];
+    case 'ellipse': {
+      // Fine chords for boundaries and nearest points; crossings are refined onto the curve (picking, trim).
+      return pathEdges(tessellateEllipse(e, 256), isFullEllipse(e));
+    }
+    case 'xline':
+    case 'ray': {
+      const r = CONSTRUCTION_REACH;
+      const a = e.kind === 'ray' ? e.p : { x: e.p.x - e.dir.x * r, y: e.p.y - e.dir.y * r };
+      return [{ kind: 'seg', a, b: { x: e.p.x + e.dir.x * r, y: e.p.y + e.dir.y * r } }];
+    }
     default:
       return [];
   }

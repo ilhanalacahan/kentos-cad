@@ -3,9 +3,10 @@ import { watchAll } from '../../core/signal';
 import { ENTITY_KIND_LABEL, HATCH_PATTERN_LABEL, entityArea, entityLength, type Entity, type HatchPatternType } from '../../model/entities';
 import { bearingGrad, dist } from '../../model/geometry';
 import { sweep } from '../../model/geom/arc';
+import { isFullEllipse } from '../../model/geom/ellipse';
 import { Panel } from '../dock/Panel';
 import { h, replaceChildren } from '../dom';
-import { layerSwatch } from '../layers/swatch';
+import { colorSwatch, layerSwatch } from '../layers/swatch';
 import { DRAW_COLORS } from '../toolbar/Toolbar';
 import type { MenuItem } from '../widgets/PopupMenu';
 import { PropertyGrid, type PropRow, type PropSection } from '../widgets/PropertyGrid';
@@ -123,12 +124,12 @@ export class PropertiesPanel extends Panel {
       display: () => {
         if (current === null) return { text: 'Çeşitli' };
         const c = DRAW_COLORS.find((x) => x.value === current);
-        return c ? { text: c.name, swatch: c.value } : { text: 'Katmana göre' };
+        return c ? { text: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette) } : { text: 'Katmana göre' };
       },
       items: () => [
         { label: 'Katmana göre', radio: true, checked: current === undefined, run: () => set(undefined) },
         { kind: 'separator' },
-        ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: c.value, radio: true, checked: current === c.value, run: () => set(c.value) })),
+        ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette), radio: true, checked: current === c.value, run: () => set(c.value) })),
       ],
     };
   }
@@ -208,6 +209,35 @@ export class PropertiesPanel extends Panel {
         );
         break;
       }
+      case 'ellipse': {
+        const d = (rad: number) => ((((rad * 180) / Math.PI) % 360 + 360) % 360).toFixed(4);
+        const a = Math.hypot(e.major.x, e.major.y);
+        const full = isFullEllipse(e);
+        geo.push(
+          num('Merkez Y', e.c.x),
+          num('Merkez X', e.c.y),
+          num('Büyük yarı eksen', a, 'm'),
+          num('Küçük yarı eksen', a * e.ratio, 'm'),
+          { label: 'Eksen açısı', value: d(Math.atan2(e.major.y, e.major.x)), numeric: true, unit: '°' },
+          ...(full
+            ? [num('Çevre', entityLength(e)!, 'm'), ...area(entityArea(e)!)]
+            : [
+                { label: 'Başlangıç parametresi', value: d(e.t0), numeric: true, unit: '°' },
+                { label: 'Bitiş parametresi', value: d(e.t1), numeric: true, unit: '°' },
+                num('Yay uzunluğu', entityLength(e)!, 'm'),
+              ]),
+        );
+        break;
+      }
+      case 'xline':
+      case 'ray':
+        geo.push(
+          num(e.kind === 'ray' ? 'Başlangıç Y' : 'Geçtiği nokta Y', e.p.x),
+          num(e.kind === 'ray' ? 'Başlangıç X' : 'Geçtiği nokta X', e.p.y),
+          { label: 'Doğrultu', value: ((((Math.atan2(e.dir.y, e.dir.x) * 180) / Math.PI) % 360 + 360) % 360).toFixed(4), numeric: true, unit: '°' },
+          { label: 'Semt', value: f.bearing(bearingGrad(e.p, { x: e.p.x + e.dir.x, y: e.p.y + e.dir.y }), false), numeric: true, unit: f.angleUnitLabel },
+        );
+        break;
       case 'spline':
         geo.push(
           { label: 'Nokta sayısı', value: String(e.pts.length), numeric: true },

@@ -148,8 +148,8 @@ Yeni bir ayar ya da durum eklemeden önce **hangi kapsama ait olduğuna** karar 
 |---|---|---|---|---|
 | **Proje ayarları** | `model/projectSettings.ts` → `doc.settings` | Proje dosyası (.kcad) | Projeyi açan herkes | SRID, uzunluk ve alan hassasiyeti, alan birimi, açı birimi, çizim ölçeği, proje adı |
 | **Belge verisi** | `CadDocument`, `LayerStore` | Proje dosyası | Projeyi açan herkes | Varlıklar, katman ağacı ve stilleri, öznitelikler |
-| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)** |
-| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, açık sekme |
+| **Uygulama ayarları** | `app/state.ts` → `ctx.prefs` | `localStorage` `kentos.prefs.v1` | Yalnızca bu kullanıcı, tüm projeler | Tema, yazı boyutu, artı imleç, fare yardımcıları (imleç yanında giriş, bilgi kartı), kenet türleri ve yarıçapları, çizim motoru, **yeni proje varsayılan SRID'si (5256)** |
+| **Çalışma alanı yerleşimi** | `app/state.ts` → `ctx.ui` | `localStorage` `kentos.ui.v1` | Yalnızca bu kullanıcı | Panel genişlikleri, araç kutusu konumu, sütun sayısı ve katlanan grupları, açık sekme |
 | **Oturum durumu** | `DraftingSettings`, `Selection`, `ToolManager`, `Clipboard` | Saklanmaz | Bu oturum | Kenet/Izgara/Orto düğmeleri, seçim, etkin araç, pano |
 
 Kurallar:
@@ -190,7 +190,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 
 ### 4.7 Araçlar (`tools/`)
 
-- **`tools/catalog.ts`:** tek bildirimsel liste. Her araç bir kimlik, etiket, simge, grup, kısayol, takma adlar, açıklama ve `create(ctx)` içerir. Araç kutusu, menüler, kısayollar ve komut satırı bu listeden üretilir.
+- **`tools/catalog.ts`:** tek bildirimsel liste. Her araç bir kimlik, etiket, simge, grup (`select | draw | annotate | transform | modify | map`), kısayol, takma adlar, açıklama, **fareyle kullanım adımları** (`steps`) ve `create(ctx)` içerir. Araç kutusu, menüler, kısayollar, ipuçları ve komut satırı bu listeden üretilir. Yeni araç `steps` olmadan eklenmez: kullanıcı aracı fareyle nasıl kullanacağını ipucundan öğrenir.
 - **Henüz yapılmamış araçlar** `create` vermez; `PendingTool` olur, `ready: false` görünür ve ipucunda "Geliştirme aşamasında" yazar.
 - **`Tool` sözleşmesi** (`tools/Tool.ts`):
   - `pointerDown/Move/Up`
@@ -206,7 +206,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 
   | Aile | Dosya | Akış |
   |---|---|---|
-  | `PointInputTool` | `tools/drawTools.ts`, `tools/curveTools.ts`, `tools/annotateTools.ts` | Nokta dizisi: çizgi, çoklu çizgi (Y ile teğet yay parçası, D ile düz), alan, dikdörtgen, nokta, ölçüm, parsel; daire (merkez, 2N, 3N, TTY), yay (üç nokta, M ile merkezden), eğri; yazı (konum → açı → metin), ölçü (iki nokta → ölçü çizgisi) |
+  | `PointInputTool` | `tools/drawTools.ts`, `tools/curveTools.ts`, `tools/shapeTools.ts`, `tools/annotateTools.ts` | Nokta dizisi: çizgi (G geri, K kapat), çoklu çizgi (Y teğet yay parçası, D düz), alan, nokta, ölçüm, parsel; dikdörtgen (köşe yuvarla/pah, döndür, boyutlar), döndürülmüş dikdörtgen (kenar → genişlik), düzgün çokgen (içten, dıştan, kenardan); daire (merkez-yarıçap/çap, 2N, 3N, TTY), yay (AutoCAD'in tüm yöntemleri, bkz. §10), eğri; yazı, ölçü |
   | Tek tık | `tools/annotateTools.ts` | Tarama: tıklanan noktayı içeren en küçük kapalı şekli (`view.enclosingRing`) desenle doldurur |
   | `SelectionFirstTool` | `tools/modifyTools.ts` | Seçim yoksa önce seçtirir, Enter ile aşamalara geçer, sonucu **afin dönüşümle** uygular: taşı, kopyala, döndür, ölçekle, aynala, dizi |
   | `SelectionActionTool` | `tools/editTools.ts` | Seçim varsa hemen çalışır, yoksa seçtirip Enter bekler: birleştir, patlat |
@@ -215,12 +215,23 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 
 - **Katalog dışı araçlar** (`ctx.tools.run(tool, label)`): içeriği o anki duruma bağlı olan araçlar (ör. panodaki nesnelerle `PasteTool`) katalogda durmaz, "son komutu yinele"ye girmez.
 
-- **İmleç kısıtlaması** tek yerdedir (`tools/tracking.ts` → `constrainPoint`). Öncelik sırası: nesne keneti, orto (Shift tersine çevirir), kutupsal izleme (F10, adım `prefs.polarIncrement`). Kutupsal kilit ışına 10 px yaklaşınca devreye girer.
+- **İmleç kısıtlaması** tek yerdedir (`tools/tracking.ts` → `constrainPoint`). Öncelik sırası: nesne keneti, nesne izleme, orto (Shift tersine çevirir), kutupsal izleme (F10, adım `prefs.polarIncrement`). Kutupsal kilit ışına 10 px yaklaşınca devreye girer.
+- **Nesne izleme** (`viewport/objectTracking.ts`, saf ve testli; `settings.tracking`, Shift+F3, durum çubuğunda "İzleme"): nokta bekleyen bir komutta uç, orta, merkez, düğüm, çeyrek ya da kesişim keneti üzerinde 350 ms beklemek o noktayı izleme noktası yapar (yeşil artı, en çok 3). Aynı noktada tekrar beklemek bırakır. İmleç bir izleme noktasının yatay/dikey hizasına (kutupsal açıksa açı adımlarına) 8 px yaklaşınca kilitlenir. İki hizanın kesişimi tek hizadan önce gelir; aracın son noktası (`snapFrom`) yalnızca kesişimlere katılır. Eksen yönleri tam değerle hesaplanır, böylece "tam üstü" aynı X'i verir. Kenet varken izleme uygulanmaz. İzleme varken yazılan tek sayı izleme noktasından hiza boyunca mesafedir: araçlar yazılan noktayı `pointFromText` ile çözer (`parsePointInput` + `view.trackAlong`). İzleme noktaları komut değişince silinir.
+- **`ToolPointer.track`:** kilitlenilen hiza. `world` önceliği `snap → track → raw`'dır.
 - **Tutamaçla düzenleme** (seçim aracı): seçili ve kilitsiz bir nesnenin tutamacını sürüklemek o noktayı taşır. Tıklayıp bırakmak tutamacı "sıcak" yapar; sonraki tıklama ya da yazılan koordinat yerleştirir, Esc vazgeçer. Kenet ve kutupsal izleme bu sırada çalışır. Tutamaç anlamları `model/ops/grips.ts` içindedir.
 - **Kenar ortası tutamaçları:** çoklu çizgi ve kapalı alanda köşelerden sonra her kenar için bir orta tutamaç gelir (içi boş baklava). Düz kenarda sürüklemek oraya yeni köşe ekler, yay kenarında yayı sürüklenen noktadan geçecek biçimde büker. Ekranda 28 px'ten kısa kenarlarda gösterilmez (`midGripVisible`).
 - **Pano:** `Ctrl+C` seçimi `ctx.clipboard`'a derin kopya olarak alır; taban noktası sınır kutusunun sol alt köşesidir. `Ctrl+V` bu köşeyi imlece bağlayıp tıklanan yere koyar, `Ctrl+Shift+V` özgün koordinatlara yapıştırır. `Ctrl+X` kopyalayıp siler. Nesne katmanı yoksa ya da kilitliyse etkin katmana yapıştırılır.
 - **Yerinde yazı düzenleme:** Seçim aracında yazı ya da ölçüye çift tıklamak `view.requestTextEdit(id)` çağırır. Asıl düzenleyici arayüz katmanındadır (`ui/shell/InlineTextEditor.ts`), çünkü araçlar DOM'a dokunmaz. Düzenleyici yazının üstüne aynı boyut ve açıyla oturur; düzenlenen yazı üst katmanda gizlenir (`view.setEditing`).
-- **Yazılı seçenekler** aşamaya göre değişir: sayı (açı, faktör, mesafe, yarıçap, satır/sütun), harf (`K` kopya, `S` kaynağı sil, `K` kapat, `G` geri). Seçenekler istem metninde köşeli parantezle gösterilir.
+- **Yazılı seçenekler** aşamaya göre değişir: sayı (açı, faktör, mesafe, yarıçap, satır/sütun), harf (`K` kopya, `S` kaynağı sil, `K` kapat, `G` geri).
+- **İstem düzeni (bağlayıcı):** `Araç: adım [Seçenek (TUŞ) / Seçenek (TUŞ): değer; not]`. `ui/promptOptions.ts` bunu ayrıştırır ve her seçeneği komut şeridinde (çizim alanının üstü) ve komut satırında **düğmeye** çevirir; düğme, tuşu yazmakla aynı işi yapar (`tool.input(TUŞ)`, `Enter` → onay, `Esc` → iptal). Köşeli parantez içinde `(TUŞ)` taşımayan parçalar not olarak gösterilir. Bölücüler ` / ` ve `;`'dür; bu yüzden değerlerin içinde bu karakterler kullanılmaz. Fareyle ulaşılamayan bir seçenek yazılmaz.
+- **Fare önce gelir:** her araç yalnızca fareyle tamamlanabilmelidir. Sayı gerektiren yerlerde fareyle gösterme yolu sunulur (ör. köşe yuvarlamada yarıçap imleç çekilerek, ötelemede "Noktadan geç"), yazılan değer yalnızca kesinlik içindir.
+- **Sağ tuş (zamana duyarlı, `ViewportController.onRightDown/onRightUp`):** kısa sağ tık çalışan komutta Enter'dır, seçim aracında bağlam menüsünü açar. 300 ms basılı tutmak komut menüsünü açar (onayla, iptal, istemdeki seçenekler, tek seferlik kenet, orto, kutupsal). Shift+sağ tık doğrudan kenet menüsünü açar. Tarayıcının `contextmenu` olayı yalnızca engellenir; zamanlaması işletim sistemine göre değiştiği için kullanılmaz. Menüleri `ui/shell/viewportMenus.ts` kurar (`contextmenu` olayı `kind: 'select' | 'command' | 'snap'` taşır).
+- **Tek seferlik kenet:** `view.snapOverride` bir sonraki sol tıklamada yalnızca seçilen türe kenetler (F3 kapalı olsa bile) ve tıklamadan sonra kendiliğinden temizlenir. Komut şeridi bunu "Sonraki tık: …" etiketiyle gösterir. Kenet menülerinde her tür, çizimdeki işaretiyle aynı biçimde çizilmiş bir simge taşır (`ui/icons.ts` → `snapEndpoint` …).
+- **İmleç yanında değer girişi** (`ui/shell/CursorInput.ts`, `prefs.cursorInput`): komut çalışırken ve fare çizim alanındayken rakam, `@` ya da `.` basılırsa alan imlecin yanında açılır; metni komut satırıyla aynı yoldan (`tool.input`) gönderir. Kapalıyken ya da fare çizim alanı dışındayken komut satırı kullanılır.
+- **Bilgi kartı** (`ui/shell/HoverCard.ts`, `prefs.hoverInfo`): seçim aracında bir nesnenin üzerinde 500 ms durunca tür, katman, ada/mahalle/nitelik, tapu alanı ile hesaplanan alan, uzunluk ya da yarıçap gösterilir.
+- **Tutamaç menüsü:** seçili çoklu çizgi ya da alanın köşe tutamacına sağ tık "Köşeyi sil", kenar ortası tutamacına sağ tık "Ortasına köşe ekle" ve "Yaya dönüştür" ya da "Düz kenar yap" sunar.
+- **Seçim isteyen araçlar** (`SelectionFirstTool` ve alt aileleri) seçim aşamasında tıklamayla tek tek ve sürüklemeyle pencere/kesişim seçimi kabul eder; sağ tık seçimi onaylar.
+- **Köşe yuvarla ve pah** (`tools/cornerTools.ts`): imleç bir köşeye (çoklu çizgi köşesi ya da iki çizginin birleştiği uç) 12 px yaklaşınca köşe halkayla işaretlenir. Tıklayınca köşe kilitlenir; imleç bir kenar boyunca çekildikçe teğet/kesim mesafesi canlı büyür (yakınlığa göre yuvarlanmış adımla), ikinci tık uygular. Yazılan değer tam uygular, sağ tık son değeri kullanır. Birleşmeyen iki çizgide sırayla iki çizgiye tıklanır.
 - **Semantik:**
 
   | Tuş | Davranış |
@@ -246,7 +257,9 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
   - `attrs { ids }`: yalnızca öznitelik değişti; tampon kurulmaz, etiket ve panel yenilenir.
 - **`load()`:** geçmiş tutmadan toplu yükleme yapar (dosya açma).
-- **`Entity`:** türler `point | line | polyline | polygon | circle | arc | spline | text | dimension | hatch`.
+- **`Entity`:** türler `point | line | polyline | polygon | circle | arc | ellipse | spline | xline | ray | text | dimension | hatch`.
+  - `ellipse`: DXF ELLIPSE biçimi: merkez `c`, büyük eksen vektörü `major`, küçük/büyük `ratio`, parametreler `t0 → t1` (saat yönünün tersine; eşitse tam elips). Nokta `c + major·cos t + minor·sin t`. Budama, kırma ve uzatma parametre uzayında yapılır, parçalar eliptik yay kalır. Öteleme (matematikte elips değildir) gerçek öteleme noktalarından sık bir çoklu çizgi verir.
+  - `xline` / `ray`: taban noktası `p` ve birim yön `dir`; iki yöne ya da tek yöne sonsuz yardımcı çizgi. Tümünü göster ve sınır kutusu yalnızca `p`'yi sayar; pencere seçimi (tamamen içeride) onları hiç seçmez, kesişim seçimi seçer. Budama ve kırma AutoCAD gibi ışın ya da çizgi parçası üretir.
   - `spline`: geçiş noktalarından merkezcil Catmull-Rom eğrisi (`pts`, `closed`); benzerlik dönüşümlerinde tam doğrudur.
   - `dimension`: hizalı ölçü (`a`, `b`, işaretli `offset`, yazı yüksekliği `height`, isteğe bağlı `text`). Boş `text` ölçülen değeri proje birimiyle gösterir; aralıklar ve ölçü uçları yazı yüksekliğinden türetilir.
   - `polyline` / `polygon`: köşeler (`pts`) ve isteğe bağlı `bulges`. `bulges[i] = tan(θ/4)`, `pts[i] → pts[i+1]` kenarının (kapalı alanda son eleman kapanış kenarının) yay açısıdır; pozitif saat yönünün tersidir, 0 düz kenardır. DXF LWPOLYLINE ile birebir aynıdır. Yay yoksa alan hiç yazılmaz. **Geometriyi `doc.update` ile değiştirirken yeni şekilde yay yoksa `bulges: undefined` açıkça verilir**, yoksa eski yaylar birleştirmede kalır. Yaylı bir şeklin halkası `polygonRing(e)`, çevresi `entityOutline(e)` ile alınır; `e.pts` doğrudan dolgu ya da içerik testi için kullanılmaz.
@@ -258,7 +271,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - `events.state` görünürlük, kilit ya da stil değişince etkilenen yaprak kimlikleriyle tetiklenir.
   - `version` sinyali ucuz liste aboneliği içindir.
 - **`LayerStyle`:** çizim motoru ve üst katman katman adını **bilmez**. Her görsel davranış stil alanıdır:
-  - `color`: hex ya da `fg` / `fg-dim` tema jetonu
+  - `color`: hex ya da tema jetonu: `fg` / `fg-dim` (ana ve ikincil mürekkep) ya da `ink` (CAD renk 7, "Siyah": açık zeminde siyah, koyu zeminde beyaz). Jetonlar `render/color.ts` içindeki `resolveColor` ile çözülür; arayüzdeki renk örnekleri `colorSwatch` kullanır, jetonu doğrudan CSS'e yazmaz. Taslak katmanı `ink` ile başlar.
   - `lineType`, `lineWeight` (mm), `fill`
   - `point { symbol, size }`
   - `label` (`LabelStyle`: yerleşim, boyut, şablon, görünür ölçek aralığı)
@@ -278,6 +291,8 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 | `geom/bulge.ts` | Çoklu çizgi yay parçaları: bulge → merkez/yarıçap/işaretli açı, üç noktadan ve teğetten bulge, kenar ortası ve teğeti, kenarlar, çevre, alan (shoelace + daire parçaları), ters çevirme, sıfır uzunluklu kenar temizliği |
 | `geom/intersect.ts` | **`Edge`** (doğru parçası ya da yay/daire) ve kesişimler: parça-parça, parça-yay, yay-yay, ışın-kenar; en yakın nokta, dik ayak. Yay kenarının `sweep`'i **işaretlidir** (negatif = saat yönü), böylece çoklu çizgi yaylarında yol yönü korunur; yay üzerinde olma testi `onEdgeArc` ile yapılır |
 | `geom/offset.ts` | Gönyeli (miter) yol öteleme, keskin köşede pah; yaylı yolda yaylar merkezleri etrafında büyür/küçülür, komşular taşıyıcı doğru/çember kesişiminde birleşir; noktanın hangi tarafta olduğu |
+| `geom/shapes.ts` | Dikdörtgen (kenardan, döndürülmüş köşelerden, boyuttan), düzgün çokgen (içten, dıştan, kenardan), AutoCAD yay yöntemleri (başlangıç-merkez-bitiş/açı/kiriş, başlangıç-bitiş-açı/yön/yarıçap/merkez) |
+| `geom/ellipse.ts` | Elips ve eliptik yay: nokta, türev, parametre (afin dönüşümle birim çembere), yay uzunluğu (Simpson), alan, en yakın parametre (Newton), doğru kesişimi (tam), teğet noktaları (tam), eksenden/merkezden kurulum |
 | `geom/tangentCircle.ts` | İki nesneye teğet, verilen yarıçaplı daire (TTY): paralel doğru ve çemberlerin kesişimleri, tıklanan yerlere en yakın çözüm |
 | `geom/spline.ts` | Merkezcil Catmull-Rom (Barry–Goldman), açık ve kapalı |
 | `geom/hatch.ts` | Tarama çizgilerini halkaya kırpma (tek-çift kuralı, yarı açık tepe kuralı, dünya ızgarasına hizalı, en çok 20 000 çizgi) |
@@ -285,6 +300,7 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 | `ops/edgeLabels.ts` | Kenar ölçüsü yazılarının yeri: kenar ortası, halkanın dışı, okunur açı |
 | `ops/edges.ts` | Nesne → `Edge[]`. **Yeni nesne türü yalnızca kenarlarını vererek** kesişim, budama, uzatma ve kenetlemeye katılır. |
 | `ops/transform.ts` | Her nesne türüne afin dönüşüm. Yazı aynalanınca okunur kalır (MIRRTEXT = 0). |
+| `ops/curveCuts.ts` | Yol olmayan eğriler için budama, kırma, uzatma, öteleme: elips (parametre uzayında, kesimler doğruda tam, yayda alternatif izdüşümle) ve yardımcı çizgiler (parçalar ışın ya da çizgi; kesimler taban noktasından çözülür) |
 | `ops/path.ts` | Nesneyi uzunluk parametreli yol (`s ∈ [0, L]`) olarak görür: noktası, teğeti, en yakın `s`, kesimler, alt yol (yay parçaları tam kesilir), eşit bölme ve aralık parametreleri. Buda, kır ve böl bunu kullanır. |
 | `ops/trim.ts` | Hızlı budama ve uzatma. Kapalı şekiller açılır, daire yaya dönüşür; yayla biten çoklu çizgi kendi çemberi boyunca uzar. |
 | `ops/break.ts`, `ops/join.ts`, `ops/explode.ts`, `ops/stretch.ts`, `ops/vertex.ts` | Kır (iki nokta arası ya da tek noktadan; kapalıda saat yönünün tersine), birleştir (uç toleranslı zincir; kapanırsa alan), patlat (çizgi/yay, eğri → çoklu çizgi, ölçü → çizgi + yazı), esnet (penceredeki köşeler), köşe ekle/sil (yay kenarı aynı çember üzerinde ikiye bölünür) |
@@ -293,6 +309,7 @@ CAD doğruluğunun kaynağıdır. **Saf fonksiyonlardan oluşur, DOM ve belge bi
 - **İşlemler geometri döndürür, belgeyi değiştirmez.** Sonuç `EntityGeometry` ya da `{ error }` olur. Kaydı araç yapar (`doc.transact`); böylece her değişiklik tek adımda geri alınır.
 - **Hata dili kullanıcıya yöneliktir** (`{ error: 'Yarıçap bu çizgiler için çok büyük.' }`). Araç bunu doğrudan `log.warn` ile gösterir.
 - **Toleranslar:** kesişimde parametre toleransı `1e-9`, kesim noktası birleştirmede `1e-7 × L`. Ekran toleransı araçtan `view.worldTolerance(px)` ile gelir; geometri çekirdeğinde piksel yoktur.
+- **Sayısal kararlılık:** yardımcı çizgiler CPU'da `CONSTRUCTION_REACH` (1000 km) yarı uzunluğunda kenar olarak hesaba girer. Bu uzunlukta ikinci derece denklemin diskriminantı basamak kaybeder; bu yüzden `lineCircleParams` merkezden doğruya dikme ayağından çözer, yardımcı çizgi kesimleri uzak uçlardan değil taban noktasından hesaplanır ve doğruyla kesişen eğrilerde nokta doğrunun üzerinden alınır. Yeni bir kesişim yazarken aynı kural geçerlidir: büyük sayıların farkını almayın.
 
 ### 4.9 Çizim hattı (`render/`, `viewport/`)
 
@@ -315,10 +332,12 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
   - Nokta: gölgelendiricide çizilen simgeler (halka, artı, üçgen).
 - **Yerel orijin (RTC):** Dünya koordinatları CPU'da float64 ve mutlaktır. GPU'ya yalnızca `doc.origin`'e göre farklar float32 olarak gider. TM koordinatları 4,4 milyon metreye ulaşır; mutlak float32 santimetre titremesine yol açar. **GPU'ya asla mutlak koordinat yüklemeyin.**
 - **Çizim sırası:** alt katmanlar (ızgara), ağaçtaki yaprak sırasının tersi (listede üstteki en son, yani en üstte çizilir), üst katmanlar (`__hover`, `__sel`). Her geçişte önce dolgular, sonra çizgiler, sonra noktalar çizilir.
+- **Yardımcı çizgiler** (`xline`, `ray`) GPU'ya görünüm alanının üç katı büyüklüğündeki bir kutuya kırpılarak gider (`BuildOptions.clip`); görünüm kutudan çıkınca ya da ölçek iki kattan fazla değişince bu çizgileri içeren katmanlar ve vurgular yeniden kurulur. Böylece GPU'ya hiçbir zaman uzak (float32'de titreyen) koordinat gitmez.
 - **Vurgu ayrı katmandır.** Seçim değişince yalnızca `__sel` ve `__hover` yeniden kurulur, belge katmanlarına dokunulmaz.
 - **`ViewportController`:**
   - `requestRender()` GPU'yu ve üst katmanı, `requestOverlay()` yalnızca 2B üst katmanı çizdirir. İkisi de `requestAnimationFrame` içinde birleştirilir.
   - Olay işleyicisinde asla eşzamanlı çizim yapmayın.
+  - **Tek istisna boyut değişimidir:** canvas'ın `width`/`height` değeri değişince tampon temizlenir ve WebGL bağlamı `alpha: false` olduğu için siyah görünür. Çizim bir sonraki kareye bırakılırsa tarayıcı arada bu siyah tamponu gösterir; panel ayırıcısı sürüklenirken ekran yanıp söner. Bu yüzden `resize()` (ResizeObserver içinde, düzenden sonra ve boyamadan önce çalışır) boyut gerçekten değiştiyse hemen `frame()` çağırır. Duman testi sürükleme sırasında ekran akışını kare kare inceleyerek bunu denetler.
 - **Üst katman** (`viewport/overlay.ts`, Canvas2D) şunları çizer: etiketler (`LabelStyle` ile), tutamaçlar, kenet işareti, artı imleç, ölçek çubuğu, "K" kuzey oku ve araç önizlemeleri. GPU metni (SDF) gelene kadar yazılar buradadır.
 - **`PickIndex`** (`viewport/picking.ts`):
   - Seçme önceliği: nokta ve kenar, sonra imleci içeren en küçük çokgen (bina, parsel, ada sırasıyla).
@@ -472,7 +491,12 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/ops/ops.test.ts` | Nesne dönüşümü, budama (kapalı şekil ve daire dahil), uzatma, öteleme, köşe yuvarlama, tutamaçlar |
 | `model/geom/curves.test.ts` | Eğri, tarama kırpma, ölçü yerleşimi, teğet noktaları, kenar ölçüleri |
 | `model/document.test.ts` | Geri alma ve yineleme, `transact`, katman devralma, proje ayarları, `Formatter` |
+| `model/geom/ellipse.test.ts` | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum |
+| `model/ops/curves2.test.ts` | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme) |
+| `model/geom/shapes.test.ts` | Dikdörtgen ve düzgün çokgen yapıları, yay yöntemleri |
 | `model/geom/bulge.test.ts` | Bulge yardımcıları, teğet devam, ters çevirme, TTY dairesi |
+| `ui/promptOptions.test.ts` | İstem ayrıştırma: araç, adım, seçenekler, değerler, notlar |
+| `viewport/objectTracking.test.ts` | Nesne izleme: tek hiza, kesişim, son noktayla kesişim, kutupsal açılar, hiza boyunca mesafe |
 | `model/ops/edit.test.ts` | Yaylı çoklu çizgide uzunluk/alan/budama/uzatma/öteleme; birleştir, patlat, kır, esnet, köşe ekle/sil, pah ve köşe yuvarlama, bölme |
 | `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
 
@@ -480,7 +504,7 @@ Kurallar:
 
 - `model/geom` ve `model/ops` altındaki her yeni fonksiyon test ile gelir. Sınır durumları (paralel, çakışık, sıfır uzunluk, açı 0/2π geçişi) mutlaka sınanır.
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
-- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano ve geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
+- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile) ve geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme) ve `geo` (CRS arama).
 
@@ -512,6 +536,9 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
    - **Yapıldı:** yay; döndür, ölçekle, aynala, ötele, buda, uzat, köşe yuvarla, dikdörtgen dizi; tutamaçla düzenleme; kutupsal izleme; kesişim, dik, en yakın ve çeyrek kenetleri
    - **Yapıldı (2. aşama):** eğri; hizalı ölçü; tarama (dolu, çizgili, çapraz); yerinde yazı düzenleme; yazı açısı ve yüksekliği; teğet keneti; "Kenar ölçülerini yaz"
    - **Yapıldı (3. aşama, A grubu):** çoklu çizgide yay parçaları (bulge) ve yay kipi; birleştir, patlat (eğri → çoklu çizgi dahil), kır, esnet, köşe ekle/sil ve kenar ortası tutamaçları, pah ve çoklu çizgi köşesinde yuvarlama/pah; böl (eşit parça ve aralık); pano (kes, kopyala, yapıştır, özgün koordinata yapıştır); daire 2N/3N/TTY, merkezden yay
+   - **AutoCAD/Netcad çizim eşdeğerliği (bağlayıcı hedef: çizim kusursuz olmadan başka işe geçilmez):**
+     - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (teğet yay kipi, Geri), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, hizalı ölçü, HATCH; MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, dikdörtgen ARRAY, OFFSET (mesafe, noktadan geç), TRIM, EXTEND, BREAK, JOIN, EXPLODE, FILLET, CHAMFER, tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
+     - *Eksik:* PLINE yay alt seçenekleri (açı, merkez, yön, yarıçap, ikinci nokta), Uzunluk ve kalınlık; CIRCLE TTT; DONUT; REVCLOUD; MTEXT; kutupsal ve yol boyunca ARRAY; LENGTHEN; ALIGN; ROTATE/SCALE referans ve kopya ayrıntıları; yatay/düşey, açı, yarıçap ölçüleri; TRIM/EXTEND için sınır seçme kipi; FILLET/CHAMFER çoklu ve "kırpma yok" seçenekleri.
    - **Sıradaki (B, semboloji):** sembol ve blok kütüphanesi (belgeye tanım kaydı, `insert` türü, ölçek/açı, patlatma); çizgi tipi kütüphanesi (desenli ve sembollü hatlar); Mekânsal Planlar Yapım Yönetmeliği gösterimleri ve lejant
    - **Sonra (C, D):** yatay/düşey, açı ve yarıçap ölçüsü; adalı ve ilişkisel tarama; nokta hesapları (dik ayak, doğrultu-mesafe, otomatik nokta numarası); kutupsal ve yol boyunca dizi; özellik eşle, yön ters çevir, benzerini seç; imleç yanında dinamik giriş kutusu
 2. **Veri modeli:**
@@ -582,17 +609,25 @@ src/
   viewport/                  Kamera, ViewportController, PickIndex, üst katman çizimi
   tools/                     Tool sözleşmesi, ToolManager, katalog, koordinat girişi, imleç kısıtlaması (tracking)
     drawTools.ts             PointInputTool ailesi: çizgi, yol (yay kipiyle), dikdörtgen, nokta, sil
-    curveTools.ts            Yay (üç nokta, merkezden), daire (merkez, 2N, 3N, TTY), eğri
+    curveTools.ts            Yay (tüm AutoCAD yöntemleri), daire (merkez-yarıçap/çap, 2N, 3N, TTY), eğri
+    shapeTools.ts            Dikdörtgen (seçenekleriyle), döndürülmüş dikdörtgen, düzgün çokgen
+    ellipseTool.ts           Elips ve eliptik yay (eksenden, merkezden, döndürmeyle)
+    constructionTools.ts     Yardımcı çizgi (nokta, yatay, düşey, açı, açıortay) ve ışın
     annotateTools.ts         Yazı, ölçü, tarama
     modifyTools.ts           SelectionFirstTool ailesi: taşı, kopyala, döndür, ölçekle, aynala, dizi
     edgeTools.ts             EdgePickTool tabanı: ötele, buda, uzat
-    cornerTools.ts           CornerTool: köşe yuvarla, pah (iki çizgi ya da çoklu çizgi köşesi)
+    cornerTools.ts           CornerTool: köşe yuvarla, pah (köşeye tıkla, imleçle boyut göster)
     pathEditTools.ts         Kır, böl, köşe ekle/sil
     editTools.ts             Birleştir, patlat, esnet, yapıştır
     SelectTool.ts            Seçim (tutamaçla düzenleme dahil), kaydırma, pencere yakınlaştırma
   ui/
     shell/AppShell.ts        Yerleşim ve bölgeler
     shell/InlineTextEditor.ts  Yazı ve ölçü için yerinde düzenleyici
+    shell/CommandBar.ts      Komut şeridi: çalışan komutun adımı, seçenek düğmeleri, tek seferlik kenet, fare hatırlatması
+    shell/CursorInput.ts     İmleç yanında değer girişi (dinamik giriş)
+    shell/HoverCard.ts       Üzerine gelinen nesnenin bilgi kartı
+    shell/viewportMenus.ts   Çizim alanındaki sağ tuş menüleri: boşta, komut, kenet, tutamaç
+    promptOptions.ts         İstem ayrıştırma ve seçenek düğmeleri (komut şeridi ve komut satırı ortak)
     menu/ toolbar/ toolbox/  Menü çubuğu, araç çubuğu, kayan araç kutusu
     dock/ layers/ properties/  Sağ dok, katman ağacı, öznitelik paneli
     bottom/                  Komut satırı ve alt panel (geçmiş, koordinat listesi, uyarılar)

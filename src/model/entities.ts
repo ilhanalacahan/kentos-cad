@@ -1,10 +1,19 @@
 import { centroid, emptyBounds, extendBounds, pathLength, signedArea, type Bounds, type Vec2 } from './geometry';
 import { arcEnd, arcLength, arcMid, arcStart, TAU, tessellateArc } from './geom/arc';
 import { bulgePathLength, bulgePathOutline, bulgeRingArea, hasBulges } from './geom/bulge';
+import { ellipseArea, ellipseLength, ellipsePoint, isFullEllipse, quadrantParams, tessellateEllipse } from './geom/ellipse';
 import { layoutDimension } from './geom/dimension';
 import { catmullRom } from './geom/spline';
 
-export type EntityKind = 'point' | 'line' | 'polyline' | 'polygon' | 'circle' | 'arc' | 'spline' | 'text' | 'dimension' | 'hatch';
+export type EntityKind = 'point' | 'line' | 'polyline' | 'polygon' | 'circle' | 'arc' | 'ellipse' | 'spline' | 'xline' | 'ray' | 'text' | 'dimension' | 'hatch';
+
+/**
+ * Half-length (1000 km) used when an infinite line meets finite geometry on
+ * the CPU. Far beyond any sheet in a TM zone, yet small enough that float64
+ * keeps ~10⁻¹⁰ m at its ends (10⁴ km would already round to 2·10⁻⁹ m).
+ * Rendering clips to the view instead.
+ */
+export const CONSTRUCTION_REACH = 1e6;
 
 interface EntityBase {
   id: number;
@@ -49,6 +58,25 @@ export interface ArcEntity extends EntityBase {
   r: number;
   a0: number;
   a1: number;
+}
+/**
+ * Ellipse or elliptical arc (DXF ELLIPSE): centre, major axis vector,
+ * minor/major ratio and parameters t0 → t1 counter-clockwise; equal
+ * parameters mean the whole ellipse. See model/geom/ellipse.
+ */
+export interface EllipseEntity extends EntityBase {
+  kind: 'ellipse';
+  c: Vec2;
+  major: Vec2;
+  ratio: number;
+  t0: number;
+  t1: number;
+}
+/** Construction line through p (xline: both ways, ray: towards dir only). dir is a unit vector. */
+export interface ConstructionEntity extends EntityBase {
+  kind: 'xline' | 'ray';
+  p: Vec2;
+  dir: Vec2;
 }
 /** Smooth curve through fit points (centripetal Catmull-Rom). */
 export interface SplineEntity extends EntityBase {
@@ -95,6 +123,8 @@ export type Entity =
   | PolylineEntity
   | CircleEntity
   | ArcEntity
+  | EllipseEntity
+  | ConstructionEntity
   | SplineEntity
   | TextEntity
   | DimensionEntity
@@ -110,7 +140,10 @@ export const ENTITY_KIND_LABEL: Record<EntityKind, string> = {
   polygon: 'Kapalı alan',
   circle: 'Daire',
   arc: 'Yay',
+  ellipse: 'Elips',
   spline: 'Eğri',
+  xline: 'Yardımcı çizgi',
+  ray: 'Işın',
   text: 'Yazı',
   dimension: 'Ölçü',
   hatch: 'Tarama',
@@ -146,6 +179,11 @@ export function entityVertices(e: EntityGeometry): Vec2[] {
       return [e.c, { x: e.c.x + e.r, y: e.c.y }, { x: e.c.x, y: e.c.y + e.r }, { x: e.c.x - e.r, y: e.c.y }, { x: e.c.x, y: e.c.y - e.r }];
     case 'arc':
       return [arcStart(e), arcMid(e), arcEnd(e)];
+    case 'ellipse':
+      return [e.c, ...(isFullEllipse(e) ? [] : [ellipsePoint(e, e.t0), ellipsePoint(e, e.t1)]), ...quadrantParams(e).map((t) => ellipsePoint(e, t))];
+    case 'xline':
+    case 'ray':
+      return [e.p];
     case 'spline':
       return e.pts;
     case 'dimension':
@@ -162,6 +200,14 @@ export function entityOutline(e: EntityGeometry, segments = 72): Vec2[] {
       return tessellateCircle(e.c, e.r, segments);
     case 'arc':
       return tessellateArc(e);
+    case 'ellipse':
+      return tessellateEllipse(e, Math.max(64, segments * 2));
+    case 'xline':
+    case 'ray': {
+      // Long enough for any preview; the renderer clips to the view.
+      const r = CONSTRUCTION_REACH;
+      return [e.kind === 'ray' ? e.p : { x: e.p.x - e.dir.x * r, y: e.p.y - e.dir.y * r }, { x: e.p.x + e.dir.x * r, y: e.p.y + e.dir.y * r }];
+    }
     case 'spline':
       return catmullRom(e.pts, e.closed);
     case 'polyline':
@@ -195,7 +241,7 @@ export function textBox(e: { p: Vec2; text: string; height: number; rotation: nu
 
 /** Whether the outline is a closed ring. */
 export const isClosedOutline = (e: EntityGeometry) =>
-  e.kind === 'polygon' || e.kind === 'circle' || e.kind === 'hatch' || (e.kind === 'spline' && e.closed);
+  e.kind === 'polygon' || e.kind === 'circle' || e.kind === 'hatch' || (e.kind === 'spline' && e.closed) || (e.kind === 'ellipse' && isFullEllipse(e));
 
 export function entityBounds(e: Entity): Bounds {
   const b = emptyBounds();
@@ -205,6 +251,11 @@ export function entityBounds(e: Entity): Bounds {
   }
   if (e.kind === 'text') {
     for (const p of textBox(e)) extendBounds(b, p);
+    return b;
+  }
+  if (e.kind === 'xline' || e.kind === 'ray' || e.kind === 'ellipse') {
+    // Construction lines count by their base point only (zoom extents ignores their reach).
+    for (const p of e.kind === 'ellipse' ? tessellateEllipse(e, 256) : [e.p]) extendBounds(b, p);
     return b;
   }
   if (e.kind === 'arc' || e.kind === 'spline' || e.kind === 'dimension' || ((e.kind === 'polyline' || e.kind === 'polygon') && hasBulges(e.bulges))) {
@@ -221,6 +272,7 @@ export function entityAnchor(e: Entity): Vec2 {
     case 'polygon':
       return centroid(polygonRing(e));
     case 'circle':
+    case 'ellipse':
       return e.c;
     case 'arc':
       return arcMid(e);
@@ -251,6 +303,8 @@ export function entityLength(e: Entity): number | null {
       return 2 * Math.PI * e.r;
     case 'arc':
       return arcLength(e);
+    case 'ellipse':
+      return ellipseLength(e);
     case 'spline':
       return pathLength(catmullRom(e.pts, e.closed));
     case 'dimension':
@@ -263,6 +317,7 @@ export function entityLength(e: Entity): number | null {
 export function entityArea(e: Entity): number | null {
   if (e.kind === 'polygon') return Math.abs(bulgeRingArea(e.pts, e.bulges));
   if (e.kind === 'circle') return Math.PI * e.r * e.r;
+  if (e.kind === 'ellipse' && isFullEllipse(e)) return ellipseArea(e);
   if (e.kind === 'hatch') return Math.abs(signedArea(e.ring));
   return null;
 }

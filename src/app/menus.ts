@@ -57,7 +57,7 @@ export const MAIN_MENU: TopMenu[] = [
   {
     id: 'draw',
     label: 'Çizim',
-    items: ['tool.point', 'tool.divide', '-', 'tool.line', 'tool.polyline', 'tool.arc', 'tool.circle', 'tool.rectangle', 'tool.polygon', 'tool.spline', '-', 'tool.text', 'tool.dimension', 'tool.hatch'],
+    items: ['tool.point', 'tool.divide', '-', 'tool.line', 'tool.polyline', 'tool.arc', 'tool.circle', 'tool.ellipse', 'tool.rectangle', 'tool.rectangle3', 'tool.regularPolygon', 'tool.polygon', 'tool.spline', '-', 'tool.xline', 'tool.ray', '-', 'tool.text', 'tool.dimension', 'tool.hatch'],
   },
   {
     id: 'modify',
@@ -103,7 +103,7 @@ export const MAIN_MENU: TopMenu[] = [
   {
     id: 'tools',
     label: 'Araçlar',
-    items: ['commandline.focus', { label: 'Çizim yardımcıları', items: ['draft.snap', 'draft.grid', 'draft.ortho', 'draft.polar'] }, '-', 'help.shortcuts', 'tools.options'],
+    items: ['commandline.focus', { label: 'Çizim yardımcıları', items: ['draft.snap', 'draft.grid', 'draft.ortho', 'draft.polar', 'draft.tracking'] }, '-', 'help.shortcuts', 'tools.options'],
   },
   {
     id: 'help',

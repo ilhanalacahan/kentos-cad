@@ -1,9 +1,9 @@
-import { entityOutline, polygonRing, tessellateCircle, type Entity } from '../model/entities';
+import { entityOutline, isClosedOutline, polygonRing, tessellateCircle, type Entity } from '../model/entities';
 import { tessellateArc } from '../model/geom/arc';
 import { layoutDimension } from '../model/geom/dimension';
 import { hatchLines } from '../model/geom/hatch';
 import { catmullRom } from '../model/geom/spline';
-import type { Vec2 } from '../model/geometry';
+import type { Bounds, Vec2 } from '../model/geometry';
 import type { LayerStyle, LineType } from '../model/layers';
 import { parseHex, resolveColor, withAlpha, type CanvasPalette } from './color';
 import type { LineBatch, PointBatch, RGBA, SceneLayer } from './types';
@@ -94,6 +94,36 @@ export interface BuildOptions {
   overrideFill?: RGBA | null;
   overrideDash?: readonly number[] | null;
   pointStyle?: Pick<PointBatch, 'size' | 'shape'>;
+  /**
+   * World box infinite construction lines are clipped to (a few view sizes
+   * around the camera). Keeps GPU coordinates small; the viewport rebuilds
+   * those layers when the view leaves it.
+   */
+  clip?: Bounds;
+}
+
+/** Part of the line p + dir·t (t ≥ 0 for a ray) inside box r, or null. */
+function clipLine(p: Vec2, dir: Vec2, ray: boolean, r: Bounds): [Vec2, Vec2] | null {
+  let t0 = ray ? 0 : -Infinity;
+  let t1 = Infinity;
+  for (const [pp, d, min, max] of [
+    [p.x, dir.x, r.minX, r.maxX],
+    [p.y, dir.y, r.minY, r.maxY],
+  ]) {
+    if (Math.abs(d) < 1e-15) {
+      if (pp < min || pp > max) return null;
+      continue;
+    }
+    const a = (min - pp) / d;
+    const b = (max - pp) / d;
+    t0 = Math.max(t0, Math.min(a, b));
+    t1 = Math.min(t1, Math.max(a, b));
+  }
+  if (!(t1 > t0)) return null;
+  return [
+    { x: p.x + dir.x * t0, y: p.y + dir.y * t0 },
+    { x: p.x + dir.x * t1, y: p.y + dir.y * t1 },
+  ];
 }
 
 /** Converts entities of one layer (or a highlight set) into GPU-ready batches. */
@@ -129,6 +159,15 @@ export function buildSceneLayer(id: string, entities: readonly Entity[], style: 
       case 'arc':
         b.lines.path(tessellateArc(e), origin, false);
         break;
+      case 'ellipse':
+        b.lines.path(entityOutline(e), origin, isClosedOutline(e));
+        break;
+      case 'xline':
+      case 'ray': {
+        const seg = opts.clip && clipLine(e.p, e.dir, e.kind === 'ray', opts.clip);
+        if (seg) b.lines.path(seg, origin, false);
+        break;
+      }
       case 'spline':
         b.lines.path(catmullRom(e.pts, e.closed), origin, false);
         break;

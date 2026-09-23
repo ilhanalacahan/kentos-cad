@@ -7,6 +7,8 @@ export interface TooltipContent {
   shortcut?: string;
   description?: string;
   note?: string;
+  /** Numbered "how to use" steps (tools). */
+  steps?: readonly string[];
 }
 
 const DELAY = 450;
@@ -36,6 +38,7 @@ function show(target: HTMLElement, content: TooltipContent, placement: 'right' |
     ),
     content.description ? h('div', { class: 'tooltip__desc' }, content.description) : null,
     content.note ? h('div', { class: 'tooltip__note' }, content.note) : null,
+    content.steps?.length ? h('ol', { class: 'tooltip__steps' }, content.steps.map((t) => h('li', null, t))) : null,
   );
   el.dataset.open = '';
   const r = target.getBoundingClientRect();

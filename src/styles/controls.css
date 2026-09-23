@@ -242,7 +242,7 @@
   max-width: 280px;
   padding: 7px 9px 8px;
   background: var(--c-tooltip);
-  color: #e8edf2;
+  color: var(--c-tooltip-text);
   border-radius: 5px;
   box-shadow: var(--shadow-pop);
   font-size: var(--fs-sm);
@@ -264,19 +264,34 @@
 }
 .tooltip .kbd {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #c9d2dc;
+  border-color: var(--c-tooltip-line);
+  color: var(--c-tooltip-text-2);
 }
 .tooltip__desc {
   margin-top: 3px;
-  color: #a9b4c0;
+  color: var(--c-tooltip-text-2);
   font-size: var(--fs-xs);
   line-height: 1.4;
 }
 .tooltip__note {
   margin-top: 4px;
-  color: #f2b632;
+  color: var(--c-tooltip-accent);
   font-size: var(--fs-xs);
+}
+.tooltip__steps {
+  margin: 6px 0 0;
+  padding: 6px 0 0 16px;
+  border-top: 1px solid var(--c-tooltip-line);
+  color: var(--c-tooltip-text);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
+.tooltip__steps li + li {
+  margin-top: 2px;
+}
+.tooltip__steps li::marker {
+  color: var(--c-tooltip-accent);
+  font-weight: 600;
 }
 
 /* ── Splitter ────────────────────────────────────────────────────── */

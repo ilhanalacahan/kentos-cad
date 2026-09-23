@@ -14,6 +14,11 @@ const ICONS = {
   arc: `<path d="M3.5 16A12.5 12.5 0 0 1 16 3.5"/>${grip(3.5, 16)}${grip(16, 3.5)}${grip(7.2, 7.2)}`,
   circle: `<circle cx="10" cy="10" r="6.5"/><path d="M10 10h6.5"/>${grip(10, 10)}`,
   rectangle: `<rect x="3.5" y="5.5" width="13" height="9"/>${grip(3.5, 14.5)}${grip(16.5, 5.5)}`,
+  ellipse: `<ellipse cx="10" cy="10" rx="7.6" ry="4.3" transform="rotate(-28 10 10)"/>${grip(3.3, 13.6)}${grip(16.7, 6.4)}`,
+  xline: `<path d="M1.5 16 18.5 4" stroke-dasharray="3.2 1.6"/>${grip(10, 10)}`,
+  ray: `<path d="M3.5 15.5 18 5.3" stroke-dasharray="3.2 1.6"/><path d="m14.4 5 3.6.3-1.4 3.3"/>${grip(3.5, 15.5)}`,
+  rectangle3: `<path d="M3 12.5 11 4l6.5 6.5-8 8.5z"/>${grip(3, 12.5)}${grip(11, 4)}${grip(9.5, 19)}`,
+  regularPolygon: `<path d="M10 2.8 16.3 6.4v7.2L10 17.2l-6.3-3.6V6.4z"/><circle cx="10" cy="10" r=".9" fill="currentColor"/>${grip(10, 2.8)}`,
   polygon: `<path d="m3.8 8 6-4.5 6.5 3.5-1.8 9H5.6z" fill="currentColor" fill-opacity=".14"/>${grip(3.8, 8)}${grip(9.8, 3.5)}${grip(16.3, 7)}${grip(14.5, 16)}${grip(5.6, 16)}`,
   spline: `<path d="M3 15c2.6-8.5 5.8-8.5 7 0 1.2 8.2 4.5 4 7-9"/>${grip(3, 15)}${grip(17, 6)}`,
   text: '<path d="M4.5 5V3.8h11V5M10 3.8v12.4M7.5 16.2h5"/>',
@@ -43,6 +48,18 @@ const ICONS = {
   spot: '<path d="M10 4 4.8 13h10.4z"/><path d="M3 16.5h14"/><circle cx="10" cy="10" r=".9" fill="currentColor"/>',
   measure: '<path d="M2.8 13.6 13.6 2.8l3.6 3.6L6.4 17.2z"/><path d="m5.9 10.5 1.6 1.6M8.4 8l2.2 2.2M10.9 5.5l1.6 1.6"/>',
   area: '<path d="M3.5 16.5v-13h13v13z" stroke-dasharray="2 1.7"/><path d="M7 13V7h6v6z" fill="currentColor" fill-opacity=".35"/>',
+
+  // Object snaps: the marker (solid) as drawn on the canvas, on its context geometry (dashed).
+  snapEndpoint: '<path d="M3.5 16.5 11 9" stroke-dasharray="2 1.6"/><rect x="10.5" y="3.5" width="6" height="6"/>',
+  snapMidpoint: '<path d="M3 16.5 6.6 13M13.4 7 17 3.5" stroke-dasharray="2 1.6"/><path d="m10 5.8 4 7H6z"/>',
+  snapCenter: '<circle cx="10" cy="10" r="7" stroke-dasharray="2 1.6"/><circle cx="10" cy="10" r="2.8"/>',
+  snapNode: '<circle cx="10" cy="10" r="5"/><path d="m7.2 7.2 5.6 5.6m0-5.6-5.6 5.6"/>',
+  snapQuadrant: '<circle cx="10" cy="11.5" r="6" stroke-dasharray="2 1.6"/><path d="m10 2.2 3.3 3.3L10 8.8 6.7 5.5z"/>',
+  snapIntersection: '<path d="m3 4.5 14 11M3 15.5l14-11" stroke-dasharray="2 1.6"/><path d="m7 7 6 6m0-6-6 6"/>',
+  snapPerpendicular: '<path d="M3 16.5h14" stroke-dasharray="2 1.6"/><path d="M6.5 16.5V5.5M6.5 11.5h5v5"/>',
+  snapTangent: '<circle cx="10" cy="12" r="5"/><path d="M3 6.5h14"/>',
+  snapNearest: '<path d="M3 16.5 17 3.5" stroke-dasharray="2 1.6"/><path d="M6 6h8l-8 8h8z"/>',
+  tracking: '<path d="M2.5 13.5h15M13.5 2.5v15" stroke-dasharray="2 1.7"/><path d="M4.5 11v5M2 13.5h5M11 3.5h5M13.5 1v5"/><circle cx="13.5" cy="13.5" r="1.4" fill="currentColor"/>',
 
   // App chrome
   fileNew: '<path d="M5 2.5h6.5L15 6v11.5H5z"/><path d="M11.5 2.5V6H15M10 9.5v5M7.5 12h5"/>',

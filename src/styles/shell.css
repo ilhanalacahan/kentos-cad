@@ -223,7 +223,7 @@
 
 /* ── Floating toolbox ────────────────────────────────────────────── */
 .toolbox {
-  --cols: 2;
+  --cols: 3;
   --tool: 34px;
   position: absolute;
   top: 0;
@@ -238,8 +238,8 @@
   box-shadow: var(--shadow-float);
   will-change: transform;
 }
-.toolbox[data-columns='1'] {
-  --cols: 1;
+.toolbox[data-columns='2'] {
+  --cols: 2;
 }
 .toolbox[data-dragging] {
   box-shadow: var(--shadow-pop);
@@ -283,21 +283,6 @@
 .toolbox:focus-within .toolbox__hactions {
   opacity: 1;
 }
-.toolbox[data-columns='1'] .toolbox__hactions {
-  position: relative;
-  top: 0;
-  right: 0;
-  z-index: 1;
-  flex-direction: column;
-}
-.toolbox[data-columns='1'] .toolbox__head {
-  height: auto;
-  flex-direction: column;
-  padding-bottom: 2px;
-}
-.toolbox[data-columns='1'] .toolbox__grip {
-  height: 18px;
-}
 .toolbox__hbtn {
   display: grid;
   place-items: center;
@@ -322,15 +307,41 @@
   width: 4px;
 }
 
-.toolbox__section {
+.toolbox__section + .toolbox__section {
+  margin-top: 3px;
+  border-top: 1px solid var(--c-line);
+}
+/* Group title: short, quiet, and a fold toggle. */
+.toolbox__title {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  height: calc(18px * var(--ui-scale));
+  padding: 0 2px;
+  border-radius: 4px;
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.toolbox__title:hover {
+  color: var(--c-text);
+  background: var(--c-hover);
+}
+.toolbox__title .icon {
+  flex: none;
+  transition: transform var(--dur);
+}
+.toolbox__section[data-folded] .toolbox__title .icon {
+  transform: rotate(-90deg);
+}
+.toolbox__grid {
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--tool));
   gap: 2px;
-}
-.toolbox__section + .toolbox__section {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--c-line);
+  padding-bottom: 2px;
 }
 
 .toolbox__tool {
@@ -362,7 +373,6 @@
 .toolbox__tool:focus-visible {
   outline-offset: -1px;
 }
-
 .toolbox__key {
   position: absolute;
   right: 2px;
@@ -389,6 +399,227 @@
   border-radius: 0;
   box-shadow: none;
   background: transparent;
+}
+
+/* ── Command bar (top of the drawing while a command runs) ─────────── */
+.cmdbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 320px);
+  min-height: calc(36px * var(--ui-scale));
+  padding: 5px 8px 5px 12px;
+  transform: translateX(-50%);
+  background: var(--c-panel);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float);
+  color: var(--c-text-2);
+  font-size: var(--fs-md);
+}
+.cmdbar[hidden] {
+  display: none;
+}
+.cmdbar__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.cmdbar__tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--c-accent-text);
+  white-space: nowrap;
+}
+.cmdbar__tool b {
+  color: var(--c-text);
+  font-weight: 600;
+}
+.cmdbar__step {
+  color: var(--c-text);
+}
+.cmdbar__note {
+  margin-left: 8px;
+  color: var(--c-text-3);
+  font-size: var(--fs-sm);
+}
+.cmdbar__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cmdbar__opt,
+.cmdline__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(24px * var(--ui-scale));
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  background: var(--c-field);
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.cmdbar__opt:hover,
+.cmdline__chip:hover {
+  border-color: var(--c-accent-line);
+  background: var(--c-hover);
+}
+.cmdbar__opt:active,
+.cmdline__chip:active {
+  background: var(--c-press);
+}
+.cmdbar__opt-value,
+.cmdline__chip-value {
+  color: var(--c-accent-text);
+}
+.cmdbar__opt-key,
+.cmdline__chip-key {
+  padding: 2px 4px;
+  border-radius: var(--r-xs);
+  background: var(--c-hover);
+  color: var(--c-text-3);
+  font: 600 var(--fs-2xs) / 1 var(--font-ui);
+}
+.cmdbar__snap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(24px * var(--ui-scale));
+  padding: 0 3px 0 8px;
+  border-radius: var(--r-sm);
+  background: var(--c-accent-soft);
+  color: var(--c-accent-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cmdbar__snap[hidden] {
+  display: none;
+}
+.cmdbar__snap-clear {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-xs);
+  color: inherit;
+}
+.cmdbar__snap-clear:hover {
+  background: var(--c-hover);
+}
+.cmdbar__mouse {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  gap: 5px;
+  padding-left: 12px;
+  border-left: 1px solid var(--c-line);
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.cmdbar__btn {
+  margin-left: 4px;
+  padding: 2px 5px;
+  border: 1px solid var(--c-line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-xs);
+  background: var(--c-field);
+  color: var(--c-text-2);
+  font: 500 var(--fs-2xs) / 1 var(--font-ui);
+}
+.cmdbar__btn:first-child {
+  margin-left: 0;
+}
+
+/* ── Cursor input (dynamic input) and hover card ─────────────────── */
+.cursor-input,
+.hover-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 7;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-float);
+}
+.cursor-input[hidden],
+.hover-card[hidden] {
+  display: none;
+}
+.cursor-input {
+  padding: 4px;
+  border-color: var(--c-accent-line);
+}
+.cursor-input__field {
+  width: calc(170px * var(--ui-scale));
+  height: calc(26px * var(--ui-scale));
+  padding: 0 8px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  background: var(--c-field);
+  color: var(--c-text);
+  font: 500 var(--fs-md) / 1 var(--font-mono);
+  outline: none;
+}
+.cursor-input__field:focus {
+  border-color: var(--c-accent);
+}
+.cursor-input__hint {
+  padding: 4px 4px 1px;
+  color: var(--c-text-3);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+}
+.hover-card {
+  min-width: 160px;
+  max-width: 280px;
+  padding: 7px 10px 8px;
+  pointer-events: none;
+  font-size: var(--fs-sm);
+}
+.hover-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--c-text);
+}
+.hover-card__layer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.hover-card__rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--c-line);
+}
+.hover-card__rows dt {
+  color: var(--c-text-3);
+}
+.hover-card__rows dd {
+  margin: 0;
+  color: var(--c-text);
+  text-align: right;
 }
 
 /* ── Bottom: panel + command line ────────────────────────────────── */
@@ -471,12 +702,26 @@
 }
 .cmdline__prompt {
   flex: none;
-  max-width: 55%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 60%;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--c-text-2);
   font-size: var(--fs-sm);
+}
+.cmdline__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmdline__chip {
+  flex: none;
+  height: calc(22px * var(--ui-scale));
+  padding-left: 7px;
+}
+.cmdline__chip:first-of-type {
+  margin-left: 6px;
 }
 .cmdline__prompt b {
   color: var(--c-text);

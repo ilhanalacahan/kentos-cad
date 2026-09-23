@@ -224,10 +224,23 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
     },
 
     // Çizim yardımcıları
-    toggle('draft.snap', 'Kenetleme', settings.snap, { category: 'Çizim yardımcıları', icon: 'snap' }),
+    toggle('draft.snap', 'Kenetleme', settings.snap, {
+      category: 'Çizim yardımcıları',
+      icon: 'snap',
+      description: 'İmleç uç, orta, merkez, kesişim gibi noktalara yapışır. Tek seferlik kenet için Shift + sağ tık.',
+    }),
     toggle('draft.grid', 'Izgara', settings.grid, { category: 'Çizim yardımcıları', icon: 'grid' }),
-    toggle('draft.ortho', 'Orto', settings.ortho, { category: 'Çizim yardımcıları', icon: 'ortho' }),
-    toggle('draft.polar', 'Kutupsal izleme', settings.polar, { category: 'Çizim yardımcıları', icon: 'polar' }),
+    toggle('draft.ortho', 'Orto', settings.ortho, { category: 'Çizim yardımcıları', icon: 'ortho', description: 'Yeni nokta son noktanın tam yatayına ya da dikeyine düşer. Shift basılıyken tersine döner.' }),
+    toggle('draft.polar', 'Kutupsal izleme', settings.polar, {
+      category: 'Çizim yardımcıları',
+      icon: 'polar',
+      description: 'Son noktadan açı adımlarında (ayarlardan, varsayılan 45°) kılavuz çıkar; imleç yaklaşınca yapışır.',
+    }),
+    toggle('draft.tracking', 'Nesne izleme', settings.tracking, {
+      category: 'Çizim yardımcıları',
+      icon: 'tracking',
+      description: 'Bir kenet noktasının üzerinde kısa süre bekleyin: o noktadan yatay ve dikey kılavuzlar çıkar, imleç bu hizalara ve kesişimlerine yapışır.',
+    }),
 
     // Harita / Koordinat / Analiz
     pending(ctx, 'map.contours', 'Eşyükselti üret…', M),

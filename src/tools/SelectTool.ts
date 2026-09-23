@@ -4,10 +4,9 @@ import { dist, type Vec2 } from '../model/geometry';
 import type { Entity } from '../model/entities';
 import { entityGrips, moveGrip } from '../model/ops/grips';
 import type { ViewTransform } from '../viewport/Camera';
-import { drawTag, strokeGeometry, strokePath } from './preview';
+import { drawSelectionBox, drawTag, strokeGeometry, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
-import { parsePointInput } from './coordinateInput';
-import { constrainPoint, drawTracking, type Tracking } from './tracking';
+import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
 const DRAG_THRESHOLD = 4;
 
@@ -167,7 +166,7 @@ export class SelectTool implements Tool {
 
   input(text: string): boolean {
     if (!this.grip) return false;
-    const pt = parsePointInput(text, this.grip.origin, this.gripPoint);
+    const pt = pointFromText(this.ctx, text, this.grip.origin, this.gripPoint);
     if (!pt) return false;
     this.commitGrip(pt);
     return true;
@@ -190,20 +189,7 @@ export class SelectTool implements Tool {
       return;
     }
     if (!this.dragging || !this.start || !this.current) return;
-    const a = this.start.screen;
-    const b = this.current.screen;
-    const crossing = b.x < a.x;
-    const pal = this.ctx.view.palette;
-    const color = crossing ? pal.snap : '#6DB3F2';
-    g.save();
-    g.fillStyle = color;
-    g.globalAlpha = 0.1;
-    g.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-    g.globalAlpha = 1;
-    g.strokeStyle = color;
-    g.setLineDash(crossing ? [5, 4] : []);
-    g.strokeRect(Math.min(a.x, b.x) + 0.5, Math.min(a.y, b.y) + 0.5, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-    g.restore();
+    drawSelectionBox(g, this.start.screen, this.current.screen, this.ctx.view.palette.snap);
   }
 }
 

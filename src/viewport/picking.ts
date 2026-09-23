@@ -3,6 +3,18 @@ import { entityBounds, entityOutline, entityVertices, isClosedOutline, polygonRi
 import { pointInPolygon, signedArea, type Bounds, type Vec2 } from '../model/geometry';
 import { arcEnd, arcMid, arcStart } from '../model/geom/arc';
 import { bulgeArc, bulgeAt, segmentMid } from '../model/geom/bulge';
+import {
+  closestParam,
+  ellipseArea,
+  ellipsePoint,
+  ellipseTangentPoints,
+  insideEllipse,
+  isFullEllipse,
+  lineEllipse,
+  quadrantParams,
+  tessellateEllipse,
+  type EllipseGeom,
+} from '../model/geom/ellipse';
 import { layoutDimension } from '../model/geom/dimension';
 import { closestOnEdge, intersectEdges, onEdgeArc, perpendicularFoot, segSeg, tangentPoints, type Edge } from '../model/geom/intersect';
 import { entityEdges } from '../model/ops/edges';
@@ -67,6 +79,11 @@ export class PickIndex {
     const layers = this.doc.layers;
     for (const e of this.doc.all()) {
       if (!layers.isVisible(e.layerId)) continue;
+      // Infinite lines have no useful bounds; their distance test decides.
+      if (e.kind === 'xline' || e.kind === 'ray') {
+        yield e;
+        continue;
+      }
       const b = this.boundsOf(e);
       if (p.x < b.minX - tol || p.x > b.maxX + tol || p.y < b.minY - tol || p.y > b.maxY + tol) continue;
       yield e;
@@ -78,6 +95,10 @@ export class PickIndex {
     const layers = this.doc.layers;
     for (const e of this.doc.all()) {
       if (e.id === exceptId || !layers.isVisible(e.layerId)) continue;
+      if (e.kind === 'xline' || e.kind === 'ray') {
+        yield e;
+        continue;
+      }
       const b = this.boundsOf(e);
       if (b.maxX < r.minX || b.minX > r.maxX || b.maxY < r.minY || b.minY > r.maxY) continue;
       yield e;
@@ -109,6 +130,9 @@ export class PickIndex {
       } else if (e.kind === 'circle' && Math.hypot(p.x - e.c.x, p.y - e.c.y) < e.r) {
         const a = Math.PI * e.r * e.r;
         if (!area || a < area.a) area = { e, a };
+      } else if (e.kind === 'ellipse' && isFullEllipse(e) && insideEllipse(e, p)) {
+        const a = ellipseArea(e);
+        if (!area || a < area.a) area = { e, a };
       }
     }
     return edge?.e ?? area?.e ?? null;
@@ -135,6 +159,7 @@ export class PickIndex {
       let ring: Vec2[] | null = null;
       if (e.kind === 'polygon') ring = polygonRing(e);
       else if (e.kind === 'circle') ring = entityOutline(e, 96);
+      else if (e.kind === 'ellipse' && isFullEllipse(e)) ring = tessellateEllipse(e, 256);
       else if (e.kind === 'spline' && e.closed) ring = entityOutline(e).slice(0, -1);
       if (!ring || !pointInPolygon(p, ring)) continue;
       const a = Math.abs(signedArea(ring));
@@ -165,9 +190,25 @@ export class PickIndex {
       if (!best || w < best.w) best = { kind, point: q, entityId: id, w };
     };
 
-    const nearby: { id: number; ed: Edge }[] = [];
+    const nearby: { id: number; ed: Edge; ell?: EllipseGeom }[] = [];
     for (const e of this.near(p, tol)) {
       switch (e.kind) {
+        case 'ellipse': {
+          consider('center', e.c, e.id);
+          for (const t of quadrantParams(e)) consider('quadrant', ellipsePoint(e, t), e.id);
+          if (!isFullEllipse(e)) {
+            consider('endpoint', ellipsePoint(e, e.t0), e.id);
+            consider('endpoint', ellipsePoint(e, e.t1), e.id);
+          }
+          // Exact on the curve (its chords only serve crossings).
+          consider('nearest', ellipsePoint(e, closestParam(e, p)), e.id);
+          if (from) {
+            consider('perpendicular', ellipsePoint(e, closestParam(e, from)), e.id);
+            for (const t of ellipseTangentPoints(e, from)) consider('tangent', t, e.id);
+          }
+          for (const ed of entityEdges(e)) if (closestOnEdge(ed, p).d <= tol) nearby.push({ id: e.id, ed, ell: e });
+          continue;
+        }
         case 'point':
         case 'text':
           consider('node', e.p, e.id);
@@ -232,7 +273,7 @@ export class PickIndex {
       for (let i = 0; i < nearby.length; i++)
         for (let j = i + 1; j < nearby.length; j++) {
           if (nearby[i].id === nearby[j].id && sharesVertex(nearby[i].ed, nearby[j].ed)) continue;
-          for (const h of intersectEdges(nearby[i].ed, nearby[j].ed)) consider('intersection', h.p, nearby[i].id);
+          for (const h of intersectEdges(nearby[i].ed, nearby[j].ed)) consider('intersection', refineCrossing(h.p, nearby[i], nearby[j]), nearby[i].id);
         }
     }
     return best ?? nearest;
@@ -245,17 +286,47 @@ export class PickIndex {
     for (const e of this.doc.all()) {
       if (!layers.isVisible(e.layerId)) continue;
       const b = this.boundsOf(e);
-      const inside = b.minX >= r.minX && b.maxX <= r.maxX && b.minY >= r.minY && b.maxY <= r.maxY;
+      // Infinite lines are never "inside" a window (as in AutoCAD); a crossing box catches them.
+      const infinite = e.kind === 'xline' || e.kind === 'ray';
+      const inside = !infinite && b.minX >= r.minX && b.maxX <= r.maxX && b.minY >= r.minY && b.maxY <= r.maxY;
       if (inside) {
         out.push(e.id);
         continue;
       }
       if (!crossing) continue;
-      const overlaps = b.minX <= r.maxX && b.maxX >= r.minX && b.minY <= r.maxY && b.maxY >= r.minY;
+      const overlaps = infinite || (b.minX <= r.maxX && b.maxX >= r.minX && b.minY <= r.maxY && b.maxY >= r.minY);
       if (overlaps && touchesRect(e, r)) out.push(e.id);
     }
     return out;
   }
+}
+
+/**
+ * A crossing found on an ellipse's chords, moved onto the true curves:
+ * exactly for a straight partner, by alternating projection otherwise.
+ */
+function refineCrossing(p: Vec2, a: { ed: Edge; ell?: EllipseGeom }, b: { ed: Edge; ell?: EllipseGeom }): Vec2 {
+  if (!a.ell && !b.ell) return p;
+  const [e, other] = a.ell ? [a, b] : [b, a];
+  const ell = e.ell!;
+  if (!other.ell && other.ed.kind === 'seg') {
+    const s = other.ed;
+    let best: { q: Vec2; d: number } | null = null;
+    for (const h of lineEllipse(ell, s.a, s.b)) {
+      if (h.u < -1e-9 || h.u > 1 + 1e-9) continue;
+      // Taken on the straight partner, so a horizontal line keeps its exact Y.
+      const q = { x: s.a.x + (s.b.x - s.a.x) * h.u, y: s.a.y + (s.b.y - s.a.y) * h.u };
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (!best || d < best.d) best = { q, d };
+    }
+    return best?.q ?? p;
+  }
+  let q = p;
+  for (let k = 0; k < 40; k++) {
+    q = ellipsePoint(ell, closestParam(ell, q));
+    q = other.ell ? ellipsePoint(other.ell, closestParam(other.ell, q)) : closestOnEdge(other.ed, q).p;
+  }
+  return q;
 }
 
 function sharesVertex(a: Edge, b: Edge): boolean {

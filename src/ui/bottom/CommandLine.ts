@@ -6,6 +6,7 @@ import { looksLikeCoordinate } from '../../tools/coordinateInput';
 import { Component } from '../Component';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
+import { optionButtons, parsePrompt } from '../promptOptions';
 
 /**
  * AutoCAD/Netcad-style command line. Accepts command aliases (L, PL,
@@ -55,19 +56,26 @@ export class CommandLine extends Component {
     ctx.keymap.fallback = (e) => {
       if (e.ctrlKey || e.altKey || e.metaKey || e.key.length !== 1) return;
       if (isTextInput(document.activeElement)) return;
-      if (/[\d@.]/.test(e.key)) this.focus();
+      if (!/[\d@.]/.test(e.key)) return;
+      if (this.direct?.accepts()) this.direct.show();
+      else this.focus();
     };
     this.d.add(() => (ctx.keymap.fallback = null));
   }
+
+  /** Field beside the cursor that takes typed values while the mouse is on the drawing. */
+  direct: { accepts(): boolean; show(): void } | null = null;
 
   focus(): void {
     this.input.focus();
   }
 
-  private setPrompt(p: string): void {
-    const i = p.indexOf(':');
-    if (i > 0) replaceChildren(this.prompt, h('b', null, p.slice(0, i)), p.slice(i));
-    else replaceChildren(this.prompt, h('b', null, p));
+  private setPrompt(prompt: string): void {
+    const p = parsePrompt(prompt);
+    if (!p.tool) return replaceChildren(this.prompt, h('b', null, p.step));
+    const notes = p.notes.length ? ` (${p.notes.join('; ')})` : '';
+    // Options are buttons here too; typing their letter still works.
+    replaceChildren(this.prompt, h('span', { class: 'cmdline__text' }, h('b', null, p.tool), `: ${p.step}${notes}`), ...optionButtons(this.ctx, p.options, 'cmdline__chip'));
   }
 
   private suggest(): void {

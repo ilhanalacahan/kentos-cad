@@ -9,7 +9,7 @@ import { DRAW_COLORS, LINE_WEIGHTS } from '../toolbar/Toolbar';
 import { commandButton } from '../widgets/CommandButton';
 import { PopupMenu, type MenuItem } from '../widgets/PopupMenu';
 import { TreeView } from '../widgets/TreeView';
-import { layerSwatch } from './swatch';
+import { colorSwatch, layerSwatch } from './swatch';
 
 /** Layer tree: visibility, lock, colour, active layer, groups, filter. */
 export class LayersPanel extends Panel {
@@ -106,7 +106,7 @@ export class LayersPanel extends Panel {
       { label: 'Ana mürekkep', swatch: this.ctx.view.palette.fg, radio: true, checked: n.style.color === 'fg', run: () => layers.setStyle(n.id, { color: 'fg' }) },
       { label: 'İkincil mürekkep', swatch: this.ctx.view.palette.fgDim, radio: true, checked: n.style.color === 'fg-dim', run: () => layers.setStyle(n.id, { color: 'fg-dim' }) },
       { kind: 'separator' },
-      ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: c.value, radio: true, checked: n.style.color === c.value, run: () => layers.setStyle(n.id, { color: c.value }) })),
+      ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette), radio: true, checked: n.style.color === c.value, run: () => layers.setStyle(n.id, { color: c.value }) })),
     ];
   }
 

@@ -1,185 +1,397 @@
-import { entityGeometry, type Entity, type EntityGeometry, type LineEntity, type PolylineEntity } from '../model/entities';
-import type { Vec2 } from '../model/geometry';
+import { entityGeometry, type Entity, type EntityGeometry, type LineEntity, type NewEntity, type PolylineEntity } from '../model/entities';
+import { dist, type Vec2 } from '../model/geometry';
+import { bulgeAt } from '../model/geom/bulge';
+import { lineLine } from '../model/geom/intersect';
 import { chamferLines, cornerOfPath, filletLines } from '../model/ops/fillet';
 import { nearestSegment } from '../model/ops/vertex';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { EdgePickTool } from './edgeTools';
-import { strokeGeometry, strokePath } from './preview';
+import { drawTag, strokeGeometry, strokePath } from './preview';
 import type { ToolPointer } from './Tool';
 
-// ── Köşe yuvarla, pah ──────────────────────────────────────────────────
+type CornerOp = { radius: number } | { d1: number; d2: number };
 
-type CornerEntity = LineEntity | PolylineEntity;
-interface CornerPick {
-  entity: CornerEntity;
-  pick: Vec2;
-  /** Segment of a polyline that was clicked. */
-  seg: number;
+interface CornerPlan {
+  updates: { entity: Entity; geometry: EntityGeometry }[];
+  /** New piece (fillet arc or chamfer cut) carrying the look of `like`. */
+  add: { like: Entity; geometry: EntityGeometry } | null;
 }
-type CornerPlan =
-  | { kind: 'lines'; l1: { a: Vec2; b: Vec2 }; l2: { a: Vec2; b: Vec2 }; extra: EntityGeometry | null; label: string }
-  | { kind: 'path'; geometry: EntityGeometry; label: string };
 
 /**
- * Two picks make a corner: two lines, or two neighbouring segments of one
- * polyline/polygon (the vertex between them is rounded or cut).
+ * A corner that can be rounded or cut: a polyline/polygon vertex between
+ * two straight segments, or the meeting point of two lines (their
+ * intersection when they do not touch). `u1`/`u2` point along the kept
+ * sides, `reach` is how far the shorter side goes.
+ */
+interface Corner {
+  at: Vec2;
+  u1: Vec2;
+  u2: Vec2;
+  reach: number;
+  /** Angle between the two sides (radians). */
+  phi: number;
+  entities: Entity[];
+  plan(op: CornerOp): CornerPlan | { error: string };
+}
+
+const HOVER_PX = 12;
+const unit = (a: Vec2, b: Vec2) => {
+  const l = dist(a, b) || 1;
+  return { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
+};
+const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.y * b.y;
+const angleBetween = (u: Vec2, v: Vec2) => Math.acos(Math.max(-1, Math.min(1, dot(u, v))));
+
+function pathCorner(e: PolylineEntity, i: number): Corner | null {
+  const n = e.pts.length;
+  const closed = e.kind === 'polygon';
+  if (!closed && (i <= 0 || i >= n - 1)) return null;
+  const iPrev = (i - 1 + n) % n;
+  if (Math.abs(bulgeAt(e.bulges, iPrev)) > 1e-12 || Math.abs(bulgeAt(e.bulges, i)) > 1e-12) return null;
+  const at = e.pts[i];
+  const prev = e.pts[iPrev];
+  const next = e.pts[(i + 1) % n];
+  const u1 = unit(at, prev);
+  const u2 = unit(at, next);
+  const phi = angleBetween(u1, u2);
+  if (phi < 1e-6 || Math.PI - phi < 1e-6) return null;
+  return {
+    at,
+    u1,
+    u2,
+    reach: Math.min(dist(at, prev), dist(at, next)),
+    phi,
+    entities: [e],
+    plan: (op) => {
+      const r = cornerOfPath(e.pts, e.bulges, closed, i, op);
+      if ('error' in r) return r;
+      return { updates: [{ entity: e, geometry: { kind: e.kind, pts: r.pts, ...(r.bulges && { bulges: r.bulges }) } }], add: null };
+    },
+  };
+}
+
+/** Corner of two lines; each keeps the side its pick point is on. */
+function linesCorner(l1: LineEntity, p1: Vec2, l2: LineEntity, p2: Vec2): Corner | null {
+  const hit = lineLine(l1.a, l1.b, l2.a, l2.b);
+  if (!hit) return null;
+  const X = hit.p;
+  const side = (l: LineEntity, pick: Vec2) => {
+    const d = unit(l.a, l.b);
+    const u = dot({ x: pick.x - X.x, y: pick.y - X.y }, d) >= 0 ? d : { x: -d.x, y: -d.y };
+    const reach = Math.max(dot({ x: l.a.x - X.x, y: l.a.y - X.y }, u), dot({ x: l.b.x - X.x, y: l.b.y - X.y }, u));
+    return { u, reach };
+  };
+  const s1 = side(l1, p1);
+  const s2 = side(l2, p2);
+  if (s1.reach <= 1e-9 || s2.reach <= 1e-9) return null;
+  const phi = angleBetween(s1.u, s2.u);
+  if (phi < 1e-6 || Math.PI - phi < 1e-6) return null;
+  return {
+    at: X,
+    u1: s1.u,
+    u2: s2.u,
+    reach: Math.min(s1.reach, s2.reach),
+    phi,
+    entities: [l1, l2],
+    plan: (op) => {
+      const r = 'radius' in op ? filletLines(l1, p1, l2, p2, op.radius) : chamferLines(l1, p1, l2, p2, op.d1, op.d2);
+      if ('error' in r) return r;
+      const extra: EntityGeometry | null = 'arc' in r ? r.arc && { kind: 'arc', ...r.arc } : r.cut && { kind: 'line', ...r.cut };
+      return {
+        updates: [
+          { entity: l1, geometry: { kind: 'line', a: r.line1.a, b: r.line1.b } },
+          { entity: l2, geometry: { kind: 'line', a: r.line2.a, b: r.line2.b } },
+        ],
+        add: extra && { like: l1, geometry: extra },
+      };
+    },
+  };
+}
+
+const farEnd = (l: LineEntity, near: Vec2) => (dist(l.a, near) <= dist(l.b, near) ? l.b : l.a);
+
+/**
+ * Fillet and chamfer. Point at a corner (a polyline vertex, or where two
+ * lines meet), click, then pull the mouse along a side: the rounding or
+ * cut grows live and a second click applies it. A typed value applies
+ * exactly; Enter or right click reuses the last one. Two lines that do
+ * not touch are picked one after the other.
  */
 abstract class CornerTool extends EdgePickTool {
-  protected first: CornerPick | null = null;
+  private stage: 'find' | 'second' | 'size' = 'find';
+  private corner: Corner | null = null;
+  private first: { entity: LineEntity | PolylineEntity; pick: Vec2 } | null = null;
+  private mouse: Vec2 | null = null;
   protected override editable = (e: Entity) => (e.kind === 'line' || e.kind === 'polyline' || e.kind === 'polygon') && !this.ctx.doc.layers.isLocked(e.layerId);
 
-  protected abstract settings(): string;
-  protected abstract title(): string;
-  protected abstract linesPlan(l1: LineEntity, p1: Vec2, l2: LineEntity, p2: Vec2): CornerPlan | { error: string };
-  protected abstract cornerOp(): { radius: number } | { d1: number; d2: number };
-  protected abstract doneMessage(): string;
+  protected abstract readonly title: string;
+  /** Operation for a size pulled out with the mouse (distance t from the corner along a side). */
+  protected abstract opForPull(t: number, c: Corner): CornerOp;
+  /** Parses a typed value; null when not understood. */
+  protected abstract opForText(text: string): CornerOp | null;
+  protected abstract lastOp(): CornerOp | null;
+  protected abstract remember(op: CornerOp): void;
+  protected abstract describe(op: CornerOp): string;
+  protected abstract done(op: CornerOp): string;
+  protected abstract prompts(): { find: string; second: string; size: string };
 
   protected refresh(): void {
-    const t = this.title();
-    this.prompt.set(this.first ? `${t}: ikinci çizgiyi ya da aynı çoklu çizginin komşu kenarını seçin [${this.settings()}]` : `${t}: ilk çizgiyi ya da çoklu çizgi kenarını seçin [${this.settings()}]`);
+    const p = this.prompts();
+    this.prompt.set(`${this.title}: ${this.stage === 'find' ? p.find : this.stage === 'second' ? p.second : p.size}`);
+    this.ctx.view.requestOverlay();
   }
 
-  private pickAt(p: ToolPointer): CornerPick | null {
-    const e = this.ctx.view.pickEdge(p.screen, this.editable) as CornerEntity | null;
-    return e ? { entity: e, pick: p.raw, seg: e.kind === 'line' ? 0 : nearestSegment(e, p.raw) } : null;
-  }
-
-  private plan(second: CornerPick): CornerPlan | { error: string } {
-    const f = this.first!;
-    const a = f.entity;
-    const b = second.entity;
-    if (a.kind === 'line' && b.kind === 'line') {
-      if (a.id === b.id) return { error: 'İkinci çizgi ilkinden farklı olmalı.' };
-      return this.linesPlan(a, f.pick, b, second.pick);
+  /** Nearest corner within reach of the cursor: polyline vertices and shared line ends. */
+  private cornerAt(p: ToolPointer): Corner | null {
+    const { view, doc } = this.ctx;
+    const tol = view.worldTolerance(HOVER_PX);
+    const box = { minX: p.raw.x - tol, minY: p.raw.y - tol, maxX: p.raw.x + tol, maxY: p.raw.y + tol };
+    const near = view
+      .pickRect(box, true)
+      .map((id) => doc.get(id))
+      .filter((e): e is LineEntity | PolylineEntity => !!e && this.editable(e));
+    let best: { c: Corner; d: number } | null = null;
+    const consider = (c: Corner | null) => {
+      if (!c) return;
+      const d = dist(c.at, p.raw);
+      if (d <= tol && (!best || d < best.d)) best = { c, d };
+    };
+    const same = view.worldTolerance(2);
+    for (const e of near) {
+      if (e.kind === 'line') {
+        for (const end of [e.a, e.b]) {
+          if (dist(end, p.raw) > tol) continue;
+          for (const o of near) {
+            if (o === e || o.kind !== 'line') continue;
+            const oEnd = dist(o.a, end) <= same ? o.a : dist(o.b, end) <= same ? o.b : null;
+            if (oEnd) consider(linesCorner(e, farEnd(e, end), o, farEnd(o, oEnd)));
+          }
+        }
+      } else e.pts.forEach((_, i) => dist(e.pts[i], p.raw) <= tol && consider(pathCorner(e, i)));
     }
-    if (a.id !== b.id || a.kind === 'line') return { error: 'Çoklu çizgide köşe için aynı nesnenin iki komşu kenarını seçin.' };
-    const e = a as PolylineEntity;
-    const n = e.pts.length;
-    const closed = e.kind === 'polygon';
-    const [i, j] = [f.seg, second.seg];
-    // Segments i and j meet at the vertex they share.
-    let vertex = -1;
-    if (j === i + 1) vertex = j;
-    else if (i === j + 1) vertex = i;
-    else if (closed && ((i === n - 1 && j === 0) || (j === n - 1 && i === 0))) vertex = 0;
-    if (vertex < 0) return { error: 'Seçilen kenarlar komşu değil; aralarında ortak köşe olan iki kenar seçin.' };
-    const r = cornerOfPath(e.pts, e.bulges, closed, vertex, this.cornerOp());
-    if ('error' in r) return r;
-    return { kind: 'path', geometry: { kind: e.kind, pts: r.pts, ...(r.bulges && { bulges: r.bulges }) }, label: this.title() };
+    return (best as { c: Corner } | null)?.c ?? null;
+  }
+
+  override pointerMove(p: ToolPointer): void {
+    this.mouse = p.raw;
+    if (this.stage === 'size') return this.ctx.view.requestOverlay();
+    if (this.stage === 'find') {
+      this.corner = this.cornerAt(p);
+      if (this.corner) {
+        this.hover = null;
+        this.ctx.selection.hover.set(null);
+        return this.ctx.view.requestOverlay();
+      }
+    }
+    super.pointerMove(p);
   }
 
   pointerDown(p: ToolPointer): void {
     if (p.button !== 0) return;
-    const pick = this.pickAt(p);
-    if (!pick) return this.ctx.log.warn('Düzenlenebilir bir çizgiye ya da çoklu çizgi kenarına tıklayın.');
-    if (!this.first) {
-      this.first = pick;
+    if (this.stage === 'size') return this.commit(this.pulled());
+    if (this.stage === 'find') {
+      const c = this.cornerAt(p);
+      if (c) return this.lock(c);
+    }
+    const e = this.ctx.view.pickEdge(p.screen, this.editable) as LineEntity | PolylineEntity | null;
+    if (!e) return this.ctx.log.warn('Bir köşeye ya da düzenlenebilir bir çizgi veya çoklu çizgi kenarına tıklayın.');
+    if (this.stage === 'find') {
+      this.first = { entity: e, pick: p.raw };
+      this.stage = 'second';
+      this.ctx.selection.hover.set(null);
       return this.refresh();
     }
-    const plan = this.plan(pick);
-    if ('error' in plan) return this.ctx.log.warn(plan.error);
-    const { doc } = this.ctx;
-    doc.transact(plan.label, () => {
-      // The whole geometry is replaced: a shape without arcs must not keep old bulges.
-      if (plan.kind === 'path') doc.update(pick.entity.id, { bulges: undefined, ...plan.geometry } as Partial<Entity>);
-      else {
-        const l1 = this.first!.entity;
-        doc.update(l1.id, { a: plan.l1.a, b: plan.l1.b } as Partial<Entity>);
-        doc.update(pick.entity.id, { a: plan.l2.a, b: plan.l2.b } as Partial<Entity>);
-        if (plan.extra) doc.add(this.inherit(l1, plan.extra, false));
-      }
-    });
-    this.ctx.log.success(this.doneMessage());
+    const c = this.cornerOfPicks(this.first!, { entity: e, pick: p.raw });
+    if ('error' in c) return this.ctx.log.warn(c.error);
+    this.lock(c);
+  }
+
+  private cornerOfPicks(a: { entity: LineEntity | PolylineEntity; pick: Vec2 }, b: { entity: LineEntity | PolylineEntity; pick: Vec2 }): Corner | { error: string } {
+    if (a.entity.kind === 'line' && b.entity.kind === 'line') {
+      if (a.entity.id === b.entity.id) return { error: 'İkinci çizgi ilkinden farklı olmalı.' };
+      return linesCorner(a.entity, a.pick, b.entity, b.pick) ?? { error: 'Çizgiler paralel ya da seçilen tarafta çizgi yok.' };
+    }
+    if (a.entity.id !== b.entity.id || a.entity.kind === 'line') return { error: 'Çoklu çizgide köşe için köşenin kendisine ya da aynı nesnenin iki komşu kenarına tıklayın.' };
+    const e = a.entity as PolylineEntity;
+    const n = e.pts.length;
+    const i = nearestSegment(e, a.pick);
+    const j = nearestSegment(e, b.pick);
+    let v = -1;
+    if (j === i + 1) v = j;
+    else if (i === j + 1) v = i;
+    else if (e.kind === 'polygon' && ((i === n - 1 && j === 0) || (j === n - 1 && i === 0))) v = 0;
+    if (v < 0) return { error: 'Seçilen kenarlar komşu değil; ortak köşesi olan iki kenar seçin.' };
+    return pathCorner(e, v) ?? { error: 'Bu köşenin kenarlarından biri yay; yalnızca düz kenarlar arasındaki köşe işlenebilir.' };
+  }
+
+  private lock(c: Corner): void {
+    this.corner = c;
+    this.stage = 'size';
+    this.hover = null;
+    this.ctx.selection.hover.set(null);
+    this.refresh();
+  }
+
+  /** How far the cursor has been pulled along the nearer side, rounded to a step that suits the zoom. */
+  private pulledDistance(): number {
+    const c = this.corner!;
+    const cur = this.mouse ?? c.at;
+    const v = { x: cur.x - c.at.x, y: cur.y - c.at.y };
+    const t = Math.min(Math.max(dot(v, c.u1), dot(v, c.u2), 0), c.reach);
+    const step = 10 ** Math.floor(Math.log10(Math.max(this.ctx.view.worldTolerance(4), 1e-3)));
+    return Math.min(Math.round(t / step) * step, c.reach);
+  }
+
+  private pulled(): CornerOp {
+    return this.opForPull(this.pulledDistance(), this.corner!);
+  }
+
+  input(text: string): boolean {
+    if (this.stage !== 'size') return false;
+    const op = this.opForText(text);
+    if (!op) return false;
+    this.commit(op);
+    return true;
+  }
+
+  confirm(): void {
+    if (this.stage !== 'size') return this.ctx.tools.exit();
+    const last = this.lastOp();
+    // Two separate lines with no size yet: join them at their intersection.
+    const fallback: CornerOp | null = this.corner!.entities.length === 2 ? this.opForPull(0, this.corner!) : null;
+    const op = last ?? fallback;
+    if (!op) return this.ctx.log.warn('Önce fareyle boyutu gösterip tıklayın ya da bir değer yazın.');
+    this.commit(op);
+  }
+
+  cancel(): boolean {
+    if (this.stage === 'find') return false;
+    this.reset();
+    return true;
+  }
+
+  private reset(): void {
+    this.stage = 'find';
+    this.corner = null;
     this.first = null;
     this.refresh();
   }
 
-  cancel(): boolean {
-    if (!this.first) return false;
-    this.first = null;
-    this.refresh();
-    return true;
+  private commit(op: CornerOp): void {
+    const plan = this.corner!.plan(op);
+    if ('error' in plan) return this.ctx.log.warn(plan.error);
+    const { doc } = this.ctx;
+    doc.transact(this.title, () => {
+      // Whole geometry replaced: a shape without arcs must not keep old bulges.
+      for (const u of plan.updates) doc.update(u.entity.id, { bulges: undefined, ...u.geometry } as Partial<Entity>);
+      if (plan.add) doc.add({ ...plan.add.geometry, layerId: plan.add.like.layerId, color: plan.add.like.color, attrs: {} } as NewEntity);
+    });
+    this.remember(op);
+    this.ctx.log.success(this.done(op));
+    this.reset();
   }
 
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     const pal = this.ctx.view.palette;
-    if (this.first) strokeGeometry(g, view, entityGeometry(this.first.entity), { color: pal.accent, width: 1.5 });
-    const h = this.hover;
-    if (!this.first || !h) return;
-    const e = h.entity as CornerEntity;
-    const plan = this.plan({ entity: e, pick: h.world, seg: e.kind === 'line' ? 0 : nearestSegment(e, h.world) });
+    if (this.stage === 'second' && this.first) {
+      strokeGeometry(g, view, entityGeometry(this.first.entity), { color: pal.accent, width: 2 });
+      return;
+    }
+    const c = this.corner;
+    if (!c) return;
+    for (const e of c.entities) strokeGeometry(g, view, entityGeometry(e), { color: pal.accent, width: 1.5 });
+    const s = view.worldToScreen(c.at);
+    g.save();
+    g.strokeStyle = pal.accent;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(s.x, s.y, 7, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+    if (this.stage === 'find') return drawTag(g, s, ['Köşeyi seçmek için tıklayın'], pal.accent, pal.labelHalo);
+    const t = this.pulledDistance();
+    const op = this.pulled();
+    const plan = c.plan(op);
+    // Where the rounding/cut starts on each side.
+    for (const u of [c.u1, c.u2]) strokePath(g, view, [c.at, { x: c.at.x + u.x * t, y: c.at.y + u.y * t }], { color: pal.snap, width: 2 });
     if ('error' in plan) return;
-    if (plan.kind === 'path') return strokeGeometry(g, view, plan.geometry, { color: pal.accent, dash: [4, 3] });
-    strokePath(g, view, [plan.l1.a, plan.l1.b], { color: pal.accent, dash: [4, 3] });
-    strokePath(g, view, [plan.l2.a, plan.l2.b], { color: pal.accent, dash: [4, 3] });
-    if (plan.extra) strokeGeometry(g, view, plan.extra, { color: pal.accent, dash: [4, 3] });
+    for (const u of plan.updates) strokeGeometry(g, view, u.geometry, { color: pal.accent, dash: [5, 3], width: 2 });
+    if (plan.add) strokeGeometry(g, view, plan.add.geometry, { color: pal.accent, width: 2.5 });
+    if (this.mouse) drawTag(g, view.worldToScreen(this.mouse), [this.describe(op), 'Tıklayın: uygula'], pal.accent, pal.labelHalo);
   }
 }
 
 export class FilletTool extends CornerTool {
   readonly id = 'fillet';
-  private static radius = 0;
+  protected readonly title = 'Köşe yuvarla';
+  private static last: number | null = null;
 
-  protected settings(): string {
-    return `yarıçap ${this.ctx.format.length(FilletTool.radius)}; yeni yarıçap için sayı yazın`;
+  protected prompts() {
+    const f = this.ctx.format;
+    const last = FilletTool.last;
+    return {
+      find: `yuvarlanacak köşeye tıklayın ya da sırayla iki çizgi seçin${last !== null ? ` [son yarıçap ${f.length(last)}]` : ''}`,
+      second: 'ikinci çizgiyi ya da aynı çoklu çizginin komşu kenarını seçin',
+      size: `fareyi kenar boyunca kaydırıp tıklayın ya da yarıçap yazın${last !== null ? ` [Son yarıçap (Enter): ${f.length(last)}]` : ''}`,
+    };
   }
-  protected title(): string {
-    return 'Köşe yuvarla';
+  protected opForPull(t: number, c: Corner): CornerOp {
+    // Pulled distance is where the arc meets the side (tangent length).
+    return { radius: t * Math.tan(c.phi / 2) };
   }
-  protected cornerOp() {
-    return { radius: FilletTool.radius };
-  }
-  protected doneMessage(): string {
-    return FilletTool.radius > 0 ? `Köşe ${this.ctx.format.length(FilletTool.radius)} yarıçapla yuvarlandı.` : 'Köşe birleştirildi.';
-  }
-  protected linesPlan(l1: LineEntity, p1: Vec2, l2: LineEntity, p2: Vec2): CornerPlan | { error: string } {
-    const r = filletLines(l1, p1, l2, p2, FilletTool.radius);
-    if ('error' in r) return r;
-    return { kind: 'lines', l1: r.line1, l2: r.line2, extra: r.arc && { kind: 'arc', ...r.arc }, label: 'Köşe yuvarla' };
-  }
-
-  input(text: string): boolean {
+  protected opForText(text: string): CornerOp | null {
     const n = parseNumber(text);
-    if (n === null || n < 0) return false;
-    FilletTool.radius = n;
-    this.refresh();
-    this.ctx.view.requestOverlay();
-    return true;
+    return n !== null && n >= 0 && !/[,;@<]/.test(text) ? { radius: n } : null;
+  }
+  protected lastOp(): CornerOp | null {
+    return FilletTool.last !== null ? { radius: FilletTool.last } : null;
+  }
+  protected remember(op: CornerOp): void {
+    if ('radius' in op) FilletTool.last = op.radius;
+  }
+  protected describe(op: CornerOp): string {
+    return 'radius' in op ? `Yarıçap ${this.ctx.format.length(op.radius)}` : '';
+  }
+  protected done(op: CornerOp): string {
+    return 'radius' in op && op.radius > 0 ? `Köşe ${this.ctx.format.length(op.radius)} yarıçapla yuvarlandı.` : 'Çizgiler köşede birleştirildi.';
   }
 }
 
 export class ChamferTool extends CornerTool {
   readonly id = 'chamfer';
-  private static d1 = 1;
-  private static d2 = 1;
+  protected readonly title = 'Pah';
+  private static last: { d1: number; d2: number } | null = null;
 
-  protected settings(): string {
+  private text(op: { d1: number; d2: number }): string {
     const f = this.ctx.format;
-    return `mesafeler ${f.length(ChamferTool.d1, false)} / ${f.length(ChamferTool.d2)}; değiştirmek için d ya da d1,d2 yazın`;
+    return op.d1 === op.d2 ? f.length(op.d1) : `${f.length(op.d1, false)} ile ${f.length(op.d2)}`;
   }
-  protected title(): string {
-    return 'Pah';
+  protected prompts() {
+    const last = ChamferTool.last;
+    return {
+      find: `kesilecek köşeye tıklayın ya da sırayla iki çizgi seçin${last ? ` [son mesafe ${this.text(last)}]` : ''}`,
+      second: 'ikinci çizgiyi ya da aynı çoklu çizginin komşu kenarını seçin',
+      size: `fareyi kenar boyunca kaydırıp tıklayın ya da mesafe yazın (d ya da d1,d2)${last ? ` [Son mesafe (Enter): ${this.text(last)}]` : ''}`,
+    };
   }
-  protected cornerOp() {
-    return { d1: ChamferTool.d1, d2: ChamferTool.d2 };
+  protected opForPull(t: number): CornerOp {
+    return { d1: t, d2: t };
   }
-  protected doneMessage(): string {
-    return 'Pah kırıldı.';
-  }
-  protected linesPlan(l1: LineEntity, p1: Vec2, l2: LineEntity, p2: Vec2): CornerPlan | { error: string } {
-    const r = chamferLines(l1, p1, l2, p2, ChamferTool.d1, ChamferTool.d2);
-    if ('error' in r) return r;
-    return { kind: 'lines', l1: r.line1, l2: r.line2, extra: r.cut && { kind: 'line', ...r.cut }, label: 'Pah' };
-  }
-
-  input(text: string): boolean {
+  protected opForText(text: string): CornerOp | null {
     const m = text.trim().match(/^(\d+(?:\.\d+)?)(?:\s*[,;]\s*(\d+(?:\.\d+)?))?$/);
-    if (!m) return false;
-    ChamferTool.d1 = +m[1];
-    ChamferTool.d2 = m[2] !== undefined ? +m[2] : +m[1];
-    this.refresh();
-    this.ctx.view.requestOverlay();
-    return true;
+    return m ? { d1: +m[1], d2: m[2] !== undefined ? +m[2] : +m[1] } : null;
+  }
+  protected lastOp(): CornerOp | null {
+    return ChamferTool.last;
+  }
+  protected remember(op: CornerOp): void {
+    if ('d1' in op) ChamferTool.last = op;
+  }
+  protected describe(op: CornerOp): string {
+    return 'd1' in op ? `Pah ${this.text(op)}` : '';
+  }
+  protected done(op: CornerOp): string {
+    return 'd1' in op && (op.d1 > 0 || op.d2 > 0) ? `Pah kırıldı: ${this.text(op)}.` : 'Çizgiler köşede birleştirildi.';
   }
 }

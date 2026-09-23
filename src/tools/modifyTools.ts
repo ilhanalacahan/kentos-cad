@@ -5,10 +5,10 @@ import { dist, type Vec2 } from '../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../model/geom/affine';
 import { transformEntity } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
-import { parseNumber, parsePointInput } from './coordinateInput';
-import { drawTag, strokeGeometry, strokePath } from './preview';
+import { parseNumber } from './coordinateInput';
+import { drawSelectionBox, drawTag, strokeGeometry, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
-import { constrainPoint, drawTracking, type Tracking } from './tracking';
+import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
 export const MAX_GHOSTS = 400;
 const deg = (rad: number) => (rad * 180) / Math.PI;
@@ -29,6 +29,7 @@ export abstract class SelectionFirstTool implements Tool {
   readonly snaps = true;
   protected picking = true;
   protected hover: Vec2 | null = null;
+  private box: { a: Vec2; aw: Vec2; b: Vec2; bw: Vec2; dragging: boolean } | null = null;
   protected tracking: Tracking | null = null;
   protected readonly ctx: AppContext;
 
@@ -74,16 +75,17 @@ export abstract class SelectionFirstTool implements Tool {
   protected refresh(): void {
     const n = this.ctx.selection.size;
     const hint = this.pickHint();
-    this.prompt.set(`${this.label}: ${this.picking ? `nesneleri seçin, bitince Enter (${n} seçili)${hint ? ` ${hint}` : ''}` : this.stagePrompt()}`);
+    const picking = `nesnelere tıklayın ya da pencereyle seçin, bitince sağ tıklayın (${n} seçili)${hint ? ` ${hint}` : ''}`;
+    this.prompt.set(`${this.label}: ${this.picking ? picking : this.stagePrompt()}`);
     this.ctx.view.requestOverlay();
   }
 
   pointerDown(p: ToolPointer): void {
     if (p.button !== 0) return;
     if (this.picking) {
-      const hit = this.ctx.view.pick(p.screen);
-      if (hit) this.ctx.selection.toggle(hit.id);
-      return this.refresh();
+      // Click toggles one object; dragging draws a window/crossing box (on pointerup).
+      this.box = { a: p.screen, aw: p.raw, b: p.screen, bw: p.raw, dragging: false };
+      return;
     }
     this.point(this.constrain(p));
     this.refresh();
@@ -91,11 +93,36 @@ export abstract class SelectionFirstTool implements Tool {
 
   pointerMove(p: ToolPointer): void {
     if (this.picking) {
+      if (this.box) {
+        this.box.b = p.screen;
+        this.box.bw = p.raw;
+        if (!this.box.dragging && Math.hypot(p.screen.x - this.box.a.x, p.screen.y - this.box.a.y) > 4) {
+          this.box.dragging = true;
+          this.ctx.selection.hover.set(null);
+        }
+        if (this.box.dragging) this.ctx.view.requestOverlay();
+        return;
+      }
       this.ctx.selection.hover.set(this.ctx.view.pick(p.screen)?.id ?? null);
       return;
     }
     this.hover = this.constrain(p);
     this.ctx.view.requestOverlay();
+  }
+
+  pointerUp(p: ToolPointer): void {
+    const box = this.box;
+    if (!this.picking || !box) return;
+    this.box = null;
+    if (box.dragging) {
+      const { aw, bw } = box;
+      const r = { minX: Math.min(aw.x, bw.x), minY: Math.min(aw.y, bw.y), maxX: Math.max(aw.x, bw.x), maxY: Math.max(aw.y, bw.y) };
+      this.ctx.selection.add(this.ctx.view.pickRect(r, box.b.x < box.a.x));
+    } else {
+      const hit = this.ctx.view.pick(p.screen);
+      if (hit) this.ctx.selection.toggle(hit.id);
+    }
+    this.refresh();
   }
 
   private constrain(p: ToolPointer): Vec2 {
@@ -106,7 +133,7 @@ export abstract class SelectionFirstTool implements Tool {
 
   input(text: string): boolean {
     if (this.picking) return false;
-    const pt = parsePointInput(text, this.anchor(), this.hover);
+    const pt = pointFromText(this.ctx, text, this.anchor(), this.hover);
     if (!pt) return false;
     this.point(pt);
     this.refresh();
@@ -148,7 +175,10 @@ export abstract class SelectionFirstTool implements Tool {
   }
 
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    if (this.picking) return;
+    if (this.picking) {
+      if (this.box?.dragging) drawSelectionBox(g, this.box.a, this.box.b, this.ctx.view.palette.snap);
+      return;
+    }
     const pal = this.ctx.view.palette;
     const ms = this.previewTransforms();
     let drawn = 0;

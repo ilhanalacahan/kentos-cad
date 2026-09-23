@@ -1,5 +1,6 @@
 import { entityGeometry, type Entity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
+import { closestParam, ellipsePoint } from '../model/geom/ellipse';
 import { breakEntity } from '../model/ops/break';
 import { divisionParams, nearestS, pathOf, pointAtS, type Path } from '../model/ops/path';
 import { insertVertex, nearestSegment, removeVertex } from '../model/ops/vertex';
@@ -14,10 +15,12 @@ import type { ToolPointer } from './Tool';
 /** Break: pick the object at the first point, then the second point (Enter = split at the first). */
 export class BreakTool extends EdgePickTool {
   readonly id = 'break';
-  override readonly snaps = true;
+  override get snaps(): boolean {
+    return true;
+  }
   private target: { entity: Entity; p1: Vec2 } | null = null;
   private p2: Vec2 | null = null;
-  protected override editable = (e: Entity) => ['line', 'polyline', 'polygon', 'arc', 'circle'].includes(e.kind) && !this.ctx.doc.layers.isLocked(e.layerId);
+  protected override editable = (e: Entity) => ['line', 'polyline', 'polygon', 'arc', 'circle', 'ellipse', 'xline', 'ray'].includes(e.kind) && !this.ctx.doc.layers.isLocked(e.layerId);
 
   protected refresh(): void {
     this.prompt.set(
@@ -101,7 +104,7 @@ export class DivideTool extends EdgePickTool {
   private static step = 10;
   private static byStep = false;
   private target: { entity: Entity; path: Path; fromEnd: boolean } | null = null;
-  protected override editable = (e: Entity) => ['line', 'polyline', 'polygon', 'arc', 'circle', 'spline'].includes(e.kind);
+  protected override editable = (e: Entity) => ['line', 'polyline', 'polygon', 'arc', 'circle', 'ellipse', 'spline'].includes(e.kind);
 
   protected refresh(): void {
     const mode = DivideTool.byStep ? `aralık ${this.ctx.format.length(DivideTool.step)}` : `${DivideTool.parts} parça`;
@@ -153,7 +156,10 @@ export class DivideTool extends EdgePickTool {
     if (!this.target) return [];
     const { path, fromEnd } = this.target;
     const ss = divisionParams(path, DivideTool.byStep ? { step: DivideTool.step } : { parts: DivideTool.parts });
-    return ss.map((s) => pointAtS(path, fromEnd ? path.length - s : s));
+    const pts = ss.map((s) => pointAtS(path, fromEnd ? path.length - s : s));
+    // An ellipse is measured along fine chords; its points are then placed on the true curve.
+    const e = this.target.entity;
+    return e.kind === 'ellipse' ? pts.map((p) => ellipsePoint(e, closestParam(e, p))) : pts;
   }
 
   private commit(): void {

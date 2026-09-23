@@ -2,6 +2,7 @@ import type { AppContext } from '../app/context';
 import type { ReadonlySignal } from '../core/signal';
 import type { Vec2 } from '../model/geometry';
 import type { ViewTransform } from '../viewport/Camera';
+import type { TrackHit } from '../viewport/objectTracking';
 import type { SnapHit } from '../viewport/picking';
 
 export interface ToolPointer {
@@ -12,6 +13,8 @@ export interface ToolPointer {
   /** CSS px inside the viewport. */
   screen: Vec2;
   snap: SnapHit | null;
+  /** Object tracking lock (alignment with acquired points), when no snap applies. */
+  track: TrackHit | null;
   button: number;
   shift: boolean;
   ctrl: boolean;
@@ -53,13 +56,15 @@ export interface Tool {
   draw?(g: CanvasRenderingContext2D, view: ViewTransform): void;
 }
 
-export type ToolGroup = 'select' | 'draw' | 'annotate' | 'modify' | 'map';
+export type ToolGroup = 'select' | 'draw' | 'annotate' | 'transform' | 'modify' | 'map';
 
+/** Short on purpose: these are the toolbox section headings. */
 export const TOOL_GROUP_LABEL: Record<ToolGroup, string> = {
-  select: 'Seçim ve görünüm',
+  select: 'Seçim',
   draw: 'Çizim',
   annotate: 'Açıklama',
-  modify: 'Değiştir',
+  transform: 'Dönüştür',
+  modify: 'Düzenle',
   map: 'Harita',
 };
 
@@ -71,6 +76,8 @@ export interface ToolDescriptor {
   shortcut?: string;
   aliases?: readonly string[];
   description: string;
+  /** Mouse-first "how to use" steps, shown in the toolbox tooltip. */
+  steps?: readonly string[];
   /** False for tools whose behaviour is not built yet. */
   ready: boolean;
   create(ctx: AppContext): Tool;

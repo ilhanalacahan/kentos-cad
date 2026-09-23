@@ -36,6 +36,8 @@ export function registerDefaultKeybindings(ctx: AppContext): void {
   keymap.bind('F7', 'draft.grid', global);
   keymap.bind('F8', 'draft.ortho', global);
   keymap.bind('F10', 'draft.polar', global);
+  // F11 (AutoCAD's key) is the browser's full screen; Shift+F3 sits next to snaps.
+  keymap.bind('Shift+F3', 'draft.tracking', global);
 
   keymap.bind('F1', 'help.shortcuts', global);
   keymap.bind('Ctrl+,', 'tools.options', global);

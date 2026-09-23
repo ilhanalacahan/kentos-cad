@@ -26,8 +26,8 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       label: 'Görünüm',
       icon: 'appearance',
       title: 'Görünüm',
-      lead: 'Tema, yazı boyutu ve çizim alanındaki artı imleç.',
-      keys: ['theme', 'uiScale', 'crosshair'],
+      lead: 'Tema, yazı boyutu, artı imleç ve fare yardımcıları.',
+      keys: ['theme', 'uiScale', 'crosshair', 'cursorInput', 'hoverInfo'],
       render: (api) => appearance(api),
     },
     {
@@ -153,6 +153,19 @@ function appearance(api: DraftApi<AppDraft>) {
           ],
           onChange: (v) => api.set('crosshair', v),
         }),
+      ),
+    ),
+    group(
+      'Fare yardımcıları',
+      settingRow(
+        'İmleç yanında değer girişi',
+        'Komut sırasında yazılan mesafe ve koordinatlar imlecin yanında açılır; kapalıyken komut satırına gider.',
+        toggleSwitch({ label: 'İmleç yanında değer girişi', checked: d.cursorInput, onChange: (v) => api.set('cursorInput', v) }),
+      ),
+      settingRow(
+        'Nesne bilgi kartı',
+        'Seçim aracında bir nesnenin üzerinde durunca türü, katmanı, uzunluğu ya da alanı gösterilir.',
+        toggleSwitch({ label: 'Nesne bilgi kartı', checked: d.hoverInfo, onChange: (v) => api.set('hoverInfo', v) }),
       ),
     ),
   ];

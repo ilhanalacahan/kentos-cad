@@ -1,5 +1,6 @@
 import { apply, applyLinear, isReflection, lengthScale, translation, type Affine } from '../geom/affine';
 import { arcEnd, arcStart, normAngle } from '../geom/arc';
+import { isFullEllipse } from '../geom/ellipse';
 import type { Entity } from '../entities';
 
 const angleOf = (c: { x: number; y: number }, p: { x: number; y: number }) => normAngle(Math.atan2(p.y - c.y, p.x - c.x));
@@ -30,6 +31,18 @@ export function transformEntity<E extends Entity>(e: E, m: Affine): E {
       return isReflection(m)
         ? { ...e, c, r: e.r * s, a0: angleOf(c, end), a1: angleOf(c, start) }
         : { ...e, c, r: e.r * s, a0: angleOf(c, start), a1: angleOf(c, end) };
+    }
+    case 'ellipse': {
+      const major = applyLinear(m, e.major);
+      // A reflection runs the parameter the other way: t → −t keeps the arc counter-clockwise.
+      if (!isReflection(m) || isFullEllipse(e)) return { ...e, c: apply(m, e.c), major };
+      return { ...e, c: apply(m, e.c), major, t0: normAngle(-e.t1), t1: normAngle(-e.t0) };
+    }
+    case 'xline':
+    case 'ray': {
+      const d = applyLinear(m, e.dir);
+      const l = Math.hypot(d.x, d.y) || 1;
+      return { ...e, p: apply(m, e.p), dir: { x: d.x / l, y: d.y / l } };
     }
     case 'spline':
       return { ...e, pts: e.pts.map((p) => apply(m, p)) };

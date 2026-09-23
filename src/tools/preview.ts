@@ -69,3 +69,21 @@ export function strokeGeometry(
   }
   strokePath(g, view, entityOutline(geom, 64), { ...opts, closed: geom.kind === 'polygon' || geom.kind === 'circle' });
 }
+
+/**
+ * Selection box between two screen points: left→right is a window (solid,
+ * blue: fully inside), right→left a crossing (dashed, snap colour: touching).
+ */
+export function drawSelectionBox(g: CanvasRenderingContext2D, a: Vec2, b: Vec2, crossingColor: string): void {
+  const crossing = b.x < a.x;
+  const color = crossing ? crossingColor : '#6DB3F2';
+  g.save();
+  g.fillStyle = color;
+  g.globalAlpha = 0.1;
+  g.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  g.globalAlpha = 1;
+  g.strokeStyle = color;
+  g.setLineDash(crossing ? [5, 4] : []);
+  g.strokeRect(Math.min(a.x, b.x) + 0.5, Math.min(a.y, b.y) + 0.5, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  g.restore();
+}

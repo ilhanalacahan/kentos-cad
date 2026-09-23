@@ -38,6 +38,7 @@ export class StatusBar extends Component {
       this.toggle('draft.grid', 'Izgara'),
       this.toggle('draft.ortho', 'Orto'),
       this.toggle('draft.polar', 'Kutupsal'),
+      this.toggle('draft.tracking', 'İzleme'),
     );
 
     const crs = h('button', { class: 'status__cell status__btn', type: 'button' }, icon('crs', 14), h('span'));
@@ -87,7 +88,7 @@ export class StatusBar extends Component {
     const sync = () => b.setAttribute('aria-pressed', String(!!cmd.isChecked?.()));
     sync();
     if (cmd.watch) this.d.add(watchAll(cmd.watch, sync));
-    this.d.add(tooltip(b, () => ({ title: cmd.title, shortcut: this.ctx.keymap.chordFor(id) }), 'top'));
+    this.d.add(tooltip(b, () => ({ title: cmd.title, shortcut: this.ctx.keymap.chordFor(id), description: cmd.description }), 'top'));
     return b;
   }
 

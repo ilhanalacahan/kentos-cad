@@ -7,6 +7,8 @@ export class DraftingSettings {
   readonly grid = new Signal(true);
   readonly ortho = new Signal(false);
   readonly polar = new Signal(false);
+  /** Object snap tracking: alignment lines from acquired snap points. */
+  readonly tracking = new Signal(true);
   /** Current properties for new entities; null = katmana göre. */
   readonly color = new Signal<string | null>(null);
   readonly lineType = new Signal<LineType | null>(null);
@@ -58,7 +60,9 @@ export interface UiLayoutData {
   toolboxDocked: boolean;
   toolboxX: number;
   toolboxY: number;
-  toolboxColumns: 1 | 2;
+  toolboxColumns: 2 | 3;
+  /** Toolbox groups folded by the user (ToolGroup ids). */
+  toolboxFolded: string[];
 }
 
 const DEFAULTS: UiLayoutData = {
@@ -73,7 +77,8 @@ const DEFAULTS: UiLayoutData = {
   toolboxDocked: false,
   toolboxX: 12,
   toolboxY: 12,
-  toolboxColumns: 2,
+  toolboxColumns: 3,
+  toolboxFolded: [],
 };
 
 export type Signals<T> = { readonly [K in keyof T]: Signal<T[K]> };
@@ -110,7 +115,20 @@ export function persistedSignals<T extends object>(key: string, defaults: T): Si
 }
 
 /** Workspace layout (panel sizes, toolbox position, theme). */
-export const createUiState = () => persistedSignals<UiLayoutData>('kentos.ui.v1', DEFAULTS);
+export function createUiState(): Signals<UiLayoutData> {
+  let legacyToolbox = false;
+  try {
+    const raw = localStorage.getItem('kentos.ui.v1');
+    legacyToolbox = !!raw && !('toolboxFolded' in JSON.parse(raw));
+  } catch {
+    /* ignore */
+  }
+  const state = persistedSignals<UiLayoutData>('kentos.ui.v1', DEFAULTS);
+  // Layouts saved before the titled toolbox groups used one or two columns;
+  // the grouped toolbox is laid out for three.
+  if (legacyToolbox) state.toolboxColumns.set(3);
+  return state;
+}
 export type UiState = Signals<UiLayoutData>;
 
 // ── Application preferences (Uygulama ayarları) ──────────────────────
@@ -142,6 +160,10 @@ export interface PreferencesData {
   rendererPreference: 'webgl2' | 'webgpu';
   /** Render at device pixel ratio; off trades sharpness for fill rate. */
   hiDpi: boolean;
+  /** Typed values open beside the cursor while a command runs (dynamic input). */
+  cursorInput: boolean;
+  /** Resting the mouse on an object shows its kind, layer and measures. */
+  hoverInfo: boolean;
 }
 
 export const PREFERENCE_DEFAULTS: PreferencesData = {
@@ -161,6 +183,8 @@ export const PREFERENCE_DEFAULTS: PreferencesData = {
   uiScale: 'standard',
   rendererPreference: 'webgl2',
   hiDpi: true,
+  cursorInput: true,
+  hoverInfo: true,
 };
 
 export const createPreferences = () => persistedSignals<PreferencesData>('kentos.prefs.v1', PREFERENCE_DEFAULTS);

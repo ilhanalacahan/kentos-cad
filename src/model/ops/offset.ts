@@ -3,6 +3,7 @@ import type { Vec2 } from '../geometry';
 import { hasBulges } from '../geom/bulge';
 import { closestOnEdge } from '../geom/intersect';
 import { offsetBulgePath, offsetPath, sideOf } from '../geom/offset';
+import { offsetConstruction, offsetEllipse } from './curveCuts';
 import { entityEdges } from './edges';
 
 export type OffsetResult = { geometry: EntityGeometry } | { error: string };
@@ -37,8 +38,13 @@ export function offsetEntity(e: Entity, distance: number, through: Vec2): Offset
       if (r <= 1e-9) return { error: 'Yarıçap sıfırın altına düşüyor; daha küçük bir mesafe girin.' };
       return { geometry: e.kind === 'circle' ? { kind: 'circle', c: e.c, r } : { kind: 'arc', c: e.c, r, a0: e.a0, a1: e.a1 } };
     }
+    case 'ellipse':
+      return offsetEllipse(e, distance, through);
+    case 'xline':
+    case 'ray':
+      return offsetConstruction(e, distance, through);
     default:
-      return { error: 'Yalnızca çizgi, çoklu çizgi, kapalı alan, daire ve yay ötelenebilir.' };
+      return { error: 'Yalnızca çizgi, çoklu çizgi, kapalı alan, daire, yay, elips ve yardımcı çizgiler ötelenebilir.' };
   }
 }
 

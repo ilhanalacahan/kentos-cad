@@ -59,6 +59,7 @@ derindir. Yakın siyah değildir, belirgin biçimde mavi-gridir.
 | `--c-ok` / `--c-warn` / `--c-danger` / `--c-info` | `#6fd08c` / `#e9a23b` / `#ef6b61` / `#6db3f2` | Durum renkleri |
 | `--canvas-bg` | `#141a21` | Çizim alanı |
 | `--canvas-fg` / `--canvas-fg-dim` | `#e4eaf0` / `#a3afbc` | "Ana mürekkep" (`fg`) / "ikincil mürekkep" (`fg-dim`) |
+| `--canvas-ink` | `#ffffff` | "Siyah" (`ink`, CAD renk 7): koyu zeminde beyaz çizilir |
 | `--canvas-grid-minor` / `major` | `#ffffff0a` / `#ffffff17` | Izgara |
 | `--canvas-accent` / `--canvas-snap` | `#f2b632` / `#6fd08c` | Seçim / kenet işareti |
 
@@ -74,6 +75,7 @@ Serin, kâğıt paftayı andıran griler. Krem ya da sıcak kâğıt tonu kullan
 | `--c-accent` | `#f0b02a` | Dolgu olarak kullanılır |
 | `--c-accent-text` | `#8f5f00` | Açık zeminde amber **metin** (kontrast için koyulaştırılmış) |
 | `--canvas-bg` / `--canvas-fg` | `#f8f9fa` / `#1e2833` | |
+| `--canvas-ink` | `#000000` | "Siyah" (`ink`): açık zeminde tam siyah |
 | `--canvas-accent` / `--canvas-snap` | `#d08600` / `#1a9a48` | Açık zeminde okunur tonlar |
 
 ### 3.3 Vurgu kuralları
@@ -87,12 +89,14 @@ Serin, kâğıt paftayı andıran griler. Krem ya da sıcak kâğıt tonu kullan
 
 ### 3.4 Katman renkleri (çizim verisi)
 
-- Katman rengi veridir (`LayerStyle.color`). Tema değişince yalnızca `fg` ve `fg-dim` jetonları çözülür; diğer renkler sabittir.
+- Katman rengi veridir (`LayerStyle.color`). Tema değişince yalnızca `fg`, `fg-dim` ve `ink` jetonları çözülür; diğer renkler sabittir.
+- **"Siyah" (`ink`) CAD'deki renk 7'dir:** kâğıtta ve açık temada siyah, koyu temada beyaz çizilir. Saf siyah koyu zeminde görünmez olurdu. Taslak katmanı bu renkle başlar ve renk listelerinde ilk sıradadır.
 - Varsayılan katman renkleri **orta doygunlukta** seçilir ki iki temada da okunsun. Sarı ve beyaz gibi tek temada kaybolan renklerden kaçının.
 - Gelenek korunur:
 
   | Katman | Renk |
   |---|---|
+  | Taslak | siyah (`ink`) |
   | Ada sınırı | ana mürekkep, kalın |
   | Parsel sınırı | ikincil mürekkep |
   | Yapı | açık mavi, hafif dolgulu |
@@ -220,11 +224,36 @@ Yalnızca **yüzen** öğeler gölge alır: araç kutusu (`--shadow-float`); men
 
 Arayüzün **tek cesur öğesi**dir.
 
-- Tek ya da iki sütun, 34×32 düğmeler. Gruplar ince çizgiyle ayrılır ve etiket taşımaz; grup adı ipucundadır.
+- Varsayılan üç sütun (isteğe bağlı iki), 34×32 düğmeler. **Tüm araçlar her zaman görünür**; gizli alt menü (yığın) kullanılmaz, çünkü fareyle aracı arayan kullanıcı onu görmelidir.
+- Gruplar kısa başlık taşır: Seçim, Çizim, Açıklama, Dönüştür, Düzenle, Harita. Başlık küçük (`--fs-xs`, 600, üçüncül renk) ve bir katlama düğmesidir: tıklamak grubu katlar, ok 90° döner. Katlanan gruplar çalışma alanı yerleşimiyle saklanır (`ui.toolboxFolded`).
+- **Hedef:** üç sütunda araç kutusu 900 px yüksekliğindeki pencerede kaydırma çubuğu çıkarmaz (bugün 628 px). Yeni araç eklenince bu ölçü korunur; gerekirse grup yeniden düzenlenir.
 - **Etkin araç dolu amber zemin** ve koyu mürekkeple gösterilir.
 - Her düğmenin sağ alt köşesinde **tuş etiketi** vardır: `L`, `⇧M`, `⌥P`, `Esc`, `Del`.
+- İpucu: ad, kısayol, kısa açıklama ve **fareyle kullanım adımları** (numaralı liste, amber numaralar). Adımlar katalogdaki `steps` alanından gelir ve "tıklayın, sürükleyin, sağ tıklayın" diliyle yazılır.
 - Hazır olmayan araçların simgesi %62 saydamdır; ipucunda "Geliştirme aşamasında" yazar.
 - Tutamaçtan sürüklenir, kenara 14 px yaklaşınca yapışır ve sol sütuna sabitlenebilir. Sütun ve sabitleme düğmeleri üzerine gelince görünür.
+
+### 7.4.1 Komut şeridi
+
+Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui/shell/CommandBar.ts`). Fare kullanıcısı alttaki komut satırına bakmadan ne yapacağını buradan okur.
+
+- **Sol sütun:** araç simgesi (amber) ve adı (600), beklenen adım (ana metin), köşeli parantezdeki notlar (üçüncül) ve **seçenek düğmeleri**. Düğmede seçenek adı, varsa şu anki değeri (amber) ve aynı işi yapan tuş (küçük tuş etiketi) yazar: `Yay Y`, `Kopya açık K`, `Son yarıçap 3.000 m Enter`.
+- **Sağ sütun (sabit):** ince ayırıcıdan sonra fare hatırlatması: `Sağ tık` onayla / bitir, `Esc` çık.
+- Seçim aracı boştayken şerit gizlidir; tutamaç düzenlenirken görünür.
+- Alttaki komut satırı da aynı seçenekleri düğme olarak gösterir.
+
+### 7.4.2 Fare yardımcıları
+
+- **İmleç yanında değer girişi:** imlecin sağ üstünde, amber çerçeveli küçük bir kart; içinde eş aralıklı yazıyla (`--font-mono`) değer alanı ve altında kabul edilen biçimler (`mesafe · Y,X · @dY,dX · @mesafe<açı`, `--fs-2xs`, üçüncül renk). Aracın kendi ölçü etiketi imlecin sağ altında kalır; ikisi çakışmaz.
+- **Bilgi kartı:** imlecin sağ altında, panel zemininde; başlıkta tür ya da "Parsel 7" (600) ve sağda katman örneği ile adı; altında ince çizgiyle ayrılmış iki sütunlu değerler (etiket üçüncül, değer sağa yaslı). Fareyle etkileşmez (`pointer-events: none`).
+- **Tek seferlik kenet etiketi:** komut şeridinde yumuşak amber zeminli "Sonraki tık: Orta nokta" ve × düğmesi.
+- **Kenet simgeleri:** kenet türünün çizimdeki işareti (kare, üçgen, daire, eşkenar dörtgen, çarpı, dik açı, teğet, kum saati) düz çizgiyle, üzerinde durduğu geometri kesikli çizilir. Menülerde 16 px'tir.
+- **Nesne izleme:** alınan izleme noktaları kenet renginde (`--canvas-snap`) 10 px'lik artıdır. Kilitlenilen hiza, noktadan başlayıp ekran kenarına kadar uzanan ince kesikli (3/4 px, %85) çizgidir. İmlecin sağ üstünde kenet etiketiyle aynı yazıda "İzleme 12.500 m < 90°" ya da "İzleme: kesişim" yazar.
+- **Sağ tuş menüleri:** komut menüsünde başlık olarak aracın adı; önce Onayla/İptal, sonra aracın seçenekleri (sağda tuşları), sonra "Tek seferlik kenet" alt menüsü ve çizim yardımcıları. Tutamaç menüsü başlığı "Köşe 3" ya da "Kenar 2" biçimindedir.
+
+### 7.4.3 İpuçları
+
+İpucu zemini iki temada da koyudur (`--c-tooltip`). Mürekkebi tema metin jetonlarından değil, kendi jetonlarından alır: `--c-tooltip-text`, `--c-tooltip-text-2`, `--c-tooltip-line`, `--c-tooltip-accent`. İpucunun içine `--c-text*` ya da `--c-line` yazılmaz; açık temada koyu zeminde koyu yazıya dönüşür.
 
 ### 7.5 Dok panelleri
 

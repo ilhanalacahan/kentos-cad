@@ -52,21 +52,26 @@ export function segSeg(a: Vec2, b: Vec2, c: Vec2, d: Vec2, eps = 1e-9): Hit | nu
   return h && h.t >= -eps && h.t <= 1 + eps && h.u >= -eps && h.u <= 1 + eps ? h : null;
 }
 
-/** Parameters t along a→b (unbounded) where the line meets the circle. */
+/**
+ * Parameters t along a→b (unbounded) where the line meets the circle.
+ * Solved from the foot of the perpendicular from the centre rather than
+ * the quadratic's discriminant: construction lines are 2·10⁷ m long, and
+ * the discriminant would lose most of its digits to cancellation.
+ */
 export function lineCircleParams(a: Vec2, b: Vec2, c: Vec2, r: number): number[] {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const fx = a.x - c.x;
-  const fy = a.y - c.y;
   const A = dx * dx + dy * dy;
   if (A < EPS) return [];
-  const B = 2 * (fx * dx + fy * dy);
-  const C = fx * fx + fy * fy - r * r;
-  const disc = B * B - 4 * A * C;
-  if (disc < -EPS) return [];
-  if (disc <= EPS) return [-B / (2 * A)];
-  const s = Math.sqrt(disc);
-  return [(-B - s) / (2 * A), (-B + s) / (2 * A)];
+  const s = ((c.x - a.x) * dx + (c.y - a.y) * dy) / A;
+  const fx = a.x + dx * s - c.x;
+  const fy = a.y + dy * s - c.y;
+  const h2 = r * r - (fx * fx + fy * fy);
+  const tol = 1e-12 * Math.max(1, r * r);
+  if (h2 < -tol) return [];
+  if (h2 <= tol) return [s];
+  const h = Math.sqrt(h2 / A);
+  return [s - h, s + h];
 }
 
 export function circleCircle(c1: Vec2, r1: number, c2: Vec2, r2: number): Vec2[] {

@@ -36,8 +36,10 @@ export async function launch(url, { width = 1600, height = 900 } = {}) {
   let id = 0;
   const pending = new Map();
   const consoleLog = [];
+  const listeners = new Map();
   ws.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
+    if (msg.method) for (const fn of listeners.get(msg.method) ?? []) fn(msg.params);
     if (msg.id && pending.has(msg.id)) {
       const { resolve, reject } = pending.get(msg.id);
       pending.delete(msg.id);
@@ -61,6 +63,11 @@ export async function launch(url, { width = 1600, height = 900 } = {}) {
   const api = {
     send,
     consoleLog,
+    /** Subscribe to a DevTools event (e.g. Page.screencastFrame). */
+    on(method, fn) {
+      if (!listeners.has(method)) listeners.set(method, []);
+      listeners.get(method).push(fn);
+    },
     async eval(expr) {
       const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
@@ -91,7 +98,19 @@ export async function launch(url, { width = 1600, height = 900 } = {}) {
       await sleep(40);
     },
     async key(key, { shift = false, alt = false, ctrl = false } = {}) {
-      const named = { Enter: [13, 'Enter', '\r'], Escape: [27, 'Escape'], ' ': [32, 'Space', ' '], Delete: [46, 'Delete'], F10: [121, 'F10'], F3: [114, 'F3'], F8: [119, 'F8'] };
+      const named = {
+        Enter: [13, 'Enter', '\r'],
+        Escape: [27, 'Escape'],
+        ' ': [32, 'Space', ' '],
+        Delete: [46, 'Delete'],
+        F10: [121, 'F10'],
+        F3: [114, 'F3'],
+        F8: [119, 'F8'],
+        // Printable keys whose char code is not their virtual key (46 would be Delete).
+        '.': [190, 'Period', '.'],
+        ',': [188, 'Comma', ','],
+        '-': [189, 'Minus', '-'],
+      };
       let vk, code, text;
       if (named[key]) [vk, code, text] = named[key];
       else {

@@ -4,10 +4,10 @@ import type { Entity, EntityGeometry, NewEntity } from '../model/entities';
 import { bearingGrad, dist, type Vec2 } from '../model/geometry';
 import { bulgeArc, bulgePathLength, bulgePathOutline, bulgeRingArea, bulgeThrough, hasBulges, segmentTangent, tangentBulge } from '../model/geom/bulge';
 import type { ViewTransform } from '../viewport/Camera';
-import { parseNumber, parsePointInput } from './coordinateInput';
+import { parseNumber } from './coordinateInput';
 import { drawTag, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
-import { constrainPoint, drawTracking, type Tracking } from './tracking';
+import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
 /**
  * Base for tools driven by a sequence of points (click or typed). Handles
@@ -58,7 +58,7 @@ export abstract class PointInputTool implements Tool {
 
   input(text: string): boolean {
     if (this.option(text.trim().toLocaleUpperCase('tr-TR'))) return true;
-    const pt = parsePointInput(text, this.last, this.hover);
+    const pt = pointFromText(this.ctx, text, this.last, this.hover);
     if (!pt) return false;
     this.accept(pt);
     return true;
@@ -143,19 +143,34 @@ export abstract class PointInputTool implements Tool {
 export class LineTool extends PointInputTool {
   readonly id = 'line';
   protected readonly label = 'Çizgi';
-  private segments = 0;
+  /** Lines drawn in this chain, so G can take the last one back (AutoCAD LINE → Undo). */
+  private created: number[] = [];
 
   protected promptFor(n: number): string {
-    return n === 0 ? 'ilk noktayı belirtin' : 'sonraki noktayı belirtin [Kapat (K) / Bitir (Enter)]';
+    if (n === 0) return 'ilk noktayı belirtin';
+    const opts = [this.created.length ? 'Geri (G)' : '', n >= 3 ? 'Kapat (K)' : '', 'Bitir (Enter)'].filter(Boolean).join(' / ');
+    return `sonraki noktayı belirtin [${opts}]`;
   }
 
   protected onPoint(p: Vec2): void {
     const last = this.last;
-    if (last && dist(last, p) > 1e-9 && this.create({ kind: 'line', a: last, b: p })) this.segments++;
+    if (last && dist(last, p) <= 1e-9) return;
+    if (last) {
+      const e = this.create({ kind: 'line', a: last, b: p });
+      if (!e) return;
+      this.created.push(e.id);
+    }
     this.pts.push(p);
   }
 
   protected override option(key: string): boolean {
+    if (key === 'G' && this.created.length) {
+      this.ctx.doc.remove([this.created.pop()!]);
+      this.pts.pop();
+      this.refreshPrompt();
+      this.ctx.view.requestOverlay();
+      return true;
+    }
     if (key !== 'K' || this.pts.length < 3) return false;
     this.onPoint(this.pts[0]);
     this.finish();
@@ -163,8 +178,8 @@ export class LineTool extends PointInputTool {
   }
 
   protected override finish(): void {
-    if (this.segments) this.ctx.log.success(`${this.segments} çizgi eklendi.`);
-    this.segments = 0;
+    if (this.created.length) this.ctx.log.success(`${this.created.length} çizgi eklendi.`);
+    this.created = [];
     super.finish();
   }
 }
@@ -330,41 +345,6 @@ export class PathTool extends PointInputTool {
     if (this.closed && pts.length >= 3) lines.push(`Alan ${f.area(Math.abs(bulgeRingArea(pts, bulges)))}`);
     drawTag(g, s, lines, pal.accent, pal.labelHalo);
     this.drawTracking(g, view);
-  }
-}
-
-export class RectangleTool extends PointInputTool {
-  readonly id = 'rectangle';
-  protected readonly label = 'Dikdörtgen';
-
-  protected promptFor(n: number): string {
-    return n === 0 ? 'ilk köşeyi belirtin' : 'karşı köşeyi belirtin ya da @genişlik,yükseklik yazın';
-  }
-
-  private ring(a: Vec2, b: Vec2): Vec2[] {
-    return [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
-  }
-
-  protected onPoint(p: Vec2): void {
-    const a = this.last;
-    if (!a) return void this.pts.push(p);
-    if (Math.abs(p.x - a.x) > 1e-9 && Math.abs(p.y - a.y) > 1e-9) {
-      const pts = this.ring(a, p);
-      if (this.create({ kind: 'polygon', pts })) this.ctx.log.success(`Dikdörtgen eklendi: ${this.ctx.format.length(Math.abs(p.x - a.x), false)} × ${this.ctx.format.length(Math.abs(p.y - a.y))}`);
-    }
-    this.pts = [];
-  }
-
-  protected override constrain(p: ToolPointer): Vec2 {
-    return p.world;
-  }
-
-  override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
-    const a = this.last;
-    if (!a || !this.hover) return;
-    const pal = this.ctx.view.palette;
-    strokePath(g, view, this.ring(a, this.hover), { color: pal.accent, closed: true });
-    drawTag(g, view.worldToScreen(this.hover), [`${this.ctx.format.length(Math.abs(this.hover.x - a.x), false)} × ${this.ctx.format.length(Math.abs(this.hover.y - a.y))}`], pal.accent, pal.labelHalo);
   }
 }
 

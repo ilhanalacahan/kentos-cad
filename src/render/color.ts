@@ -18,6 +18,8 @@ export interface CanvasPalette {
   background: RGBA;
   fg: string;
   fgDim: string;
+  /** CAD colour 7 ("siyah"): black on light backgrounds, white on dark. */
+  ink: string;
   gridMinor: RGBA;
   gridMajor: RGBA;
   accent: string;
@@ -35,6 +37,7 @@ export function readCanvasPalette(el: Element = document.documentElement): Canva
     background: parseHex(v('--canvas-bg', '#151B22')),
     fg: v('--canvas-fg', '#E4EAF0'),
     fgDim: v('--canvas-fg-dim', '#A9B4C0'),
+    ink: v('--canvas-ink', '#FFFFFF'),
     gridMinor: parseHex(v('--canvas-grid-minor', '#FFFFFF0D')),
     gridMajor: parseHex(v('--canvas-grid-major', '#FFFFFF1C')),
     accent: v('--canvas-accent', '#F2B632'),
@@ -45,8 +48,12 @@ export function readCanvasPalette(el: Element = document.documentElement): Canva
   };
 }
 
+/** Theme tokens a layer or entity colour may use instead of a hex value. */
+export const THEME_COLORS = ['fg', 'fg-dim', 'ink'] as const;
+
 export function resolveColor(color: string, palette: CanvasPalette): string {
   if (color === 'fg') return palette.fg;
   if (color === 'fg-dim') return palette.fgDim;
+  if (color === 'ink') return palette.ink;
   return color;
 }

@@ -29,7 +29,11 @@ export function stretchEntity(e: Entity, r: Bounds, dx: number, dy: number): Ent
     case 'dimension':
       return any([geom.a, geom.b]) ? { ...geom, a: mv(geom.a), b: mv(geom.b) } : null;
     case 'circle':
+    case 'ellipse':
       return inside(geom.c, r) ? { ...geom, c: mv(geom.c) } : null;
+    case 'xline':
+    case 'ray':
+      return inside(geom.p, r) ? { ...geom, p: mv(geom.p) } : null;
     case 'arc': {
       const s = arcStart(geom);
       const m = arcMid(geom);

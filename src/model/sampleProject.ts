@@ -11,7 +11,7 @@ import { LayerStore, type LayerInit } from './layers';
  */
 
 export const LAYER_TREE: LayerInit[] = [
-  { id: 'taslak', name: 'Taslak', style: { color: '#E5C07B' } },
+  { id: 'taslak', name: 'Taslak', style: { color: 'ink' } },
   {
     id: 'g-kadastro',
     name: 'Kadastro',

@@ -8,11 +8,11 @@ import { joinEntities } from '../model/ops/join';
 import { stretchEntity } from '../model/ops/stretch';
 import { transformEntity } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
-import { parseNumber, parsePointInput } from './coordinateInput';
+import { parseNumber } from './coordinateInput';
 import { MAX_GHOSTS, SelectionFirstTool } from './modifyTools';
 import { drawTag, strokeGeometry, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
-import { constrainPoint, drawTracking, type Tracking } from './tracking';
+import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
 /**
  * Selection tools that act at once: with objects already selected they run
@@ -220,7 +220,7 @@ export class StretchTool implements Tool {
 
   input(text: string): boolean {
     if (this.stage !== 'base' && this.stage !== 'target') return false;
-    const pt = parsePointInput(text, this.stage === 'target' ? this.base : null, this.hover);
+    const pt = pointFromText(this.ctx, text, this.stage === 'target' ? this.base : null, this.hover);
     if (!pt) return false;
     this.point(pt);
     return true;
@@ -292,7 +292,7 @@ export class PasteTool implements Tool {
   }
 
   input(text: string): boolean {
-    const pt = parsePointInput(text, this.base, this.hover);
+    const pt = pointFromText(this.ctx, text, this.base, this.hover);
     if (!pt) return false;
     this.place(pt);
     return true;

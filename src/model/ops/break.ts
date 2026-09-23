@@ -1,6 +1,7 @@
 import type { Entity, EntityGeometry } from '../entities';
 import type { Vec2 } from '../geometry';
 import { bulgeRingArea } from '../geom/bulge';
+import { breakConstruction, breakEllipse } from './curveCuts';
 import { nearestS, pathOf, subPath } from './path';
 
 export type BreakResult = { pieces: EntityGeometry[] } | { error: string };
@@ -13,6 +14,8 @@ export type BreakResult = { pieces: EntityGeometry[] } | { error: string };
  */
 export function breakEntity(e: Entity, p1: Vec2, p2: Vec2): BreakResult {
   if (e.kind === 'spline') return { error: 'Eğri kırılamaz; önce Patlat (X) ile çoklu çizgiye dönüştürün.' };
+  if (e.kind === 'ellipse') return breakEllipse(e, p1, p2);
+  if (e.kind === 'xline' || e.kind === 'ray') return breakConstruction(e, p1, p2);
   if (e.kind !== 'line' && e.kind !== 'polyline' && e.kind !== 'polygon' && e.kind !== 'arc' && e.kind !== 'circle') {
     return { error: 'Yalnızca çizgi, çoklu çizgi, kapalı alan, yay ve daire kırılabilir.' };
   }

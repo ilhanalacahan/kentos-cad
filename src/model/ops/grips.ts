@@ -4,7 +4,11 @@ import { arcEnd, arcMid, arcStart, arcThrough } from '../geom/arc';
 import { translation } from '../geom/affine';
 import { bulgeAt, bulgeThrough, isArcBulge, segmentMid } from '../geom/bulge';
 import { layoutDimension, signedOffset } from '../geom/dimension';
+import { closestParam, ellipseFromCenter, ellipsePoint, isFullEllipse } from '../geom/ellipse';
 import { transformEntity } from './transform';
+
+/** Construction lines show their direction grip this far (m) from the base point. */
+const DIRECTION_GRIP = 10;
 
 /**
  * Grip points of an entity, in a stable order that `moveGrip` understands.
@@ -31,6 +35,13 @@ export function entityGrips(e: Entity): Vec2[] {
       return [e.c, { x: e.c.x + e.r, y: e.c.y }, { x: e.c.x, y: e.c.y + e.r }, { x: e.c.x - e.r, y: e.c.y }, { x: e.c.x, y: e.c.y - e.r }];
     case 'arc':
       return [arcStart(e), arcMid(e), arcEnd(e), e.c];
+    case 'ellipse': {
+      if (!isFullEllipse(e)) return [e.c, ellipsePoint(e, e.t0), ellipsePoint(e, e.t1)];
+      return [e.c, ...[0, 1, 2, 3].map((k) => ellipsePoint(e, (k * Math.PI) / 2))];
+    }
+    case 'xline':
+    case 'ray':
+      return [e.p, { x: e.p.x + e.dir.x * DIRECTION_GRIP, y: e.p.y + e.dir.y * DIRECTION_GRIP }];
     case 'spline':
       return e.pts;
     case 'hatch':
@@ -79,6 +90,29 @@ export function moveGrip<E extends Entity>(e: E, index: number, p: Vec2): E | nu
       pts[index] = p;
       const g = arcThrough(pts[0], pts[1], pts[2]);
       return g ? { ...e, ...g } : null;
+    }
+    case 'ellipse': {
+      if (index === 0) return transformEntity(e, translation(p.x - e.c.x, p.y - e.c.y));
+      if (!isFullEllipse(e)) {
+        // Arc ends slide along the ellipse.
+        const t = closestParam({ ...e, t0: 0, t1: 0 }, p);
+        return index === 1 ? { ...e, t0: t } : { ...e, t1: t };
+      }
+      const a = Math.hypot(e.major.x, e.major.y);
+      const b = a * e.ratio;
+      const d = Math.hypot(p.x - e.c.x, p.y - e.c.y);
+      // Axis ends: 1/3 re-aim and resize the major axis, 2/4 resize the minor one.
+      const g =
+        index === 1 || index === 3
+          ? ellipseFromCenter(e.c, index === 1 ? p : { x: 2 * e.c.x - p.x, y: 2 * e.c.y - p.y }, b)
+          : ellipseFromCenter(e.c, { x: e.c.x + e.major.x, y: e.c.y + e.major.y }, d);
+      return g ? { ...e, ...g } : null;
+    }
+    case 'xline':
+    case 'ray': {
+      if (index === 0) return { ...e, p };
+      const l = Math.hypot(p.x - e.p.x, p.y - e.p.y);
+      return l > 1e-9 ? { ...e, dir: { x: (p.x - e.p.x) / l, y: (p.y - e.p.y) / l } } : null;
     }
     case 'spline':
       return { ...e, pts: e.pts.map((q, i) => (i === index ? p : q)) };

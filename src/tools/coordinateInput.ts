@@ -13,7 +13,7 @@ const DIST = new RegExp(String.raw`^(${NUM})$`);
  *   @25<45                distance<angle (degrees, CCW from east)
  *   18.4                  distance along the cursor direction
  */
-export function parsePointInput(text: string, last: Vec2 | null, cursor: Vec2 | null): Vec2 | null {
+export function parsePointInput(text: string, last: Vec2 | null, cursor: Vec2 | null, along?: (distance: number) => Vec2 | null): Vec2 | null {
   const t = text.trim();
   let m = t.match(REL);
   if (m) return last ? { x: last.x + +m[1], y: last.y + +m[2] } : null;
@@ -26,6 +26,9 @@ export function parsePointInput(text: string, last: Vec2 | null, cursor: Vec2 | 
   m = t.match(ABS);
   if (m) return { x: +m[1], y: +m[2] };
   m = t.match(DIST);
+  // A bare number follows an active tracking line first, then the cursor direction.
+  const tracked = m && along ? along(+m[1]) : null;
+  if (tracked) return tracked;
   if (m && last && cursor) {
     const dx = cursor.x - last.x;
     const dy = cursor.y - last.y;

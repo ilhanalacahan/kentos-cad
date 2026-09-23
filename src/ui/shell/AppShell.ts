@@ -1,5 +1,4 @@
 import type { AppContext } from '../../app/context';
-import { resolveMenu } from '../../app/menus';
 import { watchAll } from '../../core/signal';
 import { BottomPanel } from '../bottom/BottomPanel';
 import { Component } from '../Component';
@@ -9,8 +8,11 @@ import { MenuBar } from '../menu/MenuBar';
 import { StatusBar } from '../statusbar/StatusBar';
 import { Toolbar } from '../toolbar/Toolbar';
 import { Toolbox } from '../toolbox/Toolbox';
+import { CommandBar } from './CommandBar';
+import { CursorInput } from './CursorInput';
+import { HoverCard } from './HoverCard';
 import { InlineTextEditor } from './InlineTextEditor';
-import { PopupMenu } from '../widgets/PopupMenu';
+import { bindViewportMenus } from './viewportMenus';
 import { splitter } from '../widgets/Splitter';
 
 /**
@@ -63,35 +65,16 @@ export class AppShell extends Component {
 
     this.own(new Toolbox(ctx, { float: this.viewportHost, dock: left }));
     this.own(new InlineTextEditor(ctx, this.viewportHost));
+    this.own(new CommandBar(ctx, this.viewportHost));
+    this.own(new HoverCard(ctx, this.viewportHost));
+    this.bottom.commandLine.direct = this.own(new CursorInput(ctx, this.viewportHost));
 
     this.d.add(ui.dockWidth.subscribe((w) => this.el.style.setProperty('--dock-w', `${w}px`), true));
     this.d.add(watchAll([ui.rightVisible], () => right.toggleAttribute('hidden', !ui.rightVisible.value)));
     right.toggleAttribute('hidden', !ui.rightVisible.value);
 
-    // Viewport context menu (select tool, right click).
-    this.d.add(
-      ctx.view.events.on('contextmenu', ({ clientX, clientY }) => {
-        const last = ctx.tools.lastToolLabel;
-        const items = resolveMenu(ctx, [
-          ...(last ? ['tool.repeat'] : []),
-          '-',
-          'view.zoomExtents',
-          'view.zoomSelection',
-          'tool.pan',
-          '-',
-          'edit.selectAll',
-          'edit.deselect',
-          '-',
-          'tool.move',
-          'tool.copy',
-          'tool.erase',
-          '-',
-          'view.coords',
-        ]).filter((it, i, arr) => !(it.kind === 'separator' && (i === 0 || arr[i - 1].kind === 'separator')));
-        if (last && items[0]) items[0].label = `Yinele: ${last}`;
-        PopupMenu.open(items, { x: clientX, y: clientY }, { minWidth: 220 });
-      }),
-    );
+    // Right-button menus over the drawing (idle, command, snap, grips).
+    this.d.add(bindViewportMenus(ctx));
   }
 
   private own<T extends Component>(c: T): T {

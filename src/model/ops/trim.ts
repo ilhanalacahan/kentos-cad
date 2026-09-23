@@ -3,6 +3,7 @@ import type { Vec2 } from '../geometry';
 import { normAngle, TAU } from '../geom/arc';
 import { bulgeArc, bulgeAt, bulgeOfSweep } from '../geom/bulge';
 import { circleCircle, lineCircleParams, onEdgeArc, pointAt, rayEdge, type Edge } from '../geom/intersect';
+import { extendEllipse, trimConstruction, trimEllipse } from './curveCuts';
 import { cutsOn, nearestS, pathOf, subPath } from './path';
 
 /**
@@ -18,6 +19,8 @@ export type TrimResult = { pieces: EntityGeometry[] } | { error: string };
 export function trimEntity(target: Entity, pick: Vec2, boundaries: readonly Edge[]): TrimResult {
   if (target.kind === 'spline') return { error: 'Eğri budanamaz; önce Patlat (X) ile çoklu çizgiye dönüştürün.' };
   if (target.kind === 'dimension' || target.kind === 'hatch') return { error: 'Ölçü ve tarama budanamaz.' };
+  if (target.kind === 'ellipse') return trimEllipse(target, pick, boundaries);
+  if (target.kind === 'xline' || target.kind === 'ray') return trimConstruction(target, pick, boundaries);
   const path = pathOf(target);
   if (!path) return { error: 'Bu nesne budanamaz.' };
   const cuts = cutsOn(path, boundaries);
@@ -45,6 +48,7 @@ export type ExtendResult = { geometry: EntityGeometry } | { error: string };
 
 /** Extends the end of `target` nearest to `pick` to the first boundary it meets. */
 export function extendEntity(target: Entity, pick: Vec2, boundaries: readonly Edge[]): ExtendResult {
+  if (target.kind === 'ellipse') return extendEllipse(target, pick, boundaries);
   if (target.kind === 'line' || target.kind === 'polyline') {
     const pts = target.kind === 'line' ? [target.a, target.b] : [...target.pts];
     const bulges = target.kind === 'polyline' && target.bulges ? [...target.bulges] : null;
@@ -90,7 +94,7 @@ export function extendEntity(target: Entity, pick: Vec2, boundaries: readonly Ed
     if (best === null) return { error: 'Bu yönde ulaşılacak bir sınır yok.' };
     return { geometry: { kind: 'arc', c: target.c, r: target.r, a0: atEnd ? target.a0 : normAngle(target.a0 - best), a1: atEnd ? normAngle(target.a1 + best) : target.a1 } };
   }
-  return { error: 'Yalnızca çizgi, açık çoklu çizgi ve yay uzatılabilir.' };
+  return { error: 'Yalnızca çizgi, açık çoklu çizgi, yay ve eliptik yay uzatılabilir.' };
 }
 
 /**

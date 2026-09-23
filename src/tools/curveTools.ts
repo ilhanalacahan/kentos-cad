@@ -1,6 +1,16 @@
 import { entityLength, tessellateCircle, type Entity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
-import { arcThrough, circleThrough, normAngle, tessellateArc, type ArcGeom } from '../model/geom/arc';
+import { arcEnd, arcThrough, circleThrough, normAngle, tessellateArc, type ArcGeom } from '../model/geom/arc';
+import { bulgeAt, segmentTangent } from '../model/geom/bulge';
+import {
+  arcStartCenterAngle,
+  arcStartCenterChord,
+  arcStartCenterEnd,
+  arcStartEndAngle,
+  arcStartEndCenter,
+  arcStartEndDirection,
+  arcStartEndRadius,
+} from '../model/geom/shapes';
 import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { catmullRom } from '../model/geom/spline';
 import { tangentTangentRadius } from '../model/geom/tangentCircle';
@@ -12,68 +22,152 @@ import { drawTag, strokePath } from './preview';
 import type { ToolPointer } from './Tool';
 
 const deg = (rad: number) => (rad * 180) / Math.PI;
-const angleOf = (c: Vec2, p: Vec2) => Math.atan2(p.y - c.y, p.x - c.x);
 
-// ── Yay ────────────────────────────────────────────────────────────────
+// ── Yay (AutoCAD ARC) ──────────────────────────────────────────────────
+
+type ArcMode = 'three' | 'startCenter' | 'startEnd' | 'centerStart' | 'continue';
+type ArcSub = 'end' | 'angle' | 'chord' | 'center' | 'direction' | 'radius';
 
 /**
- * Arc: start, a point on the arc, end (default), or with M: centre, start,
- * end direction — counter-clockwise, or a typed included angle.
+ * Every AutoCAD arc construction, chosen with the options as you go:
+ *   üç nokta (default) · başlangıç–merkez–bitiş / açı / kiriş (M after the
+ *   start) · başlangıç–bitiş–merkez / açı / yön / yarıçap (B after the
+ *   start) · merkez–başlangıç–bitiş / açı / kiriş (M first) · devam: tangent
+ *   to the last line, arc or polyline (D first).
+ * Arcs are stored counter-clockwise; a clockwise pick gives the same curve.
  */
 export class ArcTool extends PointInputTool {
   readonly id = 'arc';
   protected readonly label = 'Yay';
-  private mode: 'three' | 'center' = 'three';
+  private mode: ArcMode = 'three';
+  private sub: ArcSub = 'end';
+  private contDir: Vec2 | null = null;
 
   protected promptFor(n: number): string {
-    if (this.mode === 'center') {
-      return n === 0 ? 'yayın merkezini belirtin' : n === 1 ? 'başlangıç noktasını belirtin' : 'bitiş doğrultusunu gösterin ya da yay açısını yazın (derece, saat yönü tersine)';
+    switch (this.mode) {
+      case 'continue':
+        return 'bitiş noktasını belirtin (son nesneye teğet devam)';
+      case 'startCenter':
+      case 'centerStart': {
+        const firstAsk = this.mode === 'startCenter' ? 'yayın merkezini belirtin' : n === 0 ? 'yayın merkezini belirtin' : 'başlangıç noktasını belirtin';
+        return n < 2 ? firstAsk : this.thirdAroundCenter();
+      }
+      case 'startEnd':
+        return n < 2 ? 'bitiş noktasını belirtin' : this.thirdStartEnd();
+      default:
+        if (n === 0) return 'başlangıç noktasını belirtin [Merkez (M) / Devam (D)]';
+        if (n === 1) return 'yay üzerinde ikinci bir nokta belirtin [Merkez (M) / Bitiş (B)]';
+        return 'bitiş noktasını belirtin';
     }
-    return n === 0 ? 'başlangıç noktasını belirtin [Merkezden (M)]' : n === 1 ? 'yay üzerinde ikinci bir nokta belirtin' : 'bitiş noktasını belirtin';
+  }
+
+  private thirdAroundCenter(): string {
+    if (this.sub === 'angle') return 'yay açısını yazın ya da gösterin (derece, saat yönünün tersine) [Bitiş noktası (N) / Kiriş (U)]';
+    if (this.sub === 'chord') return 'kiriş boyunu yazın ya da gösterin (eksi: büyük yay) [Bitiş noktası (N) / Açı (A)]';
+    return 'bitiş noktasını belirtin [Açı (A) / Kiriş (U)]';
+  }
+
+  private thirdStartEnd(): string {
+    switch (this.sub) {
+      case 'angle':
+        return 'yay açısını yazın ya da gösterin [Merkez (M) / Yön (Y) / Yarıçap (R)]';
+      case 'direction':
+        return 'başlangıçtaki teğet yönünü gösterin ya da açı yazın [Merkez (M) / Açı (A) / Yarıçap (R)]';
+      case 'radius':
+        return 'yarıçapı gösterin ya da yazın (eksi: büyük yay) [Merkez (M) / Açı (A) / Yön (Y)]';
+      default:
+        return 'yayın merkezini belirtin [Açı (A) / Yön (Y) / Yarıçap (R)]';
+    }
   }
 
   protected override option(key: string): boolean {
-    if (key !== 'M' || this.pts.length) return false;
-    this.mode = 'center';
+    const n = this.pts.length;
+    if (n === 0 && this.mode === 'three' && key === 'M') this.mode = 'centerStart';
+    else if (n === 0 && this.mode === 'three' && key === 'D') {
+      const last = this.lastEnd();
+      if (!last) {
+        this.ctx.log.warn('Devam edilecek bir çizgi, yay ya da çoklu çizgi yok.');
+        return true;
+      }
+      this.mode = 'continue';
+      this.pts = [last.p];
+      this.contDir = last.dir;
+    } else if (n === 1 && this.mode === 'three' && (key === 'M' || key === 'B')) this.mode = key === 'M' ? 'startCenter' : 'startEnd';
+    else if (n === 2 && (this.mode === 'startCenter' || this.mode === 'centerStart') && ['A', 'U', 'N'].includes(key)) {
+      this.sub = key === 'A' ? 'angle' : key === 'U' ? 'chord' : 'end';
+    } else if (n === 2 && this.mode === 'startEnd' && ['M', 'A', 'Y', 'R'].includes(key)) {
+      this.sub = key === 'M' ? 'center' : key === 'A' ? 'angle' : key === 'Y' ? 'direction' : 'radius';
+    } else return false;
+    if (this.mode === 'startEnd' && n < 2 && this.sub === 'end') this.sub = 'center';
     this.refreshPrompt();
+    this.ctx.view.requestOverlay();
     return true;
   }
 
-  /** Centre mode: arc from the start point sweeping to the direction of p. */
-  private centerArc(p: Vec2): ArcGeom | null {
-    const [c, s] = this.pts;
-    const r = dist(c, s);
-    if (r < 1e-9 || dist(c, p) < 1e-9) return null;
-    return { c, r, a0: normAngle(angleOf(c, s)), a1: normAngle(angleOf(c, p)) };
+  /** End point and travel direction of the newest line, arc or polyline. */
+  private lastEnd(): { p: Vec2; dir: Vec2 } | null {
+    const all = [...this.ctx.doc.all()];
+    for (let i = all.length - 1; i >= 0; i--) {
+      const e = all[i];
+      if (e.kind === 'line' && dist(e.a, e.b) > 1e-9) return { p: e.b, dir: { x: (e.b.x - e.a.x) / dist(e.a, e.b), y: (e.b.y - e.a.y) / dist(e.a, e.b) } };
+      if (e.kind === 'arc') return { p: arcEnd(e), dir: { x: -Math.sin(e.a1), y: Math.cos(e.a1) } };
+      if (e.kind === 'polyline' && e.pts.length >= 2) {
+        const k = e.pts.length;
+        return { p: e.pts[k - 1], dir: segmentTangent(e.pts[k - 2], e.pts[k - 1], bulgeAt(e.bulges, k - 2), true) };
+      }
+    }
+    return null;
+  }
+
+  /** The arc the third input (a point) would make in the current mode. */
+  private arcFor(p: Vec2): ArcGeom | null {
+    const [p0, p1] = this.pts;
+    switch (this.mode) {
+      case 'continue':
+        return this.contDir ? arcStartEndDirection(p0, p, this.contDir) : null;
+      case 'three':
+        return arcThrough(p0, p1, p);
+      case 'startCenter':
+      case 'centerStart': {
+        const [s, c] = this.mode === 'startCenter' ? [p0, p1] : [p1, p0];
+        if (this.sub === 'chord') return arcStartCenterChord(s, c, dist(s, p));
+        return arcStartCenterEnd(s, c, p);
+      }
+      case 'startEnd': {
+        if (this.sub === 'center') return arcStartEndCenter(p0, p1, p);
+        if (this.sub === 'direction') return arcStartEndDirection(p0, p1, { x: p.x - p0.x, y: p.y - p0.y });
+        if (this.sub === 'radius') return arcStartEndRadius(p0, p1, dist(p1, p));
+        // Included angle shown by a direction from the start, measured from east.
+        return arcStartEndAngle(p0, p1, (Math.atan2(p.y - p0.y, p.x - p0.x) * 180) / Math.PI);
+      }
+    }
+  }
+
+  private ready(): boolean {
+    return this.mode === 'continue' ? this.pts.length === 1 : this.pts.length === 2;
   }
 
   protected onPoint(p: Vec2): void {
     const last = this.last;
     if (last && dist(last, p) < 1e-9) return;
-    if (this.mode === 'center' && this.pts.length === 2) return this.commit(this.centerArc(p));
+    if (this.ready()) return this.commit(this.arcFor(p));
     this.pts.push(p);
-    if (this.mode === 'center' || this.pts.length < 3) return;
-    const g = arcThrough(this.pts[0], this.pts[1], this.pts[2]);
-    if (!g) {
-      this.ctx.log.warn('Üç nokta aynı doğru üzerinde; yay çizilemez.');
-      this.pts = [];
-      return;
-    }
-    this.commit(g);
   }
 
   override input(text: string): boolean {
     const n = parseNumber(text);
-    if (this.mode === 'center' && this.pts.length === 2 && n !== null && !/[,;@<]/.test(text)) {
-      if (Math.abs(n) < 1e-9 || Math.abs(n) >= 360) {
-        this.ctx.log.warn('Yay açısı 0 ile 360 derece arasında olmalı.');
-        return true;
-      }
-      const [c, s] = this.pts;
-      const a0 = angleOf(c, s);
-      const a1 = a0 + (n * Math.PI) / 180;
-      // A negative angle runs clockwise: the same arc stored counter-clockwise.
-      this.commit({ c, r: dist(c, s), a0: normAngle(n > 0 ? a0 : a1), a1: normAngle(n > 0 ? a1 : a0) });
+    if (this.ready() && this.mode !== 'continue' && n !== null && !/[,;@<]/.test(text)) {
+      const [p0, p1] = this.pts;
+      let g: ArcGeom | null = null;
+      if (this.mode === 'startCenter' || this.mode === 'centerStart') {
+        const [s, c] = this.mode === 'startCenter' ? [p0, p1] : [p1, p0];
+        g = this.sub === 'chord' ? arcStartCenterChord(s, c, n) : arcStartCenterAngle(s, c, n);
+      } else if (this.mode === 'startEnd') {
+        if (this.sub === 'radius') g = arcStartEndRadius(p0, p1, n);
+        else if (this.sub === 'direction') g = arcStartEndDirection(p0, p1, { x: Math.cos((n * Math.PI) / 180), y: Math.sin((n * Math.PI) / 180) });
+        else g = arcStartEndAngle(p0, p1, n);
+      } else return super.input(text);
+      this.commit(g);
       this.refreshPrompt();
       return true;
     }
@@ -81,26 +175,47 @@ export class ArcTool extends PointInputTool {
   }
 
   private commit(g: ArcGeom | null): void {
-    if (g && this.create({ kind: 'arc', ...g })) this.ctx.log.success(`Yay eklendi: r = ${this.ctx.format.length(g.r)}`);
+    if (!g) {
+      this.ctx.log.warn('Bu değerlerle yay oluşmuyor (noktalar aynı doğruda ya da yarıçap kiriş için küçük).');
+      return;
+    }
+    if (this.create({ kind: 'arc', ...g })) this.ctx.log.success(`Yay eklendi: r = ${this.ctx.format.length(g.r)}, açı ${deg(normAngle(g.a1 - g.a0) || 2 * Math.PI).toFixed(4)}°`);
     this.pts = [];
     this.mode = 'three';
+    this.sub = 'end';
+    this.contDir = null;
     this.ctx.view.requestOverlay();
+  }
+
+  protected override reset(): void {
+    this.mode = 'three';
+    this.sub = 'end';
+    this.contDir = null;
+    super.reset();
   }
 
   override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     const pal = this.ctx.view.palette;
-    if (this.pts.length === 2 && this.hover) {
-      const arc = this.mode === 'center' ? this.centerArc(this.hover) : arcThrough(this.pts[0], this.pts[1], this.hover);
+    const h = this.hover;
+    if (!h) return;
+    if (this.ready()) {
+      const arc = this.arcFor(h);
+      const [p0, p1] = this.pts;
+      if (this.mode === 'startCenter' || this.mode === 'centerStart') {
+        const c = this.mode === 'startCenter' ? p1 : p0;
+        strokePath(g, view, [c, h], { color: pal.accent, dash: [3, 3] });
+      } else if (this.mode === 'startEnd' && this.sub !== 'center') strokePath(g, view, [this.sub === 'radius' ? p1 : p0, h], { color: pal.accent, dash: [3, 3] });
       if (arc) {
-        strokePath(g, view, tessellateArc(arc), { color: pal.accent });
-        if (this.mode === 'center') strokePath(g, view, [this.pts[0], this.hover], { color: pal.accent, dash: [3, 3] });
-        const sweepDeg = deg(normAngle(arc.a1 - arc.a0));
-        drawTag(g, view.worldToScreen(this.hover), [`r ${this.ctx.format.length(arc.r)}`, `Açı ${sweepDeg.toFixed(2)}°`], pal.accent, pal.labelHalo);
-        return;
+        strokePath(g, view, tessellateArc(arc), { color: pal.accent, width: 1.5 });
+        drawTag(g, view.worldToScreen(h), [`r ${this.ctx.format.length(arc.r)}`, `Açı ${deg(normAngle(arc.a1 - arc.a0) || 2 * Math.PI).toFixed(2)}°`], pal.accent, pal.labelHalo);
       }
+      return;
     }
-    if (this.mode === 'center' && this.pts.length === 1 && this.hover) {
-      strokePath(g, view, tessellateCircle(this.pts[0], dist(this.pts[0], this.hover), 96), { color: pal.accent, closed: true, dash: [2, 4] });
+    const [p0] = this.pts;
+    if (p0 && (this.mode === 'startCenter' || this.mode === 'centerStart')) {
+      // Choosing the centre (or the start around a centre): the circle the arc will lie on.
+      const [c, onCircle] = this.mode === 'startCenter' ? [h, p0] : [p0, h];
+      strokePath(g, view, tessellateCircle(c, dist(c, onCircle), 96), { color: pal.accent, closed: true, dash: [2, 4] });
     }
     super.draw(g, view);
   }
@@ -124,6 +239,8 @@ export class CircleTool extends PointInputTool {
   private static lastRadius = 0;
   private mode: CircleMode = 'center';
   private tangents: TangentPick[] = [];
+  /** Centre mode: the second input is a diameter (AutoCAD "Çap"). */
+  private diameter = false;
 
   protected promptFor(n: number): string {
     switch (this.mode) {
@@ -136,7 +253,8 @@ export class CircleTool extends PointInputTool {
         return ['ilk teğet çizgi, yay ya da daireyi seçin', 'ikinci teğet nesneyi seçin', `yarıçapı yazın${r}`][this.tangents.length];
       }
       default:
-        return n === 0 ? 'merkez noktasını belirtin [2 nokta (2N) / 3 nokta (3N) / Teğet-teğet-yarıçap (TTY)]' : 'yarıçapı belirtin ya da yazın';
+        if (n === 0) return 'merkez noktasını belirtin [2 nokta (2N) / 3 nokta (3N) / Teğet-teğet-yarıçap (TTY)]';
+        return this.diameter ? 'çapı gösterin ya da yazın [Yarıçap (R)]' : 'yarıçapı gösterin ya da yazın [Çap (Ç)]';
     }
   }
 
@@ -145,6 +263,12 @@ export class CircleTool extends PointInputTool {
   }
 
   protected override option(key: string): boolean {
+    if (this.mode === 'center' && this.pts.length === 1 && (key === 'Ç' || key === 'C' || key === 'R')) {
+      this.diameter = key !== 'R';
+      this.refreshPrompt();
+      this.ctx.view.requestOverlay();
+      return true;
+    }
     const modes: Record<string, CircleMode> = { '2N': 'two', '3N': 'three', TTY: 'ttr', M: 'center' };
     if (!modes[key] || this.pts.length) return false;
     this.mode = modes[key];
@@ -157,7 +281,7 @@ export class CircleTool extends PointInputTool {
   override pointerDown(p: ToolPointer): void {
     if (this.mode !== 'ttr') return super.pointerDown(p);
     if (p.button !== 0 || this.tangents.length >= 2) return;
-    const e = this.ctx.view.pickEdge(p.screen, (x) => x.kind === 'line' || x.kind === 'polyline' || x.kind === 'polygon' || x.kind === 'arc' || x.kind === 'circle');
+    const e = this.ctx.view.pickEdge(p.screen, (x) => ['line', 'polyline', 'polygon', 'arc', 'circle', 'xline', 'ray'].includes(x.kind));
     if (!e) return this.ctx.log.warn('Teğet olunacak bir çizgi, çoklu çizgi, yay ya da daireye tıklayın.');
     const edge = nearestEdge(e, p.raw);
     if (!edge) return;
@@ -171,7 +295,7 @@ export class CircleTool extends PointInputTool {
     if (last && dist(last, p) < 1e-9) return;
     this.pts.push(p);
     const [a, b, c] = this.pts;
-    if (this.mode === 'center' && b) return this.commit(a, dist(a, b));
+    if (this.mode === 'center' && b) return this.commit(a, this.diameter ? dist(a, b) / 2 : dist(a, b));
     if (this.mode === 'two' && b) return this.commit({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist(a, b) / 2);
     if (this.mode === 'three' && c) {
       const circle = circleThrough(a, b, c);
@@ -193,7 +317,7 @@ export class CircleTool extends PointInputTool {
       return true;
     }
     if (this.mode === 'center' && this.last && radiusTyped) {
-      this.commit(this.last, r!);
+      this.commit(this.last, this.diameter ? r! / 2 : r!);
       this.refreshPrompt();
       return true;
     }
@@ -252,7 +376,7 @@ export class CircleTool extends PointInputTool {
     if (!h || !this.pts.length) return super.draw(g, view);
     const [a, b] = this.pts;
     let circle: { c: Vec2; r: number } | null = null;
-    if (this.mode === 'center') circle = { c: a, r: dist(a, h) };
+    if (this.mode === 'center') circle = { c: a, r: this.diameter ? dist(a, h) / 2 : dist(a, h) };
     else if (this.mode === 'two') circle = { c: { x: (a.x + h.x) / 2, y: (a.y + h.y) / 2 }, r: dist(a, h) / 2 };
     else if (b) circle = circleThrough(a, b, h);
     if (!circle) return super.draw(g, view);

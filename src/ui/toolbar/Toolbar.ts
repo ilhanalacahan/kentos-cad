@@ -6,9 +6,11 @@ import { h } from '../dom';
 import { commandButton } from '../widgets/CommandButton';
 import { Dropdown } from '../widgets/Dropdown';
 import type { MenuItem } from '../widgets/PopupMenu';
-import { layerSwatch } from '../layers/swatch';
+import { colorSwatch, layerSwatch } from '../layers/swatch';
 
+/** Drawing colours. `ink` is CAD colour 7: black, drawn white on the dark theme. */
 export const DRAW_COLORS: { name: string; value: string }[] = [
+  { name: 'Siyah', value: 'ink' },
   { name: 'Kırmızı', value: '#E5484D' },
   { name: 'Sarı', value: '#F2C94C' },
   { name: 'Yeşil', value: '#5FBF77' },
@@ -95,12 +97,12 @@ export class Toolbar extends Component {
       items: () => [
         { label: 'Katmana göre', radio: true, checked: s.value === null, run: () => s.set(null) },
         { kind: 'separator' },
-        ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: c.value, radio: true, checked: s.value === c.value, run: () => s.set(c.value) })),
+        ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette), radio: true, checked: s.value === c.value, run: () => s.set(c.value) })),
       ],
     });
     const sync = () => {
       const c = DRAW_COLORS.find((x) => x.value === s.value);
-      dd.set(c ? h('span', { class: 'swatch', style: `--swatch:${c.value}` }) : null, h('span', { class: 'dropdown__text' }, c?.name ?? 'Katmana göre'));
+      dd.set(c ? h('span', { class: 'swatch', style: `--swatch:${colorSwatch(c.value, this.ctx.view.palette)}` }) : null, h('span', { class: 'dropdown__text' }, c?.name ?? 'Katmana göre'));
     };
     this.d.add(s.subscribe(sync, true));
     return dd.el;

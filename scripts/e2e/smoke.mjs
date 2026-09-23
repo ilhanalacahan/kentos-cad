@@ -133,10 +133,11 @@ try {
   await cmd(`${X + 120},${N - 20}`);
   await key('Escape');
   const rect = await newest();
+  // Two neighbouring edges, then a typed distance.
   await key('p', { shift: true });
-  await cmd('5');
   await b.click(...(await toScreen(X + 95, N - 60)));
   await b.click(...(await toScreen(X + 120, N - 40)));
+  await cmd('5');
   await key('Escape');
   const cut = await b.eval(`window.kentos.doc.get(${rect.id}).pts.length`);
   check('chamfer cuts a polygon corner', cut === 5, `${cut} köşe`);
@@ -159,6 +160,209 @@ try {
   await key('v', { ctrl: true, shift: true });
   check('copy and paste-in-place duplicate the selection', (await b.eval('window.kentos.doc.size')) === beforePaste + 1);
   await b.eval('window.kentos.selection.clear()');
+
+  // Toolbox: every tool visible without scrolling; a group title folds its tools.
+  const box = await b.eval(`(() => { const body = document.querySelector('.toolbox__body'); return { scroll: body.scrollHeight > body.clientHeight, tools: document.querySelectorAll('.toolbox__tool').length }; })()`);
+  check('toolbox shows every tool without scrolling', !box.scroll && box.tools === (await b.eval('window.kentos.tools.list().length')), JSON.stringify(box));
+  const titleAt = await b.eval(`(() => { const r = document.querySelector('.toolbox__title').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+  await b.click(...titleAt);
+  const folded = await b.eval(`document.querySelector('.toolbox__grid').hidden`);
+  await b.click(...titleAt);
+  check('a toolbox group folds and opens from its title', folded && !(await b.eval(`document.querySelector('.toolbox__grid').hidden`)));
+
+  // Mouse only: the command bar's "Yay" button, then a corner rounded by pulling the mouse.
+  const chip = async (label) => {
+    const at = await b.eval(`(() => { const el = [...document.querySelectorAll('.cmdbar__opt')].find((x) => x.textContent.startsWith(${JSON.stringify(label)})); if (!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    if (at) await b.click(...at);
+    return !!at;
+  };
+  // Kept below the command bar, which floats over the top of the drawing.
+  await key('p');
+  await b.click(...(await toScreen(X, N + 40)));
+  await b.click(...(await toScreen(X + 30, N + 40)));
+  const yay = await chip('Yay');
+  await b.move(...(await toScreen(X + 30, N + 25)));
+  await b.click(...(await toScreen(X + 30, N + 25)));
+  await key('Enter');
+  const bulged = await newest();
+  check('command bar option buttons work with the mouse', yay && bulged.kind === 'polyline' && (bulged.bulges ?? []).some((x) => Math.abs(x) > 0.5), JSON.stringify(bulged.bulges));
+  await key('Escape');
+  await key('r');
+  await cmd(`${X + 70},${N + 20}`);
+  await cmd(`${X + 120},${N + 60}`);
+  await key('Escape');
+  const box2 = await newest();
+  await key('f', { shift: true });
+  await b.move(...(await toScreen(X + 120, N + 20)));
+  await b.click(...(await toScreen(X + 120, N + 20)));
+  await b.move(...(await toScreen(X + 120, N + 28)));
+  await b.click(...(await toScreen(X + 120, N + 28)));
+  await key('Escape');
+  const rounded = await b.eval(`window.kentos.doc.get(${box2.id})`);
+  check('fillet: click a corner, pull the mouse, click', rounded.pts.length === 5 && (rounded.bulges ?? []).some((x) => Math.abs(x) > 0.1), `${rounded.pts.length} köşe`);
+
+  // Right button held during a command: menu → one-shot midpoint snap, used by the next click.
+  const pressRight = async (x, y, ms) => {
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+    await b.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'right', clickCount: 1 });
+    await sleep(ms);
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'right', clickCount: 1 });
+    await sleep(60);
+  };
+  const menuRow = (text) => b.eval(`(() => { const row = [...document.querySelectorAll('.menu .menu__item')].find((r) => r.textContent.includes(${JSON.stringify(text)})); if (!row) return null; const r = row.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+  await key('l');
+  await cmd(`${X + 130},${N - 70}`);
+  await cmd(`${X + 130},${N - 30}`);
+  await key('Escape');
+  await key('l');
+  await pressRight(...(await toScreen(X + 60, N + 60)), 450);
+  const snapSub = await menuRow('Tek seferlik kenet');
+  if (snapSub) {
+    await b.move(...snapSub);
+    await sleep(250);
+    const mid = await menuRow('Orta nokta');
+    if (mid) await b.click(...mid);
+  }
+  await b.move(...(await toScreen(X + 131, N - 49)));
+  await b.click(...(await toScreen(X + 131, N - 49)));
+  await b.click(...(await toScreen(X + 100, N - 49)));
+  const snapped = await newest();
+  check('held right button → one-shot midpoint snap', !!snapSub && Math.abs(snapped.a.x - X - 130) < 1e-9 && Math.abs(snapped.a.y - N + 50) < 1e-9, `a=(${(snapped.a.x - X).toFixed(3)}, ${(snapped.a.y - N).toFixed(3)})`);
+  await key('Escape');
+
+  // Typing a distance while the mouse is on the drawing opens the field beside the cursor.
+  await key('l');
+  await b.click(...(await toScreen(X, N - 75)));
+  await b.move(...(await toScreen(X + 20, N - 75)));
+  await key('1');
+  await b.key('2');
+  await b.key('.');
+  await b.key('5');
+  const field = await b.eval(`(() => { const el = document.querySelector('.cursor-input'); return el.hidden ? null : el.querySelector('input').value; })()`);
+  await b.key('Enter');
+  const typedLine = await newest();
+  check('cursor input: typed 12.5 draws 12.5 m towards the mouse', field === '12.5' && Math.abs(Math.hypot(typedLine.b.x - typedLine.a.x, typedLine.b.y - typedLine.a.y) - 12.5) < 1e-9, `alan=${field}`);
+  await key('Escape');
+  await key('Escape');
+
+  // Grip menu: right click a vertex grip of a selected rectangle deletes that vertex.
+  await b.eval(`window.kentos.selection.set([${box2.id}])`);
+  await sleep(60);
+  const gripBefore = (await b.eval(`window.kentos.doc.get(${box2.id})`)).pts.length;
+  await pressRight(...(await toScreen(X + 70, N + 60)), 30);
+  const delRow = await menuRow('Köşeyi sil');
+  if (delRow) await b.click(...delRow);
+  check('grip menu deletes a vertex', (await b.eval(`window.kentos.doc.get(${box2.id})`)).pts.length === gripBefore - 1);
+  await b.eval('window.kentos.selection.clear()');
+
+  // Object tracking: rest on a corner, then the point locks exactly level with it.
+  await key('l');
+  await b.move(...(await toScreen(X + 130, N - 30)));
+  await sleep(480);
+  const acquired = await b.eval('window.kentos.view.trackPoints.length');
+  await b.move(...(await toScreen(X + 100, N - 29.6)));
+  await sleep(40);
+  await b.click(...(await toScreen(X + 100, N - 29.6)));
+  await b.click(...(await toScreen(X + 100, N + 10)));
+  const tracked = await newest();
+  check('object tracking: resting acquires a point, the next pick is level with it', acquired === 1 && tracked.a.y === N - 30, `${acquired} nokta, y=${(tracked.a.y - N).toFixed(9)}`);
+  await key('Escape');
+
+  // Shapes: rotated rectangle (edge, then width), regular polygon, arc continuing from a line.
+  const ringArea = (pts) => Math.abs(pts.reduce((acc, p, i) => { const q = pts[(i + 1) % pts.length]; return acc + p.x * q.y - q.x * p.y; }, 0) / 2);
+  await key('r', { alt: true });
+  await cmd(`${X + 20},${N - 110}`);
+  await cmd('@20<45');
+  await b.move(...(await toScreen(X + 10, N - 90)));
+  await cmd('5');
+  const rot = await newest();
+  check('rotated rectangle: 20 m edge at 45°, 5 m wide', rot.kind === 'polygon' && Math.abs(ringArea(rot.pts) - 100) < 1e-6, `alan ${ringArea(rot.pts).toFixed(4)}`);
+  await key('Escape');
+  await key('g', { shift: true });
+  await cmd('8');
+  await cmd(`${X + 70},${N - 110}`);
+  await cmd(`${X + 78},${N - 110}`);
+  const oct = await newest();
+  check('regular polygon: 8 corners on the circle', oct.pts.length === 8 && oct.pts.every((q) => Math.abs(Math.hypot(q.x - X - 70, q.y - N + 110) - 8) < 1e-9));
+  await key('Escape');
+  await key('l');
+  await cmd(`${X + 100},${N - 110}`);
+  await cmd(`${X + 120},${N - 110}`);
+  await key('Escape');
+  await key('a');
+  await chip('Devam');
+  await cmd(`${X + 130},${N - 100}`);
+  const cont = await newest();
+  check('arc continues tangent to the last line', cont.kind === 'arc' && Math.abs(cont.c.x - X - 120) < 1e-9 && Math.abs(cont.r - 10) < 1e-9, `c=(${(cont.c.x - X).toFixed(6)}, ${(cont.c.y - N).toFixed(6)})`);
+  await key('Escape');
+
+  // Ellipse (exact crossing snap) and a construction line trimmed into a ray.
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${X - 10}, minY: ${N + 85}, maxX: ${X + 90}, maxY: ${N + 150} }, 20)`);
+  await sleep(100);
+  await key('l', { shift: true });
+  await cmd(`${X + 20},${N + 110}`);
+  await cmd(`${X + 60},${N + 110}`);
+  await cmd('10');
+  const el = await newest();
+  check('ellipse from an axis and the other half-axis', el.kind === 'ellipse' && Math.abs(Math.hypot(el.major.x, el.major.y) - 20) < 1e-9 && Math.abs(el.ratio - 0.5) < 1e-12);
+  await key('Escape');
+  await key('x', { shift: true });
+  await chip('Yatay');
+  await cmd(`${X},${N + 115}`);
+  await key('Escape');
+  const xl = await newest();
+  const cross = 40 - 20 * Math.sqrt(1 - 0.25);
+  await key('l');
+  await b.move(...(await toScreen(X + cross + 0.15, N + 115.1)));
+  await b.click(...(await toScreen(X + cross + 0.15, N + 115.1)));
+  await b.click(...(await toScreen(X + cross, N + 140)));
+  const onCross = await newest();
+  check('snap to xline × ellipse crossing is exact', Math.abs(onCross.a.x - X - cross) < 1e-9 && onCross.a.y === N + 115, `x=${(onCross.a.x - X).toFixed(12)}`);
+  await key('Escape');
+  await key('t', { shift: true });
+  await b.move(...(await toScreen(X + 5, N + 115)));
+  await b.click(...(await toScreen(X + 5, N + 115)));
+  await key('Escape');
+  const rays = await b.eval(`[...window.kentos.doc.all()].filter((e) => e.kind === 'ray' && e.p.y === ${N + 115}).map((e) => e.dir.x)`);
+  check('trimming an xline on one side leaves a ray', !(await b.eval(`!!window.kentos.doc.get(${xl.id})`)) && rays.includes(1), JSON.stringify(rays));
+
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${X - 20}, minY: ${N - 80}, maxX: ${X + 140}, maxY: ${N + 80} }, 20)`);
+  await sleep(100);
+
+  // Dragging a panel splitter must never show an empty (black) viewport frame.
+  const frames = [];
+  b.on('Page.screencastFrame', (p) => {
+    frames.push(p.data);
+    b.send('Page.screencastFrameAck', { sessionId: p.sessionId });
+  });
+  const vr = await b.eval('(() => { const r = window.kentos.view.clientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()');
+  const [spx, spy] = await b.eval(`(() => { const r = document.querySelector('.shell__right .splitter').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+  await b.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+  await sleep(200);
+  await b.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: spx, y: spy, button: 'left', clickCount: 1 });
+  for (let i = 1; i <= 25; i++) {
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: spx - i * 4, y: spy, button: 'left', buttons: 1 });
+    await sleep(16);
+  }
+  await b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: spx - 100, y: spy, button: 'left', clickCount: 1 });
+  await sleep(200);
+  await b.send('Page.stopScreencast');
+  let blackFrames = 0;
+  for (const data of frames) {
+    const share = await b.eval(`(async () => {
+      const img = new Image(); img.src = 'data:image/png;base64,${data}'; await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const k = img.width / innerWidth;
+      const d = g.getImageData(Math.round((${vr.x} + 120) * k), Math.round((${vr.y} + 20) * k), Math.round((${vr.w} - 400) * k), Math.round((${vr.h} - 40) * k)).data;
+      let black = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] < 20) black++;
+      return black / (d.length / 4);
+    })()`);
+    if (share > 0.5) blackFrames++;
+  }
+  check('resizing a panel never flashes a black viewport', frames.length > 5 && blackFrames === 0, `${blackFrames}/${frames.length} kare siyah`);
+  await b.eval('window.kentos.ui.dockWidth.set(312)');
 
   // Undo / redo round trip
   const before = await b.eval('window.kentos.doc.size');

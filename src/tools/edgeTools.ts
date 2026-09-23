@@ -2,11 +2,13 @@ import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type EntityGeometry, type NewEntity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
+import { closestOnEdge } from '../model/geom/intersect';
+import { entityEdges } from '../model/ops/edges';
 import { offsetEntity } from '../model/ops/offset';
 import { extendEntity, trimEntity } from '../model/ops/trim';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
-import { strokeGeometry } from './preview';
+import { drawTag, strokeGeometry } from './preview';
 import type { Tool, ToolPointer } from './Tool';
 
 /**
@@ -18,7 +20,9 @@ export abstract class EdgePickTool implements Tool {
   abstract readonly id: string;
   readonly prompt = new Signal('');
   readonly cursor = 'pick' as const;
-  readonly snaps: boolean = false;
+  get snaps(): boolean {
+    return false;
+  }
   protected hover: { entity: Entity; world: Vec2 } | null = null;
   protected readonly ctx: AppContext;
 
@@ -69,17 +73,33 @@ export abstract class EdgePickTool implements Tool {
 export class OffsetTool extends EdgePickTool {
   readonly id = 'offset';
   private static distance = 1;
+  /** "Noktadan geç": the copy passes through the clicked point (distance from the mouse). */
+  private static through = false;
   private target: Entity | null = null;
   private side: Vec2 | null = null;
 
   protected refresh(): void {
     const d = this.ctx.format.length(OffsetTool.distance);
-    this.prompt.set(this.target ? 'Ötele: hangi tarafa? bir nokta gösterin' : `Ötele: ötelenecek nesneyi seçin [mesafe ${d}; yeni mesafe için sayı yazın]`);
+    const opt = `Noktadan geç (N): ${OffsetTool.through ? 'açık' : 'kapalı'}`;
+    if (!this.target) this.prompt.set(`Ötele: ötelenecek nesneye tıklayın [${OffsetTool.through ? '' : `mesafe ${d}; mesafe için sayı yazın; `}${opt}]`);
+    else this.prompt.set(`Ötele: ${OffsetTool.through ? 'kopyanın geçeceği noktaya tıklayın' : 'kopyanın gideceği tarafa tıklayın'} [${opt}]`);
+  }
+
+  /** Offset distance for a side point: fixed, or the point's distance to the object. */
+  private distanceFor(e: Entity, p: Vec2): number {
+    if (!OffsetTool.through) return OffsetTool.distance;
+    let d = Infinity;
+    for (const ed of entityEdges(e)) d = Math.min(d, closestOnEdge(ed, p).d);
+    return d;
+  }
+
+  override get snaps(): boolean {
+    return OffsetTool.through && !!this.target;
   }
 
   override pointerMove(p: ToolPointer): void {
     if (this.target) {
-      this.side = p.raw;
+      this.side = p.world;
       return this.ctx.view.requestOverlay();
     }
     super.pointerMove(p);
@@ -95,11 +115,13 @@ export class OffsetTool extends EdgePickTool {
       this.ctx.selection.hover.set(null);
       return this.refresh();
     }
-    const r = offsetEntity(this.target, OffsetTool.distance, p.raw);
+    const d = this.distanceFor(this.target, p.world);
+    const r = offsetEntity(this.target, d, p.world);
     if ('error' in r) this.ctx.log.warn(r.error);
     else {
+      OffsetTool.distance = d;
       this.ctx.doc.add(this.inherit(this.target, r.geometry, false));
-      this.ctx.log.success(`${this.ctx.format.length(OffsetTool.distance)} ötelenmiş kopya eklendi.`);
+      this.ctx.log.success(`${this.ctx.format.length(d)} ötelenmiş kopya eklendi.`);
     }
     this.target = null;
     this.refresh();
@@ -107,9 +129,16 @@ export class OffsetTool extends EdgePickTool {
   }
 
   input(text: string): boolean {
+    if (text.trim().toLocaleUpperCase('tr-TR') === 'N') {
+      OffsetTool.through = !OffsetTool.through;
+      this.refresh();
+      this.ctx.view.requestOverlay();
+      return true;
+    }
     const n = parseNumber(text);
     if (n === null || n <= 0) return false;
     OffsetTool.distance = n;
+    OffsetTool.through = false;
     this.refresh();
     this.ctx.view.requestOverlay();
     return true;
@@ -133,9 +162,12 @@ export class OffsetTool extends EdgePickTool {
 
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     if (!this.target || !this.side) return;
-    const r = offsetEntity(this.target, OffsetTool.distance, this.side);
-    if ('geometry' in r) strokeGeometry(g, view, r.geometry, { color: this.ctx.view.palette.accent, dash: [4, 3] });
-    strokeGeometry(g, view, entityGeometry(this.target), { color: this.ctx.view.palette.accent });
+    const pal = this.ctx.view.palette;
+    const d = this.distanceFor(this.target, this.side);
+    const r = offsetEntity(this.target, d, this.side);
+    if ('geometry' in r) strokeGeometry(g, view, r.geometry, { color: pal.accent, dash: [4, 3] });
+    strokeGeometry(g, view, entityGeometry(this.target), { color: pal.accent });
+    drawTag(g, view.worldToScreen(this.side), [`Mesafe ${this.ctx.format.length(d)}`], pal.accent, pal.labelHalo);
   }
 }
 

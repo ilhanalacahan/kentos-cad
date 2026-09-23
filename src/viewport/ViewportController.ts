@@ -13,11 +13,27 @@ import { buildSceneLayer } from '../render/sceneBuilder';
 import type { BackendKind, RenderBackend } from '../render/types';
 import type { ToolPointer } from '../tools/Tool';
 import { Camera } from './Camera';
-import { drawCrosshair, drawGrips, drawLabels, drawNorthArrow, drawScaleBar, drawSnap, midGripVisible } from './overlay';
+import { drawCrosshair, drawGrips, drawLabels, drawNorthArrow, drawObjectTracking, drawScaleBar, drawSnap, midGripVisible } from './overlay';
+import { alongTrack, trackAngles, trackPoint, type TrackHit } from './objectTracking';
 import { PickIndex, type SnapHit, type SnapKind } from './picking';
 
+/** Right-button menus the UI draws: idle selection, a running command, or snap overrides. */
+export type ViewportMenuKind = 'select' | 'command' | 'snap';
+
+const isConstruction = (e: Entity) => e.kind === 'xline' || e.kind === 'ray';
+
+/** Holding the right button this long opens the command menu instead of confirming. */
+const RIGHT_HOLD_MS = 300;
+/** Resting on a snap this long acquires (or releases) it as a tracking point. */
+const TRACK_DWELL_MS = 350;
+const MAX_TRACK_POINTS = 3;
+/** How close (px) the cursor must come to an alignment line to lock onto it. */
+const TRACK_PX = 8;
+/** Snaps that make sense as tracking origins. */
+const TRACKABLE = new Set<SnapKind>(['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection']);
+
 interface ViewportEvents {
-  contextmenu: { clientX: number; clientY: number; world: Vec2 };
+  contextmenu: { clientX: number; clientY: number; world: Vec2; screen: Vec2; kind: ViewportMenuKind };
   /** A tool asks the UI to edit the text of an entity in place. */
   editText: { id: number };
 }
@@ -29,6 +45,8 @@ interface ViewportEvents {
 export class ViewportController {
   readonly camera = new Camera();
   readonly cursorWorld = new Signal<Vec2 | null>(null);
+  /** One-shot object snap chosen from the right-button menu; cleared after the next pick. */
+  readonly snapOverride = new Signal<SnapKind | null>(null);
   readonly backendKind = new Signal<BackendKind | null>(null);
   readonly backendLabel = new Signal('Başlatılıyor…');
   readonly events = new Emitter<ViewportEvents>();
@@ -245,6 +263,11 @@ export class ViewportController {
     d.add(
       tools.activeId.subscribe(() => {
         this.snap = null;
+        this.snapOverride.set(null);
+        // Tracking points belong to one command.
+        this.acquired = [];
+        this.track = null;
+        this.clearDwell();
         this.overlay.dataset.cursor = tools.active.cursor;
         this.requestOverlay();
       }),
@@ -260,7 +283,8 @@ export class ViewportController {
   private pointer(e: PointerEvent | MouseEvent): ToolPointer {
     const screen = this.screenOf(e);
     const raw = this.camera.screenToWorld(screen);
-    return { world: this.snap?.point ?? raw, raw, screen, snap: this.snap, button: e.button, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
+    const track = this.snap ? null : this.track;
+    return { world: this.snap?.point ?? track?.point ?? raw, raw, screen, snap: this.snap, track, button: e.button, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
   }
 
   private snapKinds(): Set<SnapKind> {
@@ -280,10 +304,103 @@ export class ViewportController {
 
   private updateSnap(screen: Vec2): void {
     const tool = this.ctx.tools.active;
-    const on = tool.snaps && this.ctx.settings.snap.value;
-    this.snap = on
-      ? this.picker.snap(this.camera.screenToWorld(screen), this.ctx.prefs.snapAperture.value / this.camera.scale, this.snapKinds(), tool.snapFrom?.() ?? null)
-      : null;
+    const override = this.snapOverride.value;
+    // A one-shot snap works even with running snaps off (F3), and only for its own kind.
+    const on = tool.snaps && (this.ctx.settings.snap.value || !!override);
+    const kinds = override ? new Set<SnapKind>([override]) : this.snapKinds();
+    this.snap = on ? this.picker.snap(this.camera.screenToWorld(screen), this.ctx.prefs.snapAperture.value / this.camera.scale, kinds, tool.snapFrom?.() ?? null) : null;
+    this.updateTracking(screen);
+  }
+
+  // ── Object tracking ─────────────────────────────────────────────────
+
+  private acquired: Vec2[] = [];
+  private track: TrackHit | null = null;
+  /** Snap point being rested on; `done` once it has toggled, so resting longer does not toggle back. */
+  private dwell: { x: number; y: number; timer: number; done: boolean } | null = null;
+
+  private updateTracking(screen: Vec2): void {
+    const { settings, prefs } = this.ctx;
+    const tool = this.ctx.tools.active;
+    if (!tool.snaps || tool.id === 'select' || !settings.tracking.value) {
+      this.track = null;
+      return this.clearDwell();
+    }
+    const s = this.snap;
+    if (s && TRACKABLE.has(s.kind)) this.restOn(s.point);
+    else this.clearDwell();
+    const angles = trackAngles(settings.polar.value ? prefs.polarIncrement.value : null);
+    this.track = s ? null : trackPoint(this.camera.screenToWorld(screen), this.acquired, tool.snapFrom?.() ?? null, angles, this.worldTolerance(TRACK_PX));
+  }
+
+  private restOn(p: Vec2): void {
+    if (this.dwell && this.dwell.x === p.x && this.dwell.y === p.y) return;
+    this.clearDwell();
+    const dwell = { x: p.x, y: p.y, timer: 0, done: false };
+    dwell.timer = window.setTimeout(() => {
+      dwell.done = true;
+      this.toggleTrackPoint(p);
+    }, TRACK_DWELL_MS);
+    this.dwell = dwell;
+  }
+
+  private clearDwell(): void {
+    if (this.dwell) clearTimeout(this.dwell.timer);
+    this.dwell = null;
+  }
+
+  private toggleTrackPoint(p: Vec2): void {
+    const i = this.acquired.findIndex((q) => q.x === p.x && q.y === p.y);
+    if (i >= 0) this.acquired.splice(i, 1);
+    else {
+      this.acquired.push(p);
+      if (this.acquired.length > MAX_TRACK_POINTS) this.acquired.shift();
+    }
+    this.requestOverlay();
+  }
+
+  /** Point `distance` along the active tracking line (typed distance while tracking), else null. */
+  trackAlong(distance: number): Vec2 | null {
+    return this.track ? alongTrack(this.track, distance) : null;
+  }
+
+  /** Acquired tracking points (read-only view, for tests and the UI). */
+  get trackPoints(): readonly Vec2[] {
+    return this.acquired;
+  }
+
+  /**
+   * Right button: a quick click is Enter for a running command (the select
+   * tool opens its menu); holding it opens the command menu; Shift opens
+   * the one-shot snap menu at once.
+   */
+  private rightPress: { timer: number; opened: boolean } | null = null;
+
+  private onRightDown(e: PointerEvent): void {
+    const emit = (kind: ViewportMenuKind) =>
+      this.events.emit('contextmenu', { clientX: e.clientX, clientY: e.clientY, world: this.pointer(e).raw, screen: this.screenOf(e), kind });
+    if (e.shiftKey) {
+      this.rightPress = null;
+      return emit('snap');
+    }
+    const running = this.ctx.tools.activeId.value !== 'select';
+    const press = { timer: 0, opened: false };
+    press.timer = window.setTimeout(() => {
+      press.opened = true;
+      emit(running ? 'command' : 'select');
+    }, RIGHT_HOLD_MS);
+    this.rightPress = press;
+  }
+
+  private onRightUp(e: PointerEvent): void {
+    const press = this.rightPress;
+    this.rightPress = null;
+    if (!press) return;
+    clearTimeout(press.timer);
+    if (press.opened) return;
+    const tool = this.ctx.tools.active;
+    if (tool.id !== 'select' && tool.confirm) return tool.confirm();
+    this.events.emit('contextmenu', { clientX: e.clientX, clientY: e.clientY, world: this.pointer(e).raw, screen: this.screenOf(e), kind: 'select' });
   }
 
   private bindInput(): void {
@@ -299,11 +416,12 @@ export class ViewportController {
           el.dataset.panning = '';
           return;
         }
-        if (e.button === 2) return;
+        if (e.button === 2) return this.onRightDown(e);
         // Recompute the snap here: a click can arrive without a preceding move
         // (pen, touch, fast clicks), and a stale snap would place the point elsewhere.
         this.updateSnap(this.screenOf(e));
         this.ctx.tools.active.pointerDown?.(this.pointer(e));
+        if (e.button === 0 && this.snapOverride.value) this.snapOverride.set(null);
       }),
     );
     d.add(
@@ -328,6 +446,7 @@ export class ViewportController {
           delete el.dataset.panning;
           return;
         }
+        if (e.button === 2) return this.onRightUp(e);
         if (e.button !== 0) return;
         this.updateSnap(this.screenOf(e));
         this.ctx.tools.active.pointerUp?.(this.pointer(e));
@@ -337,6 +456,8 @@ export class ViewportController {
       listen<PointerEvent>(el, 'pointerleave', () => {
         this.screenCursor = null;
         this.snap = null;
+        this.track = null;
+        this.clearDwell();
         this.cursorWorld.set(null);
         if (this.ctx.tools.activeId.value === 'select') this.ctx.selection.hover.set(null);
         this.requestOverlay();
@@ -361,26 +482,32 @@ export class ViewportController {
       }),
     );
     d.add(
-      listen<MouseEvent>(el, 'contextmenu', (e) => {
-        e.preventDefault();
-        const tool = this.ctx.tools.active;
-        // Right click confirms a running command, like Enter.
-        if (tool.id !== 'select' && tool.confirm) return tool.confirm();
-        this.events.emit('contextmenu', { clientX: e.clientX, clientY: e.clientY, world: this.pointer(e).raw });
-      }),
+      // The right button is handled on press/release (see onRightDown); the
+      // browser menu never shows. Its timing differs per OS (down vs up).
+      listen<MouseEvent>(el, 'contextmenu', (e) => e.preventDefault()),
     );
   }
 
   private resize(): void {
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
-    this.dpr = this.ctx.prefs.hiDpi.value ? window.devicePixelRatio || 1 : 1;
-    this.overlay.width = Math.round(w * this.dpr);
-    this.overlay.height = Math.round(h * this.dpr);
-    this.backend?.resize(w, h, this.dpr);
+    const dpr = this.ctx.prefs.hiDpi.value ? window.devicePixelRatio || 1 : 1;
+    if (w === this.size.w && h === this.size.h && dpr === this.dpr) return;
+    this.size = { w, h };
+    this.dpr = dpr;
+    this.overlay.width = Math.round(w * dpr);
+    this.overlay.height = Math.round(h * dpr);
+    this.backend?.resize(w, h, dpr);
     this.camera.setSize(w, h);
-    this.requestRender();
+    // Resizing a canvas clears it. Waiting for the next animation frame would
+    // let the browser paint the empty (black) buffer in between — visible as
+    // flashing while a panel splitter is dragged. ResizeObserver callbacks run
+    // after layout and before paint, so drawing here keeps every frame filled.
+    this.glQueued = true;
+    this.frame();
   }
+
+  private size = { w: -1, h: -1 };
 
   // ── Frame ───────────────────────────────────────────────────────────
 
@@ -390,10 +517,47 @@ export class ViewportController {
     requestAnimationFrame(() => this.frame());
   }
 
+  // ── Construction lines (xline/ray) ──────────────────────────────────
+
+  private constructionLayers = new Set<string>();
+  private clipBox: Bounds | null = null;
+  private clipScale = 0;
+
+  /**
+   * World box infinite lines are clipped to: three view sizes around the
+   * camera, renewed when the view leaves it or the zoom changes 2× or more.
+   */
+  private constructionClip(): Bounds {
+    const v = this.camera.visibleBounds();
+    const c = this.clipBox;
+    const s = this.camera.scale;
+    if (!c || v.minX < c.minX || v.maxX > c.maxX || v.minY < c.minY || v.maxY > c.maxY || s > this.clipScale * 2 || s < this.clipScale / 2) {
+      const w = v.maxX - v.minX;
+      const h = v.maxY - v.minY;
+      this.clipBox = { minX: v.minX - w, minY: v.minY - h, maxX: v.maxX + w, maxY: v.maxY + h };
+      this.clipScale = s;
+    }
+    return this.clipBox!;
+  }
+
+  /** Rebuild layers (and highlights) holding construction lines when their clip box is stale. */
+  private refreshConstructionClip(): void {
+    const sel = [...this.ctx.selection.ids.value, this.ctx.selection.hover.value].some((id) => {
+      const e = id === null ? undefined : this.ctx.doc.get(id);
+      return !!e && isConstruction(e);
+    });
+    if (!this.constructionLayers.size && !sel) return;
+    const before = this.clipBox;
+    if (this.constructionClip() === before) return;
+    this.constructionLayers.forEach((id) => this.dirtyLayers.add(id));
+    this.highlightDirty = true;
+  }
+
   private frame(): void {
     this.frameQueued = false;
     if (this.backend && this.glQueued) {
       this.glQueued = false;
+      this.refreshConstructionClip();
       this.syncLayers();
       this.renderGl();
     }
@@ -412,7 +576,10 @@ export class ViewportController {
         backend.remove(id);
         continue;
       }
-      backend.upload(buildSceneLayer(id, doc.byLayer(id), node.style, { origin: doc.origin, palette: this.palette }));
+      const list = doc.byLayer(id);
+      if (list.some(isConstruction)) this.constructionLayers.add(id);
+      else this.constructionLayers.delete(id);
+      backend.upload(buildSceneLayer(id, list, node.style, { origin: doc.origin, palette: this.palette, clip: this.constructionClip() }));
     }
     if (this.highlightDirty) {
       this.highlightDirty = false;
@@ -433,6 +600,7 @@ export class ViewportController {
         overrideFill: withAlpha(accent, 0.13),
         overrideDash: [6, 3],
         pointStyle: { size: 15, shape: 'ring' },
+        clip: this.constructionClip(),
       }),
     );
     const hoverId = selection.hover.value;
@@ -446,6 +614,7 @@ export class ViewportController {
         overrideFill: null,
         overrideDash: null,
         pointStyle: { size: 15, shape: 'ring' },
+        clip: this.constructionClip(),
       }),
     );
   }
@@ -493,6 +662,7 @@ export class ViewportController {
     drawGrips(g, sel, cam, pal, this.ctx.tools.active.activeGrip?.() ?? null);
     this.ctx.tools.active.draw?.(g, cam);
     if (this.snap) drawSnap(g, this.snap, cam, pal);
+    drawObjectTracking(g, this.acquired, this.snap ? null : this.track, cam, pal, (m) => this.ctx.format.length(m));
     drawNorthArrow(g, cam, pal);
     drawScaleBar(g, cam, pal);
     if (this.screenCursor && !this.panFrom) drawCrosshair(g, this.screenCursor, this.ctx.tools.active.cursor, pal, this.ctx.prefs.crosshair.value);

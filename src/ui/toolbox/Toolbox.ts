@@ -2,20 +2,22 @@ import type { AppContext } from '../../app/context';
 import { listen } from '../../core/disposable';
 import { formatChordCompact } from '../../core/keymap';
 import { watchAll } from '../../core/signal';
-import { TOOL_GROUP_LABEL, type ToolGroup } from '../../tools/Tool';
+import { TOOL_GROUP_LABEL, type ToolDescriptor, type ToolGroup } from '../../tools/Tool';
 import { Component } from '../Component';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { tooltip } from '../widgets/tooltip';
 
-const GROUP_ORDER: ToolGroup[] = ['select', 'draw', 'annotate', 'modify', 'map'];
+const GROUP_ORDER: ToolGroup[] = ['select', 'draw', 'annotate', 'transform', 'modify', 'map'];
 const EDGE_SNAP = 14;
 const MARGIN = 8;
 
 /**
- * Floating drawing toolbox. Drag by the grip, it sticks to viewport edges;
- * it can also be docked into the left column. Every button shows its
- * shortcut on a key cap so the palette doubles as a cheat sheet.
+ * Floating drawing toolbox. Every tool is visible, in short titled groups
+ * that fold away with a click on their title. Drag by the grip, it sticks
+ * to viewport edges; it can also be docked into the left column. Every
+ * button shows its shortcut on a key cap, and its tooltip explains the
+ * mouse steps.
  */
 export class Toolbox extends Component {
   readonly el: HTMLElement;
@@ -39,42 +41,7 @@ export class Toolbox extends Component {
     const groups = ctx.tools.byGroup();
     for (const g of GROUP_ORDER) {
       const list = groups.get(g);
-      if (!list) continue;
-      const section = h('div', { class: 'toolbox__section', role: 'group', 'aria-label': TOOL_GROUP_LABEL[g] });
-      for (const d of list) {
-        const chord = d.id === 'select' ? 'Esc' : ctx.keymap.chordFor(`tool.${d.id}`);
-        const b = h(
-          'button',
-          {
-            class: 'toolbox__tool',
-            type: 'button',
-            'aria-label': d.label,
-            'aria-pressed': 'false',
-            dataset: { tool: d.id, ready: String(d.ready) },
-          },
-          icon(d.icon, 20),
-          chord ? h('span', { class: 'toolbox__key', 'aria-hidden': 'true' }, formatChordCompact(chord)) : null,
-        );
-        b.addEventListener('click', () => {
-          ctx.commands.execute(`tool.${d.id}`);
-          ctx.view.focus();
-        });
-        this.d.add(
-          tooltip(
-            b,
-            () => ({
-              title: d.label,
-              shortcut: chord,
-              description: d.description,
-              note: d.ready ? undefined : 'Geliştirme aşamasında',
-            }),
-            'right',
-          ),
-        );
-        this.buttons.set(d.id, b);
-        section.append(b);
-      }
-      body.append(section);
+      if (list) body.append(this.section(g, list));
     }
 
     this.el = h(
@@ -92,17 +59,79 @@ export class Toolbox extends Component {
     );
     this.buttons.get(ctx.tools.activeId.value)?.setAttribute('aria-pressed', 'true');
 
-    this.d.add(listen(colsBtn, 'click', () => ui.toolboxColumns.set(ui.toolboxColumns.value === 2 ? 1 : 2)));
+    this.d.add(listen(colsBtn, 'click', () => ui.toolboxColumns.set(ui.toolboxColumns.value === 3 ? 2 : 3)));
     this.d.add(listen(dockBtn, 'click', () => ui.toolboxDocked.set(!ui.toolboxDocked.value)));
-    this.d.add(tooltip(colsBtn, () => ({ title: ui.toolboxColumns.value === 2 ? 'Tek sütun' : 'İki sütun' }), 'right'));
+    this.d.add(tooltip(colsBtn, () => ({ title: ui.toolboxColumns.value === 3 ? 'İki sütun' : 'Üç sütun' }), 'right'));
     this.d.add(tooltip(dockBtn, () => ({ title: ui.toolboxDocked.value ? 'Serbest bırak' : 'Kenara sabitle', shortcut: undefined }), 'right'));
-    this.d.add(ui.toolboxColumns.subscribe((c) => (this.el.dataset.columns = String(c)), true));
+    // Older layouts stored 1 or 2 columns; everything below three is two.
+    this.d.add(ui.toolboxColumns.subscribe((c) => (this.el.dataset.columns = c === 3 ? '3' : '2'), true));
     this.d.add(watchAll([ui.toolboxDocked, ui.toolboxVisible], () => this.place()));
     this.place();
     this.bindDrag(grip);
     const ro = new ResizeObserver(() => this.clamp());
     ro.observe(this.floatHost);
     this.d.add(() => ro.disconnect());
+  }
+
+  /** A titled group; clicking the title folds it (remembered with the layout). */
+  private section(g: ToolGroup, list: readonly ToolDescriptor[]): HTMLElement {
+    const { ui } = this.ctx;
+    const grid = h('div', { class: 'toolbox__grid', id: `toolbox-${g}` });
+    for (const d of list) grid.append(this.button(d));
+    const title = h(
+      'button',
+      { class: 'toolbox__title', type: 'button', 'aria-controls': `toolbox-${g}` },
+      icon('chevronDown', 12),
+      h('span', null, TOOL_GROUP_LABEL[g]),
+    );
+    const section = h('div', { class: 'toolbox__section', role: 'group', 'aria-label': TOOL_GROUP_LABEL[g] }, title, grid);
+    const sync = () => {
+      const folded = ui.toolboxFolded.value.includes(g);
+      section.toggleAttribute('data-folded', folded);
+      title.setAttribute('aria-expanded', String(!folded));
+      grid.hidden = folded;
+    };
+    this.d.add(ui.toolboxFolded.subscribe(sync, true));
+    this.d.add(
+      listen(title, 'click', () => {
+        const folded = ui.toolboxFolded.value;
+        ui.toolboxFolded.set(folded.includes(g) ? folded.filter((x) => x !== g) : [...folded, g]);
+      }),
+    );
+    this.d.add(tooltip(title, () => ({ title: ui.toolboxFolded.value.includes(g) ? `${TOOL_GROUP_LABEL[g]} grubunu aç` : `${TOOL_GROUP_LABEL[g]} grubunu katla` }), 'right'));
+    return section;
+  }
+
+  private button(d: ToolDescriptor): HTMLButtonElement {
+    const { ctx } = this;
+    const chord = d.id === 'select' ? 'Esc' : ctx.keymap.chordFor(`tool.${d.id}`);
+    const b = h(
+      'button',
+      { class: 'toolbox__tool', type: 'button', 'aria-label': d.label, 'aria-pressed': 'false', dataset: { tool: d.id, ready: String(d.ready) } },
+      icon(d.icon, 20),
+      chord ? h('span', { class: 'toolbox__key', 'aria-hidden': 'true' }, formatChordCompact(chord)) : null,
+    );
+    this.d.add(
+      listen(b, 'click', () => {
+        ctx.commands.execute(`tool.${d.id}`);
+        ctx.view.focus();
+      }),
+    );
+    this.d.add(
+      tooltip(
+        b,
+        () => ({
+          title: d.label,
+          shortcut: chord,
+          description: d.description,
+          steps: d.ready ? d.steps : undefined,
+          note: d.ready ? undefined : 'Geliştirme aşamasında',
+        }),
+        'right',
+      ),
+    );
+    this.buttons.set(d.id, b);
+    return b;
   }
 
   private place(): void {
