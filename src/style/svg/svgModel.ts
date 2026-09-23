@@ -19,6 +19,13 @@ interface ShapeBase {
   stroke: Paint;
   strokeWidth: number;
   opacity?: number;
+  /** Stroke dash lengths (on, off …); absent = continuous. */
+  dash?: number[];
+  /** Line ends and corners; absent = round (paths) or the SVG default (other shapes). */
+  cap?: 'butt' | 'round' | 'square';
+  join?: 'miter' | 'round' | 'bevel';
+  /** Which parts of self-crossing or nested sub-paths are inside; absent = evenodd for paths. */
+  fillRule?: 'nonzero' | 'evenodd';
   /** Shapes with the same group move and select together. */
   group?: string;
   hidden?: boolean;
@@ -59,6 +66,10 @@ export function elementOf(s: SvgShape, paint: (p: Paint) => string = paintValue)
   const attrs: Record<string, string> = { fill: paint(s.fill), stroke: paint(s.stroke) };
   if (s.stroke !== 'none') attrs['stroke-width'] = n(s.strokeWidth);
   if (s.opacity !== undefined && s.opacity < 1) attrs.opacity = n(s.opacity);
+  if (s.stroke !== 'none' && s.dash?.length) attrs['stroke-dasharray'] = s.dash.map(n).join(' ');
+  if (s.cap) attrs['stroke-linecap'] = s.cap;
+  if (s.join) attrs['stroke-linejoin'] = s.join;
+  if (s.fillRule) attrs['fill-rule'] = s.fillRule;
   switch (s.kind) {
     case 'rect': {
       Object.assign(attrs, { x: n(s.x), y: n(s.y), width: n(s.w), height: n(s.h) });
@@ -72,9 +83,9 @@ export function elementOf(s: SvgShape, paint: (p: Paint) => string = paintValue)
       return { tag: 'ellipse', attrs };
     case 'path':
       attrs.d = pathDataOf(s.subs);
-      attrs['fill-rule'] = 'evenodd';
-      attrs['stroke-linejoin'] = 'round';
-      attrs['stroke-linecap'] = 'round';
+      attrs['fill-rule'] ??= 'evenodd';
+      attrs['stroke-linejoin'] ??= 'round';
+      attrs['stroke-linecap'] ??= 'round';
       return { tag: 'path', attrs };
     case 'text':
       Object.assign(attrs, { x: n(s.x), y: n(s.y), 'font-family': FONT[s.font], 'font-size': n(s.size), 'font-weight': String(s.weight), 'text-anchor': s.anchor });
@@ -120,7 +131,7 @@ const rotateAbout = (deg: number, cx: number, cy: number): Matrix => {
 /** A rectangle or ellipse as a path (for transforms they cannot keep). */
 export function toPath(s: SvgShape): Extract<SvgShape, { kind: 'path' }> | Extract<SvgShape, { kind: 'text' }> {
   if (s.kind === 'path' || s.kind === 'text') return s;
-  const base = { id: s.id, fill: s.fill, stroke: s.stroke, strokeWidth: s.strokeWidth, opacity: s.opacity, group: s.group, hidden: s.hidden, name: s.name };
+  const base = { id: s.id, fill: s.fill, stroke: s.stroke, strokeWidth: s.strokeWidth, opacity: s.opacity, dash: s.dash, cap: s.cap, join: s.join, fillRule: s.fillRule, group: s.group, hidden: s.hidden, name: s.name };
   let subs: SubPath[];
   if (s.kind === 'rect') {
     const r = Math.min(s.r ?? 0, s.w / 2, s.h / 2);
