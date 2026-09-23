@@ -179,6 +179,29 @@ describe('cloud autosave', () => {
     expect(first.server.store.size).toBe(2);
   });
 
+  it('an edit made after reopening wins over an older device draft', async () => {
+    const drafts = new MemoryDraftStore();
+    const first = setup({ drafts });
+    const a = first.doc.add(pt(1));
+    await first.sync.flush();
+    const id = first.sync.featureOf(a.id)!;
+    first.server.offline = true;
+    first.doc.update(a.id, { p: { x: 5, y: 4420210 } });
+    await first.sync.flush();
+    first.sync.dispose();
+    first.server.offline = false;
+    // Reopen, and edit the same object before the draft comes back in.
+    const doc = newDoc();
+    const localId = doc.allocateId();
+    doc.applyExternal({ put: [{ ...(first.server.store.get(id)!.entity as Entity), id: localId }] });
+    const again = setup({ drafts, doc, server: first.server, records: [{ localId, featureId: id, version: '1' }] });
+    doc.update(localId, { p: { x: 9, y: 4420210 } });
+    await again.sync.restore((await drafts.get('u1/t/p'))!);
+    expect((doc.get(localId) as { p: { x: number } }).p.x).toBe(9);
+    await again.sync.flush();
+    expect(first.server.store.get(id)?.entity).toMatchObject({ p: { x: 9 } });
+  });
+
   it('sends metadata with its version, and keeps it local without the right to change it', async () => {
     const { doc, server, sync } = setup();
     doc.setLayerStyle('parsel', { color: '#ff0000' });
