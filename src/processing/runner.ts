@@ -1,7 +1,7 @@
 import { Signal } from '../core/signal';
 import { foldTurkish } from '../core/text';
 import type { Entity, NewEntity } from '../model/entities';
-import { compileExpression, previewExpression } from './expression';
+import { compileExpression, previewExpression } from '../model/expression/expression';
 import { resolveFeatures, summarizeFeatures, type FeatureHost, type InputSummary } from './features';
 import { clientExecutor, type Executor, type FeatureRef, type RunJob } from './job';
 import { isVisible, validateValues, type ValidationIssue } from './parameters';

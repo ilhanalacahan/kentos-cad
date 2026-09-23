@@ -45,9 +45,8 @@ src/processing/
   model.ts           Modeller (akış diyagramı) veri yapısı, tür uyumu, sıralama ve denetim
   modelRunner.ts     Modeli çalıştırma (tek geri alma adımı, hata ve Durdur'da geri alma), modelAsTool
   modelEdit.ts       Model taslağını düzenleme (tasarımcının işlemleri, saf)
-  expression.ts      İfade dili: sözcüklere ayırma, ayrıştırma, closure'a derleme, hata mesajları, önizleme
-  expressionLib.ts   İfade değerleri (tür dönüşümleri, eşitlik, sıralama), değişkenler ($alan …), işlevler
-  processing.test.ts, expression.test.ts   Birim testleri
+  processing.test.ts Birim testleri
+  (ifade dili model/expression/ altındadır: stil motoru da kullanır)
   worker/
     protocol.ts      Sayfa ↔ worker mesajları
     handleJob.ts     Worker içinde bir işi çalıştırma (sahte worker'la test edilir)
@@ -167,7 +166,7 @@ panel bunlara abone olur.
 
 ## 5. İfade dili
 
-Koşul ve değer parametreleri (`expression`) küçük, güvenli bir ifade dili kullanır (`processing/expression.ts`, `expressionLib.ts`). `eval` yoktur: metin sözcüklere ayrılır, öncelik tırmanmasıyla ayrıştırılır ve closure'lara derlenir. Hata mesajı yerini söyler: "15. karakterde: İfade yarım kalmış: sonunda bir değer eksik."
+Koşul ve değer parametreleri (`expression`) küçük, güvenli bir ifade dili kullanır (`model/expression/expression.ts`, `expressionLib.ts`; stil motoru da aynı dili kullanır). `eval` yoktur: metin sözcüklere ayrılır, öncelik tırmanmasıyla ayrıştırılır ve closure'lara derlenir. Hata mesajı yerini söyler: "15. karakterde: İfade yarım kalmış: sonunda bir değer eksik."
 
 ```
 Nitelik = 'Arsa' ve $alan > 500
@@ -187,7 +186,7 @@ eğer(boş(Parsel), 'numarasız', Ada || '/' || Parsel)
 
 Pencerede ifade alanı tek satırdır (komut satırı gibi eşaralıklı yazıyla). Altında girdi nesnelerinin alanları düğme olarak (tıklayınca imlecin yerine eklenir), "Değişkenler" ve "İşlevler" menüleri (her biri ne yaptığını söyler) ve canlı bir satır bulunur: koşulda "16 / 340 nesne koşulu sağlıyor.", değerde "İlk nesnede (10): “472.26”."
 
-Yeni işlev eklemek için `EXPR_FUNCTIONS` listesine ad, İngilizce karşılık, değer sayısı, kullanım, açıklama ve `call` ekleyin ve `expression.test.ts`'e bir satır yazın. Menü ve belge buradan beslenir.
+Yeni işlev eklemek için `EXPR_FUNCTIONS` listesine ad, İngilizce karşılık, değer sayısı, kullanım, açıklama ve `call` ekleyin ve `model/expression/expression.test.ts`'e bir satır yazın. Menü ve belge buradan beslenir.
 
 ## 6. Çalışma yerleri (client, worker, server, postgis)
 

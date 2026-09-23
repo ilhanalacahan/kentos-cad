@@ -1,5 +1,5 @@
-import { foldTurkish } from '../core/text';
-import { ENTITY_KIND_LABEL, entityAnchor, entityArea, entityLength, type Entity } from '../model/entities';
+import { foldTurkish } from '../../core/text';
+import { ENTITY_KIND_LABEL, entityAnchor, entityArea, entityLength, type Entity } from '../entities';
 
 /**
  * Values, variables and functions of the expression language

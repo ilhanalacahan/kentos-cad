@@ -1,4 +1,4 @@
-import { compileExpression, expressionError } from './expression';
+import { compileExpression, expressionError } from '../model/expression/expression';
 import type { DefaultsContext, FeaturesValue, LayerValue, ParamDef, ProcessingTool } from './types';
 
 /**

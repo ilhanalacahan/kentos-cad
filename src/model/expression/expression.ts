@@ -1,5 +1,5 @@
-import { foldTurkish } from '../core/text';
-import type { Entity } from '../model/entities';
+import { foldTurkish } from '../../core/text';
+import type { Entity } from '../entities';
 import { compare, equals, findFunction, findVariable, toNumber, toText, truthy, type ExprFunction, type ExprScope, type ExprValue, type ExprVariable } from './expressionLib';
 
 /**

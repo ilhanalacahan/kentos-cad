@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Entity } from '../model/entities';
+import type { Entity } from '../entities';
 import { compileExpression, expressionError, previewExpression } from './expression';
 import { toText, type ExprValue } from './expressionLib';
 

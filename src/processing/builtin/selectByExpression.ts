@@ -1,4 +1,4 @@
-import { truthy } from '../expressionLib';
+import { truthy } from '../../model/expression/expressionLib';
 import { defineTool } from '../types';
 
 /**

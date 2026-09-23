@@ -84,7 +84,7 @@ npx tsc --noEmit -p .     # yalnızca tip denetimi
 ### 4.1 Katmanlar ve bağımlılık yönü
 
 ```
-core ─► geo ─► model ─► processing ─► render ─► viewport ─► tools ─► ui ─► app (kompozisyon kökü)
+core ─► geo ─► model ─► style ─► processing ─► render ─► viewport ─► tools ─► ui ─► app (kompozisyon kökü)
 ```
 
 Oklar "şunu kullanabilir" yönündedir: bir katman yalnızca **solundakileri**
@@ -97,6 +97,7 @@ içinde kurulur.
 | `core/` | Signal, Emitter, Disposable, CommandRegistry, Keymap | Yalnızca DOM tipleri | model, ui |
 | `geo/` | EPSG/CRS kaydı; ileride dönüşümler, geodezik hesaplar | core | DOM, model |
 | `model/` | Belge, varlıklar, katman ağacı, geometri, seçim, proje ayarları, geri alma | core, geo | DOM, render, ui |
+| `style/` | Stil motoru: semboller ve sembol katmanları, katman stilleri (işleyiciler), kitaplık (sistem/kullanıcı/proje, kategori ağacı), .kstil dosyaları, sembol × geometri → çizim ilkelleri (bkz. [docs/STYLE.md](docs/STYLE.md)) | core, geo, model | DOM, render, viewport, tools, ui, app |
 | `processing/` | İşlem araçları: bildirimsel tanım, parametreler, kayıt, çalıştırıcı, modeller (bkz. [docs/PROCESSING.md](docs/PROCESSING.md)) | core, geo, model | DOM, render, viewport, tools, ui, app |
 | `render/` | `RenderBackend` sözleşmesi, sahne verisi, WebGL2 ve WebGPU arka uçları | core, model (tip + stil) | ui, tools, viewport |
 | `viewport/` | Kamera, seçme ve kenetleme dizini, 2B üst katman, çizim döngüsü | core, model, render, tools (tip), app (tip) | ui |
@@ -392,7 +393,7 @@ Toplu işlemler (QGIS Processing gibi) için ayrı bir çatıdır; ayrıntılar 
 - **Çalışma yeri:** sayfa (`clientExecutor`) ya da Web Worker (`processing/worker/`; belge nesnelerin kopyasıyla gider, Durdur worker'ı sonlandırır). Pencerede araç başına seçilir; Otomatik, 2 000 nesne ve üstünü worker'a gönderir. `run` bu yüzden DOM'a ve modül durumuna dokunmaz, sonucu yapılandırılmış kopyayla taşınabilir olmalıdır.
 - **Parametre değer tipleri tanımdan çıkar.** Tanım içindeki ok fonksiyonlarının argümanı tiplenir (`(v: Shown)`, `(c: DefaultsContext)`), yoksa çıkarım bozulur.
 - **Nesne kapsamları:** seçili, görünen, tümü (görünür katmanlar), katman (grup dahil) ve modellerde önceki adımın çıktısı (`ids`). Kullanıcı bir çalıştırmada nesne türlerini daraltabilir (`kinds`: yalnızca kapalı alanlar gibi). Zorunlu girdi boş kalırsa araç çalışmaz, alanda yönlendirme yazar.
-- **İfadeler** (`processing/expression.ts`): koşul ve değer parametreleri için güvenli, `eval`'siz bir dil: alanlar (`Nitelik`, `[Tapu alanı]`), geometri değişkenleri (`$alan`, `$uzunluk`, `$katman` …), Türkçe ve İngilizce işlev adları (`yuvarla`/`round`), `ve`/`veya`/`değil`. Öznitelik metni sayı gibi okunur, boş değer kuralları sabittir; hata mesajı karakter yerini söyler. Seçim üreten araçlar belgeyi değiştirmez, `select` döndürür.
+- **İfadeler** (`model/expression/`; stil motoru da kullanır): koşul ve değer parametreleri için güvenli, `eval`'siz bir dil: alanlar (`Nitelik`, `[Tapu alanı]`), geometri değişkenleri (`$alan`, `$uzunluk`, `$katman` …), Türkçe ve İngilizce işlev adları (`yuvarla`/`round`), `ve`/`veya`/`değil`. Öznitelik metni sayı gibi okunur, boş değer kuralları sabittir; hata mesajı karakter yerini söyler. Seçim üreten araçlar belgeyi değiştirmez, `select` döndürür.
 - **Modeller** (akış diyagramları; `processing/model.ts`, `modelRunner.ts`, `modelEdit.ts`): adım değerleri sabit, model girdisi ya da önceki adımın çıktısı olabilir (tür uyumu `canFeed`). Model tek geri alma adımıdır (`CadDocument.beginGroup`); bir adım çalışmazsa önceki adımlar geri alınır. Yerleşik modeller değiştirilemez (kopyası düzenlenir); kullanıcının modelleri `kentos.processing.v1`'de. **Model tasarımcısı** (`ui/processing/model/`): solda girdiler ve araçlar, ortada kutu-bağlantı diyagramı (porttan sürükleyip bağlama), sağda seçilenin ayarları; kendi geri alma yığını, kaydedilmemiş değişiklik uyarısı.
 - **Arayüz:** İşlemler menüsü (kategoriler kayıttan üretilir), sağ dokta İşlemler sekmesi (arama, kategori ağacı, geçmiş), `ui/processing/ToolDialog.ts` penceresi.
 
@@ -546,7 +547,8 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `tools/coordinateInput.test.ts` | Mutlak, göreli, kutupsal ve mesafe girişi |
 | `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama, denetim ve tür uyumu, model çalıştırma (zincir, tek geri alma, hatada geri alma), model düzenleme (adlandırma, zincirleme, uygun kaynaklar, silme, dizme) |
 | `processing/worker/worker.test.ts` | Worker'da çalıştırma (sahte worker, yapılandırılmış kopya): sayfayla aynı sonuç ve tek geri alma, worker'da ifade derleme, Otomatik seçim eşiği, bilinmeyen araç, çöken worker, Durdur ve yeni worker |
-| `processing/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme |
+| `style/style.test.ts` | Stil motoru: birimler, alan halkalarının yönü, çizgi boyunca işaret yerleşimi, alanın iç noktası, derleme (kesik ve kaydırma, dönüşümlü işaretler, içe kaydırılmış kenar, tarama, öznitelikten yazı, veriye bağlı boyut/açı/renk/görünürlük, desen döşemesi), işleyiciler (kategorili, aralıklı, iç içe kurallar ve ölçek aralığı), kitaplık (sistem salt okunur, kopya, ağaç ve arama, projeye varlıklarıyla kopya), .kstil (dışa/içe aktarma, çakışma kipleri, doğrulama, SVG temizliği) |
+| `model/expression/expression.test.ts` | İfade dili: alanlar ve değişkenler, metin-sayı aritmetiği, karşılaştırma ve boş değer kuralları, Türkçe/İngilizce işlevler, konumlu hata mesajları, önizleme |
 
 Kurallar:
 
@@ -597,6 +599,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
      - *Netcad'e özgü, eksik:* alanı verilen alana göre bölme (ifraz, topolojiyle); sembol ve blok yerleştirme; klotoid (spiral) nesnesi; poligon ve kutupsal ölçü hesapları (Hesap menüsü).
      - *Var:* ELLIPSE (eksenden, merkezden, döndürme, eliptik yay), XLINE (nokta, yatay, düşey, açı, açıortay), RAY, LINE (Geri, Kapat), PLINE (yay: teğet, açı, merkez, yarıçap, ikinci nokta, doğrultu; Uzunluk; Geri), DONUT (dolu tarama olarak), REVCLOUD (dikdörtgen, çokgen), RECTANG (köşe yuvarla, pah, döndür, boyutlar) ve üç noktalı dikdörtgen, POLYGON (içten, dıştan, kenardan), CIRCLE (merkez-yarıçap, merkez-çap, 2N, 3N, TTY, TTT), ARC (üç nokta; başlangıç-merkez-bitiş/açı/kiriş; başlangıç-bitiş-merkez/açı/yön/yarıçap; merkez-başlangıç-bitiş/açı/kiriş; devam), SPLINE, POINT, DIVIDE/MEASURE, TEXT, ölçüler (hizalı, doğrusal ΔY/ΔX, açı, yarıçap, çap), HATCH; MOVE, COPY, ROTATE (Referans, Kopya), SCALE (Referans, Kopya), MIRROR, STRETCH, dikdörtgen ve kutupsal ARRAY, ALIGN, LENGTHEN, OFFSET (mesafe, noktadan geç), TRIM, EXTEND (sınır seçme, Shift ile öbür işlem), BREAK, JOIN, EXPLODE, FILLET ve CHAMFER (çoklu, kırpmasız), tutamaçlar, tek seferlik kenet, nesne izleme, kutupsal izleme, orto, dinamik giriş.
      - *Eksik:* PLINE kalınlığı (genişlik; çizgi kalınlığı gelince); MTEXT; yol boyunca ARRAY.
+   - **Stil motoru (sürüyor, [docs/STYLE.md](docs/STYLE.md)):** 1. aşama (çekirdek: semboller, işleyiciler, kitaplık, .kstil, derleme) yapıldı; sıradaki GPU çizimi, stil yöneticisi ve sembol tasarımcısı, SVG editörü, MPYY sistem kitaplığı.
    - **Sıradaki (B, semboloji):** sembol ve blok kütüphanesi (belgeye tanım kaydı, `insert` türü, ölçek/açı, patlatma); çizgi tipi kütüphanesi (desenli ve sembollü hatlar); Mekânsal Planlar Yapım Yönetmeliği gösterimleri ve lejant
    - **Sonra (C, D):** yatay/düşey, açı ve yarıçap ölçüsü; adalı ve ilişkisel tarama; nokta hesapları (dik ayak, doğrultu-mesafe, otomatik nokta numarası); kutupsal ve yol boyunca dizi; özellik eşle, yön ters çevir, benzerini seç; imleç yanında dinamik giriş kutusu
 2. **Veri modeli:**
@@ -664,9 +667,11 @@ src/
   core/                      Bağımsız temel yapılar (signal, emitter, disposable, commands, keymap)
   geo/crs.ts                 EPSG kaydı (TUREF/ED50 TM, UTM, WGS84), arama, dilim önerisi
   model/                     Belge, varlıklar, geometri, katmanlar, seçim, proje ayarları, örnek proje
+    expression/              İfade dili (ayrıştırma, derleme, değerler, işlevler; işlem araçları ve stil motoru kullanır)
     geom/                    Saf geometri çekirdeği: afin, yay, bulge, kesişim, öteleme, teğet daire, düzlem bindirme ve alan cebiri (+ testler)
     ops/                     Nesne işlemleri: kenarlar, yol parametresi, dönüşüm, budama/uzatma, kır, birleştir, patlat, esnet, köşe, öteleme, köşe yuvarlama/pah, tutamaçlar (+ testler)
-  processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit, expression + expressionLib (ifade dili) (+ testler)
+  style/                     Stil motoru: types (semboller, işleyiciler, kitaplık öğeleri), geometry, compile, primitives, resolve, fromLayer, library, file (.kstil) (+ testler)
+  processing/                İşlem araçları: types (sözleşme), parameters, features (kapsamlar), categories, registry, runner, job (RunJob, Executor), model, modelRunner, modelEdit (+ testler)
     worker/                  Web Worker çalıştırıcısı: protokol, iş yürütme, executor, worker girişi (+ testler)
     builtin/                 Yerleşik araçlar: köşe numaralandırma (numbering + vertexNumbering), kenar uzunlukları, öznitelik hesapla, ifadeyle seç; yerleşik modeller
   render/                    RenderBackend sözleşmesi, sahne kurucu, delikli üçgenleme, ızgara, renk; webgl2/ ve webgpu/
@@ -717,4 +722,5 @@ src/
   styles/                    tokens, base, shell, controls, panels, settings, processing, model
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
+docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanları, birimler, işleyiciler, kitaplık, çizim hattı, aşamalar
 ```

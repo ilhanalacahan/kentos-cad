@@ -1,6 +1,6 @@
 import type { AngleUnit } from '../model/projectSettings';
 import type { Entity, EntityKind, NewEntity } from '../model/entities';
-import type { CompiledExpression } from './expression';
+import type { CompiledExpression } from '../model/expression/expression';
 import type { Vec2 } from '../model/geometry';
 import type { LayerStyle } from '../model/layers';
 

@@ -1,5 +1,5 @@
 import type { Entity } from '../model/entities';
-import { compileExpression } from './expression';
+import { compileExpression } from '../model/expression/expression';
 import type { DefaultsContext, DocumentSnapshot, ExecutionTarget, Feedback, FeatureSet, ProcessingTool, RunContext, RunResult } from './types';
 
 /**

@@ -2,7 +2,7 @@ import type { AppContext } from '../../app/context';
 import { foldTurkish } from '../../core/text';
 import { ENTITY_KIND_LABEL, type EntityKind } from '../../model/entities';
 import type { Vec2 } from '../../model/geometry';
-import { EXPR_FUNCTIONS, EXPR_VARIABLES } from '../../processing/expressionLib';
+import { EXPR_FUNCTIONS, EXPR_VARIABLES } from '../../model/expression/expressionLib';
 import { scopesOf } from '../../processing/parameters';
 import type { InputSummary } from '../../processing/runner';
 import type { FeaturesValue, LayerValue, ParamDef } from '../../processing/types';

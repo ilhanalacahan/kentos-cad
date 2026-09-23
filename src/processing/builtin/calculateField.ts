@@ -1,5 +1,5 @@
 import type { Entity } from '../../model/entities';
-import { toText, truthy } from '../expressionLib';
+import { toText, truthy } from '../../model/expression/expressionLib';
 import { defineTool, type DefaultsContext } from '../types';
 
 /**
