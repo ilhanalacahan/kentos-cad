@@ -15,7 +15,7 @@
     "test:rust": "pnpm rust:test && pnpm rust:wasm && vitest run src/wasm",
     "api": "cargo run -q -p kentos-api --bin kentosd -- serve",
     "kentosd": "cargo run -q -p kentos-api --bin kentosd --",
-    "db:setup": "cargo run -q -p kentos-api --bin kentosd -- db-setup && cargo run -q -p kentos-api --bin kentosd -- migrate"
+    "db:setup": "cargo run -q -p kentos-api --bin kentosd -- db-setup && cargo run -q -p kentos-api --bin kentosd -- migrate && cargo run -q -p kentos-api --bin kentosd -- dev-seed"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

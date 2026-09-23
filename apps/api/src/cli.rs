@@ -210,8 +210,59 @@ pub async fn run(config: &Config, args: &Args) -> Result<(), String> {
                 );
             }
         }
+        ["dev-seed"] => dev_seed(config).await?,
         _ => return Err(USAGE.into()),
     }
+    Ok(())
+}
+
+/// Development data: tenant `ornek-buro` with two accounts (a project manager
+/// and an editor, for two-editor tests). Their shared password is random and
+/// kept in `.env.local` (`KENTOS_DEV_PASSWORD`). Safe to run again.
+async fn dev_seed(config: &Config) -> Result<(), String> {
+    let pool = owner_pool(config).await?;
+    let tenants = admin::list_tenants(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    if !tenants.iter().any(|t| t.slug == "ornek-buro") {
+        admin::create_tenant(&pool, "ornek-buro", "Örnek Harita Bürosu", 5)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    let mut vars = config.vars.clone();
+    let password = vars
+        .get("KENTOS_DEV_PASSWORD")
+        .cloned()
+        .unwrap_or_else(|| format!("dev-{}", &setup::random_secret()[..20]));
+    for (login, name, role) in [
+        ("ayse", "Ayşe Yılmaz", TenantRole::ProjectManager),
+        ("mehmet", "Mehmet Demir", TenantRole::Editor),
+    ] {
+        match admin::create_local_user(&pool, login, name, None, &password).await {
+            Ok(_) => {}
+            Err(kentos_application::AppError::Invalid(m)) if m.contains("zaten") => {
+                admin::set_password(&pool, login, &password)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+        admin::set_membership(&pool, "ornek-buro", login, role, true)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    vars.insert("KENTOS_DEV_PASSWORD".into(), password);
+    env::write_file(
+        &config.env_file,
+        &vars,
+        "KentOS yerel ayarları (kentosd db-setup yazar). Depoya girmez; parolalar içerir.",
+    )
+    .map_err(|e| format!("{} yazılamadı: {e}", config.env_file.display()))?;
+    println!("kurum: ornek-buro; hesaplar: ayse (proje yöneticisi), mehmet (editör)");
+    println!(
+        "parola: {} içinde KENTOS_DEV_PASSWORD",
+        config.env_file.display()
+    );
     Ok(())
 }
 
@@ -224,4 +275,5 @@ pub const USAGE: &str = "kullanım:
   kentosd user add --login GİRİŞ --name AD [--email E] (--password-stdin | --password-env DEĞİŞKEN)
   kentosd user password --login GİRİŞ (--password-stdin | --password-env DEĞİŞKEN)
   kentosd member add --tenant KISA --user GİRİŞ|KİMLİK --role owner|admin|project_manager|editor|viewer [--seat]
-  kentosd member list --tenant KISA";
+  kentosd member list --tenant KISA
+  kentosd dev-seed                            geliştirme kurumu ve iki hesap (ayse, mehmet)";

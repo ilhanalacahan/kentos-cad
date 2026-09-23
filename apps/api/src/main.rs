@@ -7,6 +7,7 @@
 mod cli;
 mod config;
 mod http;
+mod hub;
 mod oidc;
 
 use std::net::SocketAddr;
@@ -63,6 +64,7 @@ async fn serve(config: Config) -> Result<(), String> {
         config: Arc::new(config),
         database,
         oidc,
+        hub: hub::Hub::default(),
     };
     let listener = tokio::net::TcpListener::bind(addr)
         .await

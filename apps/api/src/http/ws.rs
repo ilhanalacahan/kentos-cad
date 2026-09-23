@@ -1,0 +1,211 @@
+//! `/v1/ws`: the live channel of an open project (CLAUDE.md §21.1). The
+//! client subscribes with the cursor it has applied; missed events are
+//! replayed first, then new ones follow as they are committed. The client
+//! sends a heartbeat (`ping`) at least every 60 s or is disconnected. Access
+//! and the session are checked again every 30 s, so a revoked membership or
+//! a signed-out session stops the stream. A job or a commit never depends on
+//! this socket: closing it loses nothing on the server.
+
+use std::time::{Duration, Instant};
+
+use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
+use kentos_application::identity::{self, Actor};
+use kentos_application::tenancy::{self, Access};
+use kentos_application::{AppError, events};
+use kentos_contracts::{ClientMessage, ServerMessage};
+use uuid::Uuid;
+
+use super::AppState;
+use super::auth::{Caller, SESSION_COOKIE, cookie};
+use super::error::Failure;
+
+const IDLE_LIMIT: Duration = Duration::from_secs(60);
+const POLL_EVERY: Duration = Duration::from_secs(5);
+const RECHECK_EVERY: Duration = Duration::from_secs(30);
+
+pub async fn upgrade(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    caller: Caller,
+    ws: WebSocketUpgrade,
+) -> Result<Response, Failure> {
+    // Another site's page cannot open this socket with the user's cookie (cross-site WebSocket hijacking).
+    let origin = headers.get("origin").and_then(|v| v.to_str().ok());
+    if origin.is_some_and(|o| o != state.config.public_url) {
+        return Err(Failure::with(
+            AppError::forbidden("Bağlantı uygulamanın kendi adresinden gelmiyor."),
+            &headers,
+        ));
+    }
+    let session = cookie(&headers, SESSION_COOKIE);
+    Ok(ws
+        .on_upgrade(move |socket| run(socket, state, caller.0, session))
+        .into_response())
+}
+
+struct Subscription {
+    access: Access,
+    project: Uuid,
+    cursor: i64,
+}
+
+async fn send(socket: &mut WebSocket, msg: &ServerMessage) -> bool {
+    let text = serde_json::to_string(msg).expect("server messages serialize");
+    socket.send(Message::Text(text.into())).await.is_ok()
+}
+
+fn error(e: &AppError) -> ServerMessage {
+    ServerMessage::Error {
+        error: e.code().into(),
+        message: e.to_string(),
+    }
+}
+
+/// Sends every event after the subscription's cursor; false when the socket is gone.
+async fn flush(
+    socket: &mut WebSocket,
+    state: &AppState,
+    sub: &mut Subscription,
+) -> Result<bool, AppError> {
+    loop {
+        let page = events::after(
+            state.db()?,
+            &sub.access,
+            sub.project,
+            sub.cursor,
+            events::PAGE_MAX,
+        )
+        .await?;
+        if page.events.is_empty() {
+            return Ok(true);
+        }
+        sub.cursor = page.next.parse().unwrap_or(sub.cursor);
+        let msg = ServerMessage::Events {
+            project_id: sub.project.to_string(),
+            events: page.events,
+        };
+        if !send(socket, &msg).await {
+            return Ok(false);
+        }
+    }
+}
+
+/// The subscription and the project's newest cursor.
+async fn subscribe(
+    state: &AppState,
+    actor: &Actor,
+    tenant: &str,
+    project: &str,
+    after: &str,
+) -> Result<(Subscription, i64), AppError> {
+    let tenant = Uuid::parse_str(tenant).map_err(|_| AppError::not_found("Kurum bulunamadı."))?;
+    let project = Uuid::parse_str(project).map_err(|_| AppError::not_found("Proje bulunamadı."))?;
+    let cursor = after
+        .parse::<i64>()
+        .map_err(|_| AppError::invalid("after bir olay imleci olmalı."))?;
+    let access = tenancy::access(state.db()?, actor, tenant).await?;
+    let latest = events::latest(state.db()?, &access, project).await?;
+    Ok((
+        Subscription {
+            access,
+            project,
+            cursor,
+        },
+        latest,
+    ))
+}
+
+async fn run(mut socket: WebSocket, state: AppState, actor: Actor, session: Option<String>) {
+    let mut changes = state.hub.subscribe();
+    let mut sub: Option<Subscription> = None;
+    let mut last_heard = Instant::now();
+    let mut last_check = Instant::now();
+    let mut poll = tokio::time::interval(POLL_EVERY);
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => {
+                let Some(Ok(message)) = incoming else { break };
+                last_heard = Instant::now();
+                let text = match message {
+                    Message::Text(t) => t,
+                    Message::Close(_) => break,
+                    _ => continue,
+                };
+                match serde_json::from_str::<ClientMessage>(&text) {
+                    Ok(ClientMessage::Ping { t }) => {
+                        if !send(&mut socket, &ServerMessage::Pong { t }).await { break }
+                    }
+                    Ok(ClientMessage::Unsubscribe) => sub = None,
+                    Ok(ClientMessage::Subscribe { tenant_id, project_id, after }) => {
+                        match subscribe(&state, &actor, &tenant_id, &project_id, &after).await {
+                            // A cursor beyond the newest event (a restored database): the client must reopen.
+                            Ok((s, latest)) if s.cursor > latest => {
+                                sub = None;
+                                if !send(&mut socket, &ServerMessage::ResyncRequired { project_id: s.project.to_string() }).await { break }
+                            }
+                            Ok((mut s, _)) => {
+                                let ok = send(&mut socket, &ServerMessage::Subscribed { project_id: s.project.to_string(), after: s.cursor.to_string() }).await;
+                                if !ok { break }
+                                match flush(&mut socket, &state, &mut s).await {
+                                    Ok(true) => sub = Some(s),
+                                    Ok(false) => break,
+                                    Err(e) => { if !send(&mut socket, &error(&e)).await { break } }
+                                }
+                            }
+                            Err(e) => { if !send(&mut socket, &error(&e)).await { break } }
+                        }
+                    }
+                    Err(e) => {
+                        let msg = error(&AppError::invalid(format!("İleti okunamadı: {e}")));
+                        if !send(&mut socket, &msg).await { break }
+                    }
+                }
+            }
+            changed = changes.recv() => {
+                let relevant = match (&changed, &sub) {
+                    (Ok((t, p)), Some(s)) => *t == s.access.tenant && *p == s.project,
+                    // Missed signals (a slow socket): check anyway.
+                    (Err(tokio::sync::broadcast::error::RecvError::Lagged(_)), Some(_)) => true,
+                    (Err(tokio::sync::broadcast::error::RecvError::Closed), _) => break,
+                    _ => false,
+                };
+                if relevant && let Some(s) = sub.as_mut() {
+                    match flush(&mut socket, &state, s).await {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(e) => { sub = None; if !send(&mut socket, &error(&e)).await { break } }
+                    }
+                }
+            }
+            _ = poll.tick() => {
+                if last_heard.elapsed() > IDLE_LIMIT {
+                    let _ = socket.send(Message::Close(None)).await;
+                    break;
+                }
+                if last_check.elapsed() > RECHECK_EVERY {
+                    last_check = Instant::now();
+                    let Ok(db) = state.db() else { break };
+                    // A cookie session must still be open; the tenant access must still hold.
+                    if let Some(token) = &session && !matches!(identity::session_actor(db, token).await, Ok(Some(_))) {
+                        let _ = send(&mut socket, &error(&AppError::Unauthenticated("Oturumunuz sona erdi; yeniden giriş yapın.".into()))).await;
+                        break;
+                    }
+                    if let Some(s) = &sub && let Err(e) = tenancy::access(db, &actor, s.access.tenant).await {
+                        sub = None;
+                        if !send(&mut socket, &error(&e)).await { break }
+                    }
+                }
+                if let Some(s) = sub.as_mut() {
+                    match flush(&mut socket, &state, s).await {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(e) => { sub = None; if !send(&mut socket, &error(&e)).await { break } }
+                    }
+                }
+            }
+        }
+    }
+}

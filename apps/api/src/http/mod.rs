@@ -3,8 +3,10 @@
 
 pub mod auth;
 pub mod error;
+pub mod projects;
 #[cfg(test)]
 mod tests;
+pub mod ws;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,6 +25,7 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::config::Config;
+use crate::hub::Hub;
 use crate::oidc::Oidc;
 
 /// Largest request body: a batch of object changes (a whole imported sheet goes in several).
@@ -34,6 +37,7 @@ pub struct AppState {
     /// `None` when no database is configured: only `/v1/health` works then.
     pub database: Option<Db>,
     pub oidc: Option<Arc<Oidc>>,
+    pub hub: Hub,
 }
 
 impl AppState {
@@ -73,6 +77,27 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/auth/oidc/start", get(auth::oidc_start))
         .route("/v1/auth/oidc/callback", get(auth::oidc_callback))
         .route("/v1/me", get(auth::me))
+        .route(
+            "/v1/tenants/{tenant}/projects",
+            get(projects::list).post(projects::create),
+        )
+        .route(
+            "/v1/tenants/{tenant}/projects/{project}",
+            get(projects::info),
+        )
+        .route(
+            "/v1/tenants/{tenant}/projects/{project}/features",
+            get(projects::features),
+        )
+        .route(
+            "/v1/tenants/{tenant}/projects/{project}/commands",
+            post(projects::command),
+        )
+        .route(
+            "/v1/tenants/{tenant}/projects/{project}/events",
+            get(projects::event_log),
+        )
+        .route("/v1/ws", get(ws::upgrade))
         .layer(middleware)
         .with_state(state)
 }

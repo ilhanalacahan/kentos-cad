@@ -4,8 +4,12 @@
 //! a verified session or token, never from the request body.
 
 pub mod admin;
+pub mod cad;
+pub mod changes;
 pub mod error;
+pub mod events;
 pub mod identity;
+pub mod projects;
 pub mod tenancy;
 
 pub use error::{AppError, AppResult};

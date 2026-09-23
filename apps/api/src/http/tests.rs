@@ -32,6 +32,7 @@ fn app(database: Option<Db>) -> Router {
         config: Arc::new(config()),
         database,
         oidc: None,
+        hub: crate::hub::Hub::default(),
     })
 }
 
@@ -196,5 +197,206 @@ async fn local_sign_in_with_a_session_cookie() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+    db.close().await;
+}
+
+async fn signed_in(app: &Router, login: &str) -> String {
+    let (status, headers, _) = send(app, login_request(login, "dogru-parola-1", true)).await;
+    assert_eq!(status, StatusCode::OK, "{login} giriş yapamadı");
+    headers
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+fn json_req(method: &str, uri: &str, cookie: &str, body: serde_json::Value) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::COOKIE, cookie)
+        .header("x-kentos-client", "web")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn projects_commands_and_events_over_http() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let tenant = admin::create_tenant(&db.owner, "buro", "Harita Bürosu", 3)
+        .await
+        .unwrap();
+    let other = admin::create_tenant(&db.owner, "diger", "Diğer", 3)
+        .await
+        .unwrap();
+    for (login, t, role) in [
+        ("ayse", "buro", TenantRole::ProjectManager),
+        ("bora", "buro", TenantRole::Editor),
+        ("can", "diger", TenantRole::Owner),
+    ] {
+        admin::create_local_user(&db.owner, login, login, None, "dogru-parola-1")
+            .await
+            .unwrap();
+        admin::set_membership(&db.owner, t, login, role, true)
+            .await
+            .unwrap();
+    }
+    let app = app(Some(db.app.clone()));
+    let (ayse, bora, can) = (
+        signed_in(&app, "ayse").await,
+        signed_in(&app, "bora").await,
+        signed_in(&app, "can").await,
+    );
+    let layer = serde_json::json!({ "id": "cizim", "name": "Çizim", "type": "layer", "visible": true, "locked": false, "expanded": true,
+        "style": { "color": "ink", "lineType": "continuous", "lineWeight": 0.25 }, "children": [] });
+    let create = serde_json::json!({ "name": "Ada 101", "settings": { "srid": 5256, "lengthDecimals": 2, "areaDecimals": 2, "areaUnit": "m2", "angleUnit": "grad", "plotScale": 1000 },
+        "origin": { "x": 486500.0, "y": 4420200.0 }, "layers": [layer], "activeLayer": "cizim", "styles": { "items": [], "categories": [] } });
+    let base = format!("/v1/tenants/{tenant}/projects");
+    let mut req = json_req("POST", &base, &ayse, create.clone());
+    req.headers_mut()
+        .insert("idempotency-key", "proje-olustur-1".parse().unwrap());
+    let (status, _, body) = send(&app, req).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let info: kentos_contracts::ProjectInfo = serde_json::from_slice(&body).unwrap();
+    // A retried create with the same key gives the same project, not a second one.
+    let mut again = json_req("POST", &base, &ayse, create.clone());
+    again
+        .headers_mut()
+        .insert("idempotency-key", "proje-olustur-1".parse().unwrap());
+    let (_, _, body) = send(&app, again).await;
+    assert_eq!(
+        serde_json::from_slice::<kentos_contracts::ProjectInfo>(&body)
+            .unwrap()
+            .id,
+        info.id
+    );
+    // An editor cannot create projects.
+    let (status, _, _) = send(&app, json_req("POST", &base, &bora, create)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let project = &info.id;
+    let fid = uuid::Uuid::new_v4().to_string();
+    let command = |cookie: &str, x: f64, op: &str, expected: serde_json::Value| {
+        let entity = serde_json::json!({ "kind": "point", "id": 1, "layerId": "cizim", "attrs": {}, "p": { "x": x, "y": 4420210.0 } });
+        let change = if op == "create" || op == "update" {
+            serde_json::json!({ "op": op, "id": fid, "entity": entity })
+        } else {
+            serde_json::json!({ "op": op, "id": fid })
+        };
+        json_req(
+            "POST",
+            &format!("{base}/{project}/commands"),
+            cookie,
+            serde_json::json!({
+            "commandName": "project.changes", "version": 1, "tenantId": tenant.to_string(), "projectId": project,
+            "requestId": "istek-1", "idempotencyKey": uuid::Uuid::new_v4().to_string(), "expectedVersions": expected,
+            "input": { "features": [change] } }),
+        )
+    };
+    let (status, _, body) = send(&app, command(&ayse, 1.0, "create", serde_json::json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    let (status, _, _) = send(
+        &app,
+        command(
+            &bora,
+            2.0,
+            "update",
+            serde_json::json!({ fid.clone(): "1" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, body) = send(
+        &app,
+        command(
+            &ayse,
+            3.0,
+            "update",
+            serde_json::json!({ fid.clone(): "1" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let err: ApiError = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error, "conflict");
+    assert_eq!(err.conflicts.unwrap()[0].actual.as_deref(), Some("2"));
+
+    let (status, _, body) = send(
+        &app,
+        Request::get(format!("{base}/{project}/features"))
+            .header(header::COOKIE, &ayse)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let page: kentos_contracts::FeaturePage = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        (page.features.len(), page.features[0].version.as_str()),
+        (1, "2")
+    );
+    let (_, _, body) = send(
+        &app,
+        Request::get(format!("{base}/{project}/events?after=0"))
+            .header(header::COOKIE, &bora)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let log: kentos_contracts::EventPage = serde_json::from_slice(&body).unwrap();
+    assert_eq!(log.events.len(), 2);
+
+    // Another tenant's member: every route is 404, even with the right ids; a wrong tenant in the body is refused.
+    for uri in [
+        base.clone(),
+        format!("{base}/{project}"),
+        format!("{base}/{project}/features"),
+        format!("{base}/{project}/events"),
+    ] {
+        let (status, _, _) = send(
+            &app,
+            Request::get(&uri)
+                .header(header::COOKIE, &can)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+    }
+    let (status, _, _) = send(
+        &app,
+        Request::get(format!("/v1/tenants/{other}/projects/{project}"))
+            .header(header::COOKIE, &can)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = send(
+        &app,
+        Request::get("/v1/tenants/bozuk/projects")
+            .header(header::COOKIE, &ayse)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // Without the app header a command is refused even with a valid session.
+    let mut no_header = command(
+        &ayse,
+        4.0,
+        "update",
+        serde_json::json!({ fid.clone(): "2" }),
+    );
+    no_header.headers_mut().remove("x-kentos-client");
+    let (status, _, _) = send(&app, no_header).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
     db.close().await;
 }
