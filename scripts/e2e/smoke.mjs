@@ -6,7 +6,8 @@
 import { createServer } from 'vite';
 import { launch, sleep, WEBGPU_ARGS } from './cdp.mjs';
 
-const server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
+// No file watching or hot reload: a file saved while the test runs must not reload the page under it.
+const server = await createServer({ server: { port: 0, strictPort: false, hmr: false, watch: null }, logLevel: 'error' });
 await server.listen();
 const url = server.resolvedUrls.local[0];
 const b = await launch(url, { args: WEBGPU_ARGS });
@@ -569,7 +570,8 @@ try {
       for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 30) n++;
       return n;
     })()`);
-  await b.eval(`window.kentos.commands.execute('view.zoomExtents')`);
+  // The sample sheet, not everything: the symbol catalogue below it grows with the library.
+  await b.eval(`window.kentos.view.camera.fit(window.kentos.doc.homeView)`);
   // The faint full-screen grid is all antialiasing; engines differ there only by sampling.
   const gridWasOn = await b.eval('window.kentos.settings.grid.value');
   await b.eval('window.kentos.settings.grid.set(false)');

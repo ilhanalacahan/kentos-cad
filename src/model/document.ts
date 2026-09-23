@@ -4,13 +4,16 @@ import { entityBounds, type Entity, type NewEntity } from './entities';
 import type { CrsDef } from '../geo/crs';
 import { ProjectSettings, type ProjectSettingsData } from './projectSettings';
 import { emptyBounds, isEmptyBounds, type Bounds, type Vec2 } from './geometry';
+import type { LayerStyle } from './layers';
 import { LayerStore } from './layers';
 import type { ProjectStyles } from './style';
 
 type Op =
   | { type: 'add'; entity: Entity }
   | { type: 'remove'; entity: Entity }
-  | { type: 'update'; before: Entity; after: Entity };
+  | { type: 'update'; before: Entity; after: Entity }
+  /** A layer's look (colour, line type, renderer …) is project data: undoable like objects. */
+  | { type: 'layerStyle'; layerId: string; before: LayerStyle; after: LayerStyle };
 
 interface Transaction {
   label: string;
@@ -163,6 +166,17 @@ export class CadDocument {
     });
   }
 
+  /** Changes a layer's style as one undoable step (the Layers panel, the layer style window). */
+  setLayerStyle(layerId: string, patch: Partial<LayerStyle>, label = 'Katman stili'): void {
+    const node = this.layers.get(layerId);
+    if (!node) return;
+    const before = structuredClone(node.style);
+    const after = { ...before, ...structuredClone(patch) };
+    for (const k of Object.keys(after) as (keyof LayerStyle)[]) if (after[k] === undefined) delete after[k];
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.record({ type: 'layerStyle', layerId, before, after }, label);
+  }
+
   update(id: number, patch: Partial<Entity>): void {
     const before = this.entities.get(id);
     if (!before) return;
@@ -228,6 +242,10 @@ export class CadDocument {
     const layerIds = new Set<string>();
     const attrIds: number[] = [];
     for (const op of ops) {
+      if (op.type === 'layerStyle') {
+        this.layers.replaceStyle(op.layerId, op.after);
+        continue;
+      }
       if (op.type === 'add') {
         this.entities.set(op.entity.id, op.entity);
         layerIds.add(op.entity.layerId);
@@ -253,6 +271,7 @@ export class CadDocument {
 }
 
 function invert(op: Op): Op {
+  if (op.type === 'layerStyle') return { ...op, before: op.after, after: op.before };
   if (op.type === 'add') return { type: 'remove', entity: op.entity };
   if (op.type === 'remove') return { type: 'add', entity: op.entity };
   return { type: 'update', before: op.after, after: op.before };

@@ -127,7 +127,7 @@ class LayerStyleDialog {
 
   private apply(): boolean {
     const r = this.renderer();
-    this.ctx.doc.layers.setStyle(this.layerId, { renderer: r ?? undefined });
+    this.ctx.doc.setLayerStyle(this.layerId, { renderer: r ?? undefined }, r ? 'Katman stili' : 'Basit katman stili');
     this.applied = JSON.stringify(r);
     this.say(r ? 'Stil haritaya uygulandı.' : 'Katman basit görünüşüne döndü.');
     return true;

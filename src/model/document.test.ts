@@ -66,6 +66,25 @@ describe('CadDocument history', () => {
 });
 
 describe('LayerStore', () => {
+  it('changes a layer style as one undo step, restoring it exactly', () => {
+    const doc = makeDoc();
+    const before = structuredClone(doc.layers.get('a')!.style);
+    doc.setLayerStyle('a', { color: '#FF0000', renderer: { type: 'single', symbols: { fill: { ref: 'temel.alan.dolu' } } } });
+    expect(doc.layers.get('a')!.style.color).toBe('#FF0000');
+    expect(doc.canUndo.value).toBe(true);
+    expect(doc.undo()).toBe('Katman stili');
+    expect(doc.layers.get('a')!.style).toEqual(before);
+    doc.redo();
+    expect(doc.layers.get('a')!.style.renderer?.type).toBe('single');
+    // Taking the renderer away removes the key; an unchanged style records nothing.
+    doc.setLayerStyle('a', { renderer: undefined });
+    expect('renderer' in doc.layers.get('a')!.style).toBe(false);
+    const steps = doc.canUndo.value;
+    doc.setLayerStyle('a', { color: '#FF0000' });
+    doc.undo();
+    expect(doc.layers.get('a')!.style.renderer?.type).toBe('single');
+    expect(steps).toBe(true);
+  });
   it('inherits visibility and lock from groups', () => {
     const doc = makeDoc();
     doc.layers.setVisible('g', false);

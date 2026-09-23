@@ -292,6 +292,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - `events.structure` ağaç şekli değişince tetiklenir.
   - `events.state` görünürlük, kilit ya da stil değişince etkilenen yaprak kimlikleriyle tetiklenir.
   - `version` sinyali ucuz liste aboneliği içindir.
+- **Katman stili değişikliği geri alınabilir:** arayüz `doc.setLayerStyle(id, patch, etiket)` kullanır (Katmanlar paneli renk/tip/kalınlık, katman stili penceresi); geri alma stili olduğu gibi geri koyar (`LayerStore.replaceStyle`). Görünürlük, kilit ve açık/kapalı durumu geçmişe girmez.
 - **`LayerStyle`:** çizim motoru ve üst katman katman adını **bilmez**. Her görsel davranış stil alanıdır:
   - `color`: hex ya da tema jetonu: `fg` / `fg-dim` (ana ve ikincil mürekkep) ya da `ink` (CAD renk 7, "Siyah": açık zeminde siyah, koyu zeminde beyaz). Jetonlar `render/color.ts` içindeki `resolveColor` ile çözülür; arayüzdeki renk örnekleri `colorSwatch` kullanır, jetonu doğrudan CSS'e yazmaz. Taslak katmanı `ink` ile başlar.
   - `lineType`, `lineWeight` (mm), `fill`
@@ -534,7 +535,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/geom/geom.test.ts` | Afin dönüşüm (büyük TM koordinatında hassasiyet dahil), yay, kesişimler, öteleme |
 | `model/ops/ops.test.ts` | Nesne dönüşümü, budama (kapalı şekil ve daire dahil), uzatma, öteleme, köşe yuvarlama, tutamaçlar |
 | `model/geom/curves.test.ts` | Eğri, tarama kırpma, ölçü yerleşimi (tüm türler, doğrusal yön seçimi, açı bölgesi), teğet noktaları, kenar ölçüleri |
-| `model/document.test.ts` | Geri alma ve yineleme, `transact`, await arasında gruplama ve grubu iptal, katman devralma, proje ayarları, `Formatter` |
+| `model/document.test.ts` | Geri alma ve yineleme, `transact`, await arasında gruplama ve grubu iptal, katman stilinin geri alınması, katman devralma, proje ayarları, `Formatter` |
 | `model/geom/ellipse.test.ts` | Elips: parametre, uzunluk (Ramanujan'a karşı), doğru kesişimi, en yakın nokta, teğetler, eksenden kurulum |
 | `model/ops/curves2.test.ts` | Elips nesnesi (aynalama, budama, kırma, uzatma, öteleme, tutamaçlar) ve yardımcı çizgiler (budama → ışın/çizgi, kırma, öteleme) |
 | `model/geom/parallel.test.ts` | Paralel çizgi yanları, gönye köşeleri, sıfır mesafe, koridor alanı, kapalı eksen |

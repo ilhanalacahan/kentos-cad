@@ -101,12 +101,11 @@ export class LayersPanel extends Panel {
   }
 
   private colorItems(n: LayerNode): MenuItem[] {
-    const layers = this.ctx.doc.layers;
     return [
-      { label: 'Ana mürekkep', swatch: this.ctx.view.palette.fg, radio: true, checked: n.style.color === 'fg', run: () => layers.setStyle(n.id, { color: 'fg' }) },
-      { label: 'İkincil mürekkep', swatch: this.ctx.view.palette.fgDim, radio: true, checked: n.style.color === 'fg-dim', run: () => layers.setStyle(n.id, { color: 'fg-dim' }) },
+      { label: 'Ana mürekkep', swatch: this.ctx.view.palette.fg, radio: true, checked: n.style.color === 'fg', run: () => this.ctx.doc.setLayerStyle(n.id, { color: 'fg' }, 'Katman rengi') },
+      { label: 'İkincil mürekkep', swatch: this.ctx.view.palette.fgDim, radio: true, checked: n.style.color === 'fg-dim', run: () => this.ctx.doc.setLayerStyle(n.id, { color: 'fg-dim' }, 'Katman rengi') },
       { kind: 'separator' },
-      ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette), radio: true, checked: n.style.color === c.value, run: () => layers.setStyle(n.id, { color: c.value }) })),
+      ...DRAW_COLORS.map((c): MenuItem => ({ label: c.name, swatch: colorSwatch(c.value, this.ctx.view.palette), radio: true, checked: n.style.color === c.value, run: () => this.ctx.doc.setLayerStyle(n.id, { color: c.value }, 'Katman rengi') })),
     ];
   }
 
@@ -137,11 +136,11 @@ export class LayersPanel extends Panel {
         {
           label: 'Çizgi tipi',
           items: () =>
-            (Object.keys(LINE_TYPE_LABEL) as LineType[]).map((t) => ({ label: LINE_TYPE_LABEL[t], radio: true, checked: n.style.lineType === t, run: () => layers.setStyle(n.id, { lineType: t }) })),
+            (Object.keys(LINE_TYPE_LABEL) as LineType[]).map((t) => ({ label: LINE_TYPE_LABEL[t], radio: true, checked: n.style.lineType === t, run: () => this.ctx.doc.setLayerStyle(n.id, { lineType: t }, 'Çizgi tipi') })),
         },
         {
           label: 'Kalınlık',
-          items: () => LINE_WEIGHTS.map((w) => ({ label: `${w.toFixed(2)} mm`, radio: true, checked: n.style.lineWeight === w, run: () => layers.setStyle(n.id, { lineWeight: w }) })),
+          items: () => LINE_WEIGHTS.map((w) => ({ label: `${w.toFixed(2)} mm`, radio: true, checked: n.style.lineWeight === w, run: () => this.ctx.doc.setLayerStyle(n.id, { lineWeight: w }, 'Çizgi kalınlığı') })),
         },
         {
           label: n.style.renderer ? 'Katman stili… (özel)' : 'Katman stili…',

@@ -210,6 +210,14 @@ export class LayerStore {
     this.changedState(id);
   }
 
+  /** Sets a layer's whole style (undo and redo restore it exactly). */
+  replaceStyle(id: string, style: LayerStyle): void {
+    const n = this.get(id);
+    if (!n) return;
+    n.style = structuredClone(style);
+    this.changedState(id);
+  }
+
   rename(id: string, name: string): void {
     const n = this.get(id);
     if (!n || !name.trim()) return;

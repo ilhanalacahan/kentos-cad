@@ -1,7 +1,7 @@
 import type { AppContext } from '../../app/context';
 import { DisposableStore } from '../../core/disposable';
 import type { LibrarySource, Sourced, Symbol } from '../../model/style';
-import { parseStyleFile } from '../../style/file';
+import { exportStyles, parseStyleFile } from '../../style/file';
 import type { CategoryNode } from '../../style/library';
 import { h, replaceChildren } from '../dom';
 import { icon } from '../icons';
@@ -117,10 +117,23 @@ class StyleManager implements DetailsHost {
         { x: r.left, y: r.bottom + 4 },
       );
     });
-    const importBtn = h('button', { class: 'btn btn--small', type: 'button', title: '.kstil dosyasındaki sembolleri kitaplığa ya da projeye alır' }, icon('import', 14), 'İçe aktar…');
-    importBtn.addEventListener('click', () => void this.importFile());
-    const exportBtn = h('button', { class: 'btn btn--small', type: 'button', title: 'Listedeki sembolleri, kullandıkları çizimlerle .kstil dosyasına yazar' }, icon('export', 14), 'Dışa aktar');
-    exportBtn.addEventListener('click', () => this.exportListed());
+    const menuBtn = (label: string, iconName: string, title: string, items: () => { label: string; hint?: string; run: () => void }[]) => {
+      const b = h('button', { class: 'btn btn--small', type: 'button', title }, icon(iconName, 14), label, icon('chevronDown', 12));
+      b.addEventListener('click', () => {
+        const r = b.getBoundingClientRect();
+        PopupMenu.open(items(), { x: r.left, y: r.bottom + 4 });
+      });
+      return b;
+    };
+    // Until the server exists, styles travel as .kstil files or as text on the clipboard (a chat message is enough).
+    const importBtn = menuBtn('İçe aktar', 'import', 'Sembolleri kitaplığa ya da projeye alır', () => [
+      { label: 'Dosyadan…', hint: '.kstil, PNG, JPEG', run: () => void this.importFile() },
+      { label: 'Panodan yapıştır', hint: 'paylaşılan metin', run: () => void this.importClipboard() },
+    ]);
+    const exportBtn = menuBtn('Dışa aktar', 'export', 'Listedeki sembolleri kullandıkları çizimlerle birlikte verir', () => [
+      { label: 'Dosyaya (.kstil)', run: () => this.exportListed() },
+      { label: 'Panoya kopyala', hint: 'paylaşmak için', run: () => void this.exportListed(true) },
+    ]);
 
     this.tree = new TreeView<Node>(
       {
@@ -329,12 +342,34 @@ class StyleManager implements DetailsHost {
     this.dialog.close();
   }
 
-  private exportListed(): void {
+  private async exportListed(toClipboard = false): Promise<void> {
     const ids = this.selected && !this.listed.length ? [this.selected] : this.listed.map((i) => i.id);
     if (!ids.length) return this.say('Dışa aktarılacak öğe yok: bir kategori seçin ya da arayın.', 'warn');
+    if (toClipboard) {
+      const file = exportStyles(this.ctx.styles.library, ids);
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(file));
+        this.say(`${file.items.length} öğe panoya kopyalandı: bir iletiye yapıştırıp paylaşabilirsiniz; alan kişi “İçe aktar → Panodan yapıştır” der.`);
+      } catch {
+        this.say('Tarayıcı panoya yazmaya izin vermedi; dosyaya aktarmayı deneyin.', 'warn');
+      }
+      return;
+    }
     const name = this.query || this.at.path.at(-1) || SOURCES.find((s) => s.source === this.at.source)!.label;
     const n = downloadStyles(this.ctx, ids, name);
     this.say(`${n} öğe (kullandıkları çizimlerle) .kstil dosyasına yazıldı.`);
+  }
+
+  private async importClipboard(): Promise<void> {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      return this.say('Tarayıcı panoyu okumaya izin vermedi; dosyadan içe aktarmayı deneyin.', 'warn');
+    }
+    const { file, issues } = parseStyleFile(text);
+    if (!file) return this.say(`Panodaki metin bir KentOS stili değil: ${issues[0] ?? 'biçim tanınmadı'}.`, 'warn');
+    replaceChildren(this.details, renderImport(this, 'Pano', file, issues));
   }
 
   private async importFile(): Promise<void> {
