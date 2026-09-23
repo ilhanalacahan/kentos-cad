@@ -552,6 +552,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `processing/processing.test.ts` | Numara biçimi, köşe sırası ve ortak köşe, parametre varsayılanları ve doğrulama, kayıt ve arama, çalıştırıcı (belgeyle, tek geri alma, boş girdi), tür süzgeci ve alan özetleri, ifadeyle seçim kipleri, öznitelik hesabı (etiket, boş sonuç, koşul, geri alma), model sıralama, denetim ve tür uyumu, model çalıştırma (zincir, tek geri alma, hatada geri alma), model düzenleme (adlandırma, zincirleme, uygun kaynaklar, silme, dizme) |
 | `processing/worker/worker.test.ts` | Worker'da çalıştırma (sahte worker, yapılandırılmış kopya): sayfayla aynı sonuç ve tek geri alma, worker'da ifade derleme, Otomatik seçim eşiği, bilinmeyen araç, çöken worker, Durdur ve yeni worker |
 | `style/svg/svg.test.ts` | SVG çizim modeli: yol verisi (bütün komutlar, bitişik yay bayrakları, yay → kübik, geri yazma), kutular, türü koruyan dönüşümler, gruplu ve parametreli SVG çıktısı, düzgün çokgen/yıldız, içe alma (dönüşümler, boyalar, atlananlar) |
+| `style/legend.test.ts` | Lejant: işleyicisiz katman, kategoriler ve diğer değerler, kapalı kategori ve kurallar, üst kural adıyla alt kurallar, nesnelerin kendi sembolleri |
 | `style/classify.test.ts` | Katman stili sınıflama: ifade değerleri, benzersiz değerler ve doğal sıra, eşit aralık ve eşit sayı, renk rampası, geometriye göre basit semboller |
 | `style/system/system.test.ts` | Sistem kitaplığı: benzersiz kimlikler, her sembolün doğrulanması, kullanılan çizimlerin varlığı, her öğenin kategorisi |
 | `style/style.test.ts` | Stil motoru: birimler, alan halkalarının yönü, çizgi boyunca işaret yerleşimi, alanın iç noktası, derleme (kesik ve kaydırma, dönüşümlü işaretler, içe kaydırılmış kenar, tarama, öznitelikten yazı, veriye bağlı boyut/açı/renk/görünürlük, desen döşemesi), işleyiciler (kategorili, aralıklı, iç içe kurallar ve ölçek aralığı), kitaplık (sistem salt okunur, kopya, ağaç ve arama, projeye varlıklarıyla kopya), .kstil (dışa/içe aktarma, çakışma kipleri, doğrulama, SVG temizliği) |
@@ -680,6 +681,7 @@ src/
     ops/                     Nesne işlemleri: kenarlar, yol parametresi, dönüşüm, budama/uzatma, kır, birleştir, patlat, esnet, köşe, öteleme, köşe yuvarlama/pah, tutamaçlar (+ testler)
   style/                     Stil motoru: geometry, compile, primitives, resolve, fromLayer, library, file (.kstil) (+ testler); türler model/style.ts'de
     classify.ts              Katman stili sınıflama (benzersiz değer, eşit aralık/sayı, rampalar)
+    legend.ts                Lejant satırları (katman, sınıf, nesne sembolleri)
     svg/                     SVG çizim modeli: yol verisi, şekiller ve dönüşümler, SVG çıktısı, içe alma (+ testler)
     showcase.ts              Gösterim kataloğu: her sistem sembolü örnek geometride (demo projede paftanın altı)
     system/                  Sistem kitaplığı (salt okunur, kopyalanabilir): temel çizgi tipleri, işaretler, alanlar; mpyy/ (yardımcılar, piktogram adları, plan kademesine göre bölümler)

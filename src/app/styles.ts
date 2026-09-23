@@ -84,6 +84,15 @@ export function registerStyleCommands(ctx: AppContext): void {
       },
     },
     {
+      id: 'style.legend',
+      title: 'Lejant…',
+      category: cat,
+      icon: 'layers',
+      aliases: ['LEJANT', 'LEGEND', 'ACIKLAMA'],
+      description: 'Çizimdeki sembollerin anlamı, katman katman; PNG olarak kaydedilir.',
+      run: () => void import('../ui/style/LegendDialog').then((m) => m.openLegend(ctx)),
+    },
+    {
       id: 'style.assign',
       title: 'Seçili nesnelere sembol ver…',
       category: cat,
