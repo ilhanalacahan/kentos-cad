@@ -77,6 +77,7 @@ export class HoverCard extends Component {
     if (Number.isFinite(deed)) rows.push(['Tapu alanı', format.area(deed)]);
     const area = entityArea(e);
     if (area !== null) rows.push([Number.isFinite(deed) ? 'Hesaplanan alan' : 'Alan', format.area(area)]);
+    if (e.kind === 'polygon' && e.holes?.length) rows.push(['Ada (delik)', String(e.holes.length)]);
     const length = entityLength(e);
     if (length !== null) rows.push([e.kind === 'polygon' || e.kind === 'circle' ? 'Çevre' : 'Uzunluk', format.length(length)]);
     if (e.kind === 'circle' || e.kind === 'arc') rows.push(['Yarıçap', format.length(e.r)]);

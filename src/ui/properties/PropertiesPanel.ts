@@ -189,6 +189,8 @@ export class PropertiesPanel extends Panel {
         geo.push({ label: 'Köşe sayısı', value: String(e.pts.length), numeric: true });
         geo.push(num(e.kind === 'polygon' ? 'Çevre' : 'Uzunluk', entityLength(e)!, 'm'));
         if (e.kind === 'polygon') {
+          // Net area: holes (adalar) are already taken out.
+          if (e.holes?.length) geo.push({ label: 'Ada (delik)', value: String(e.holes.length), numeric: true });
           geo.push(...area(entityArea(e)!));
         }
         break;

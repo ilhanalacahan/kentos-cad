@@ -18,7 +18,7 @@ import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tr
  * Selection tools that act at once: with objects already selected they run
  * immediately, otherwise the user picks and presses Enter.
  */
-abstract class SelectionActionTool extends SelectionFirstTool {
+export abstract class SelectionActionTool extends SelectionFirstTool {
   protected abstract run(targets: Entity[]): void;
 
   protected begin(): void {

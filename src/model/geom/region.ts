@@ -1,7 +1,7 @@
 import type { Vec2 } from '../geometry';
 import { bulgePathEdges, bulgeRingArea, hasBulges, reverseBulgePath } from './bulge';
 import type { Edge } from './intersect';
-import { faceRings, overlay, winding, type Area, type Ring, type Source } from './overlay';
+import { faceRings, overlay, winding, type Area, type FaceRing, type Ring, type Source } from './overlay';
 
 /**
  * Area algebra on top of the overlay engine: union, intersection,
@@ -77,29 +77,41 @@ export function splitArea(a: Area, cut: Source): Area[] {
   return overlay([areaSource([a]), { ...cut, cut: true }], ([inside]) => inside);
 }
 
-/**
- * The face of the line work around `p`, or null when `p` is outside every
- * closed shape. With `islands`, closed groups inside the face become holes
- * (a building inside a parcel boundary).
- */
-export function faceAt(lines: readonly Source[], p: Vec2, islands = true): Area | null {
-  const rs = faceRings(lines);
-  const outers = rs.filter((r) => r.area > 0).sort((a, b) => a.area - b.area);
-  const outer = outers.find((r) => r.contains(p));
-  if (!outer) return null;
-  const holes = islands ? rs.filter((r) => r.area < 0 && outers.find((o) => o.contains(r.probe)) === outer).map((r) => r.ring) : [];
-  return { outer: outer.ring, holes };
+/** Faces of line work, computed once and queried many times (hover previews). */
+export interface FaceIndex {
+  /**
+   * The face around `p`, or null when `p` is outside every closed shape.
+   * With `islands`, closed groups inside the face become holes (a
+   * building inside a parcel boundary).
+   */
+  at(p: Vec2, islands?: boolean): Area | null;
+  /** Every bounded face, each with the groups inside it as holes. */
+  all(): Area[];
 }
 
-/** Every bounded face of the line work, each with the groups inside it as holes. */
-export function allFaces(lines: readonly Source[]): Area[] {
+export function faceIndex(lines: readonly Source[]): FaceIndex {
   const rs = faceRings(lines);
+  const inBox = (r: FaceRing, p: Vec2) => p.x >= r.box.minX && p.x <= r.box.maxX && p.y >= r.box.minY && p.y <= r.box.maxY;
   const outers = rs.filter((r) => r.area > 0).sort((a, b) => a.area - b.area);
-  const holes = new Map(outers.map((o) => [o, [] as Ring[]]));
-  for (const r of rs) {
-    if (r.area >= 0) continue;
-    const host = outers.find((o) => o.contains(r.probe));
-    if (host) holes.get(host)!.push(r.ring);
-  }
-  return outers.map((o) => ({ outer: o.ring, holes: holes.get(o)! }));
+  // The face a group outline belongs to: the smallest face around a point just outside it.
+  const container = new Map<FaceRing, FaceRing | undefined>();
+  const host = (r: FaceRing) => {
+    if (!container.has(r)) container.set(r, outers.find((o) => inBox(o, r.probe) && o.contains(r.probe)));
+    return container.get(r);
+  };
+  const groups = rs.filter((r) => r.area < 0);
+  const holesOf = (outer: FaceRing) => groups.filter((r) => inBox(outer, r.probe) && host(r) === outer).map((r) => r.ring);
+  return {
+    at(p, islands = true) {
+      const outer = outers.find((r) => inBox(r, p) && r.contains(p));
+      return outer ? { outer: outer.ring, holes: islands ? holesOf(outer) : [] } : null;
+    },
+    all: () => outers.map((o) => ({ outer: o.ring, holes: holesOf(o) })),
+  };
 }
+
+/** The face of the line work around `p` (see FaceIndex.at). */
+export const faceAt = (lines: readonly Source[], p: Vec2, islands = true): Area | null => faceIndex(lines).at(p, islands);
+
+/** Every bounded face of the line work, each with the groups inside it as holes. */
+export const allFaces = (lines: readonly Source[]): Area[] => faceIndex(lines).all();

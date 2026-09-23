@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry';
 import { bulgeOfSweep, bulgeRingArea } from './bulge';
 import { pointAt, type Edge } from './intersect';
 import { normAngle, TAU } from './arc';
-import { build, classify, edgeLen, leaveAngle, TOL, translateEdge, winding, type Area, type DirPiece, type Ring, type Source, type Vertices } from './arrangement';
+import { build, classify, edgeBox, edgeLen, leaveAngle, TOL, translateEdge, winding, type Area, type Box, type DirPiece, type Ring, type Source, type Vertices } from './arrangement';
 
 /**
  * Planar overlay of straight and circular edges — the engine behind area
@@ -222,6 +222,8 @@ export interface FaceRing {
   contains: (p: Vec2) => boolean;
   /** A point just off the ring on its left (inside a face, outside a group). */
   probe: Vec2;
+  /** Bounding box in true coordinates (quick reject before `contains`). */
+  box: Box;
 }
 
 /** Every closed walk formed by the line work. */
@@ -235,5 +237,9 @@ export function faceRings(sources: readonly Source[]): FaceRing[] {
     area: r.area,
     contains: (p: Vec2) => winding(r.edges, { x: p.x - o.x, y: p.y - o.y }) !== 0,
     probe: { x: r.probe.x + o.x, y: r.probe.y + o.y },
+    box: r.edges.map(edgeBox).reduce(
+      (b, e) => ({ minX: Math.min(b.minX, e.minX + o.x), minY: Math.min(b.minY, e.minY + o.y), maxX: Math.max(b.maxX, e.maxX + o.x), maxY: Math.max(b.maxY, e.maxY + o.y) }),
+      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+    ),
   }));
 }

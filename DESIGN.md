@@ -225,8 +225,8 @@ Yalnızca **yüzen** öğeler gölge alır: araç kutusu (`--shadow-float`); men
 Arayüzün **tek cesur öğesi**dir.
 
 - Varsayılan üç sütun (isteğe bağlı iki), 34×32 düğmeler. **Tüm araçlar her zaman görünür**; gizli alt menü (yığın) kullanılmaz, çünkü fareyle aracı arayan kullanıcı onu görmelidir.
-- Gruplar kısa başlık taşır: Seçim, Çizim, Açıklama, Dönüştür, Düzenle, Harita. Başlık küçük (`--fs-xs`, 600, üçüncül renk) ve bir katlama düğmesidir: tıklamak grubu katlar, ok 90° döner. Katlanan gruplar çalışma alanı yerleşimiyle saklanır (`ui.toolboxFolded`).
-- **Hedef:** üç sütunda araç kutusu 900 px yüksekliğindeki pencerede kaydırma çubuğu çıkarmaz (bugün 628 px). Yeni araç eklenince bu ölçü korunur; gerekirse grup yeniden düzenlenir.
+- Gruplar kısa başlık taşır: Seçim, Çizim, Açıklama, Dönüştür, Düzenle, Alan, Harita. Başlık küçük (`--fs-xs`, 600, üçüncül renk) ve bir katlama düğmesidir: tıklamak grubu katlar, ok 90° döner. Katlanan gruplar çalışma alanı yerleşimiyle saklanır (`ui.toolboxFolded`).
+- **Kaydırma çubuğu çıkmaz.** Seçilen sütun sayısı (2 ya da 3) yüksekliğe sığmıyorsa araç kutusu bir sütun daha genişler (en çok 6); araçlar gizlenmez ve kaydırılmaz. 900 px yüksekliğindeki pencerede 50 araç 4 sütunda sığar. Pencere büyüyünce seçilen sütun sayısına döner.
 - **Etkin araç dolu amber zemin** ve koyu mürekkeple gösterilir.
 - Her düğmenin sağ alt köşesinde **tuş etiketi** vardır: `L`, `⇧M`, `⌥P`, `Esc`, `Del`.
 - İpucu: ad, kısayol, kısa açıklama ve **fareyle kullanım adımları** (numaralı liste, amber numaralar). Adımlar katalogdaki `steps` alanından gelir ve "tıklayın, sürükleyin, sağ tıklayın" diliyle yazılır.

@@ -83,6 +83,8 @@ export const MAIN_MENU: TopMenu[] = [
       'tool.explode',
       'tool.vertex',
       '-',
+      { label: 'Alan işlemleri', icon: 'areaUnion', items: ['tool.boundary', 'tool.toArea', '-', 'tool.areaUnion', 'tool.areaIntersect', 'tool.areaSubtract', 'tool.areaSplit', '-', 'tool.toPolyline'] },
+      '-',
       'tool.erase',
     ],
   },

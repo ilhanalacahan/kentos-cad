@@ -7,6 +7,7 @@ import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { drawTag, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
+import { writableLayer } from './targetLayer';
 import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
 /**
@@ -109,16 +110,7 @@ export abstract class PointInputTool implements Tool {
 
   /** Target layer for new entities, or null (with a message) when not writable. */
   protected targetLayer(preferred?: string): string | null {
-    const layers = this.ctx.doc.layers;
-    const id = preferred ?? layers.active.value;
-    const node = layers.get(id);
-    if (!node) return null;
-    if (layers.isLocked(id)) {
-      this.ctx.log.warn(`“${node.name}” katmanı kilitli. Kilidi Katmanlar panelinden açın ya da başka bir katmanı etkinleştirin.`);
-      return null;
-    }
-    if (!layers.isVisible(id)) this.ctx.log.warn(`“${node.name}” katmanı gizli; çizilen nesne görünmeyecek.`);
-    return id;
+    return writableLayer(this.ctx, preferred);
   }
 
   protected create(geom: EntityGeometry, extra: { attrs?: Record<string, string>; label?: string; layerId?: string } = {}): Entity | null {

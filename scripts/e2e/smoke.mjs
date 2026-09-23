@@ -394,6 +394,40 @@ try {
   check('resizing a panel never flashes a black viewport', frames.length > 5 && blackFrames === 0, `${blackFrames}/${frames.length} kare siyah`);
   await b.eval('window.kentos.ui.dockWidth.set(312)');
 
+  // Area operations (Alan işlemleri) on fresh squares east of everything else.
+  const AX = E + 400;
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${AX - 10}, minY: ${N - 60}, maxX: ${AX + 140}, maxY: ${N + 60} }, 20)`);
+  await sleep(100);
+  const addGeom = (geom) => b.eval(`(() => { const k = window.kentos; let id; k.doc.transact('t', () => { id = k.doc.add({ ...${JSON.stringify(geom)}, layerId: k.doc.layers.active.value, attrs: {} }).id; }); return id; })()`);
+  const sq = (x, y, s) => [{ x: AX + x, y: N + y }, { x: AX + x + s, y: N + y }, { x: AX + x + s, y: N + y + s }, { x: AX + x, y: N + y + s }];
+  const netOf = (id) => b.eval(`window.kentos.doc.get(${id}) && (() => { const e = window.kentos.doc.get(${id}); const a = (p) => { let s = 0; for (let i = 0, j = p.length - 1; i < p.length; j = i++) s += (p[j].x - p[0].x) * (p[i].y - p[0].y) - (p[i].x - p[0].x) * (p[j].y - p[0].y); return Math.abs(s / 2); }; return a(e.pts) - (e.holes || []).reduce((t, h) => t + a(h.pts), 0); })()`);
+  const selected = () => b.eval('[...window.kentos.selection.ids.value]');
+  const sqA = await addGeom({ kind: 'polygon', pts: sq(0, 0, 20) });
+  const sqB = await addGeom({ kind: 'polygon', pts: sq(10, 10, 20) });
+  await b.eval(`window.kentos.selection.set([${sqA}, ${sqB}])`);
+  await key('b', { alt: true });
+  await sleep(150);
+  const united = await selected();
+  check('Alt+B unites two squares into one area', united.length === 1 && Math.abs((await netOf(united[0])) - 700) < 1e-6);
+  await b.eval(`window.kentos.commands.execute('edit.undo')`);
+  const island = await addGeom({ kind: 'polygon', pts: sq(6, 6, 4) });
+  await b.eval(`window.kentos.selection.set([${sqA}])`);
+  await key('c', { alt: true });
+  await b.click(...(await toScreen(AX + 8, N + 8)));
+  await key('Enter');
+  await sleep(150);
+  const [holedId] = await selected();
+  const holedE = await b.eval(`window.kentos.doc.get(${holedId})`);
+  check('Alt+C with an inner area leaves a hole (adalı alan)', holedE?.holes?.length === 1 && Math.abs((await netOf(holedId)) - 384) < 1e-6 && !!(await b.eval(`window.kentos.doc.get(${island})`)));
+  await key('Escape');
+  for (const [x1, y1, x2, y2] of [[60, -2, 90, -2], [88, -4, 88, 26], [90, 24, 60, 24], [62, 26, 62, -4]]) await addGeom({ kind: 'line', a: { x: AX + x1, y: N + y1 }, b: { x: AX + x2, y: N + y2 } });
+  await key('b', { shift: true });
+  await b.click(...(await toScreen(AX + 70, N + 10)));
+  await sleep(150);
+  const [faceId] = await selected();
+  check('Shift+B: a click inside crossing lines makes the enclosed area', Math.abs((await netOf(faceId)) - 26 * 26) < 1e-6);
+  await key('Escape');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
@@ -410,6 +444,9 @@ try {
       return n;
     })()`);
   await b.eval(`window.kentos.commands.execute('view.zoomExtents')`);
+  // The faint full-screen grid is all antialiasing; engines differ there only by sampling.
+  const gridWasOn = await b.eval('window.kentos.settings.grid.value');
+  await b.eval('window.kentos.settings.grid.set(false)');
   await sleep(100);
   const glInk = await inked();
   const gpuReady = await b.eval('(async () => !!(await navigator.gpu?.requestAdapter()))()');
@@ -427,6 +464,7 @@ try {
     await b.waitFor(`window.kentos.view.backendKind.value === 'webgl2'`, 10000).catch(() => {});
     check('switching back to WebGL2 keeps one canvas', (await b.eval(`window.kentos.view.backendKind.value + '|' + document.querySelectorAll('.viewport__gl').length`)) === 'webgl2|1');
   }
+  await b.eval(`window.kentos.settings.grid.set(${gridWasOn})`);
 
   // Undo / redo round trip
   const before = await b.eval('window.kentos.doc.size');

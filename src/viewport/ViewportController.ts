@@ -213,6 +213,11 @@ export class ViewportController {
     return this.picker.enclosing(world);
   }
 
+  /** Visible entities whose bounds overlap `r` (candidates for boundaries and cut lines). */
+  entitiesIn(r: Bounds): Entity[] {
+    return [...this.picker.overlapping(r)];
+  }
+
   /** Boundary edges of visible entities overlapping `r`, optionally excluding one entity. */
   edgesIn(r: Bounds, exceptId?: number): Edge[] {
     return this.picker.edgesIn(r, exceptId);

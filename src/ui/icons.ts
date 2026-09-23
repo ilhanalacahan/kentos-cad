@@ -48,6 +48,14 @@ const ICONS = {
   spot: '<path d="M10 4 4.8 13h10.4z"/><path d="M3 16.5h14"/><circle cx="10" cy="10" r=".9" fill="currentColor"/>',
   measure: '<path d="M2.8 13.6 13.6 2.8l3.6 3.6L6.4 17.2z"/><path d="m5.9 10.5 1.6 1.6M8.4 8l2.2 2.2M10.9 5.5l1.6 1.6"/>',
   area: '<path d="M3.5 16.5v-13h13v13z" stroke-dasharray="2 1.7"/><path d="M7 13V7h6v6z" fill="currentColor" fill-opacity=".35"/>',
+  // Alan işlemleri
+  boundary: '<path d="M3 15h14M5 17 11 3M9 3l6 14"/><path d="M5.86 15h8.28L10 5.33z" fill="currentColor" fill-opacity=".3" stroke="none"/><circle cx="10" cy="11.8" r="1" fill="currentColor" stroke="none"/>',
+  toArea: '<path d="m3.8 8 6-4.5 6.5 3.5-1.8 9H5.6z" fill="currentColor" fill-opacity=".3" stroke-dasharray="2.2 1.5"/>',
+  areaUnion: '<path d="M3 3h9v5h5v9H8v-5H3z" fill="currentColor" fill-opacity=".22"/>',
+  areaIntersect: '<path d="M3 3h9v9H3zM8 8h9v9H8z" stroke-dasharray="2 1.6"/><path d="M8 8h4v4H8z" fill="currentColor" fill-opacity=".55"/>',
+  areaSubtract: '<path d="M3 3h14v7h-6v7H3z" fill="currentColor" fill-opacity=".22"/><path d="M11 10h6v7h-6" stroke-dasharray="2 1.6"/>',
+  areaSplit: '<path d="M4 4h12v12H4z" fill="currentColor" fill-opacity=".16"/><path d="M2 14.5 18 5.5"/>',
+  toPolyline: `<path d="M5.6 16 3.8 8l6-4.5 6.5 3.5-1.8 9H8"/>${grip(3.8, 8)}${grip(9.8, 3.5)}${grip(16.3, 7)}${grip(14.5, 16)}${grip(5.6, 16)}`,
 
   // Object snaps: the marker (solid) as drawn on the canvas, on its context geometry (dashed).
   snapEndpoint: '<path d="M3.5 16.5 11 9" stroke-dasharray="2 1.6"/><rect x="10.5" y="3.5" width="6" height="6"/>',

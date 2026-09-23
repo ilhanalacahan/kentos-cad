@@ -1,4 +1,4 @@
-import { entityOutline, type EntityGeometry } from '../model/entities';
+import { entityOutline, polygonRing, type EntityGeometry, type RingGeometry } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
 import type { ViewTransform } from '../viewport/Camera';
 
@@ -68,6 +68,34 @@ export function strokeGeometry(
     return;
   }
   strokePath(g, view, entityOutline(geom, 64), { ...opts, closed: geom.kind === 'polygon' || geom.kind === 'circle' });
+  if (geom.kind === 'polygon') for (const h of geom.holes ?? []) strokePath(g, view, polygonRing(h), { ...opts, closed: true });
+}
+
+/** An area (outer ring and holes) filled with the even–odd rule and outlined: area tool previews. */
+export function drawArea(
+  g: CanvasRenderingContext2D,
+  view: ViewTransform,
+  area: { outer: RingGeometry; holes: readonly RingGeometry[] },
+  opts: { color: string; fill?: string; dash?: number[]; width?: number },
+): void {
+  g.save();
+  g.beginPath();
+  for (const r of [area.outer, ...area.holes]) {
+    polygonRing(r).forEach((p, i) => {
+      const s = view.worldToScreen(p);
+      i ? g.lineTo(s.x, s.y) : g.moveTo(s.x, s.y);
+    });
+    g.closePath();
+  }
+  if (opts.fill) {
+    g.fillStyle = opts.fill;
+    g.fill('evenodd');
+  }
+  g.setLineDash(opts.dash ?? []);
+  g.lineWidth = opts.width ?? 1.5;
+  g.strokeStyle = opts.color;
+  g.stroke();
+  g.restore();
 }
 
 /**
@@ -86,4 +114,10 @@ export function drawSelectionBox(g: CanvasRenderingContext2D, a: Vec2, b: Vec2, 
   g.setLineDash(crossing ? [5, 4] : []);
   g.strokeRect(Math.min(a.x, b.x) + 0.5, Math.min(a.y, b.y) + 0.5, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   g.restore();
+}
+
+/** A palette colour (#rrggbb) at the given opacity, for translucent preview fills. */
+export function tint(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color.trim());
+  return m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})` : color;
 }

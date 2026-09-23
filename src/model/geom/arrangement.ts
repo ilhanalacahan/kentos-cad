@@ -106,14 +106,14 @@ function splitFullCircles(edges: readonly Edge[]): Edge[] {
   return out;
 }
 
-interface Box {
+export interface Box {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
 }
 
-function edgeBox(e: Edge): Box {
+export function edgeBox(e: Edge): Box {
   if (e.kind === 'seg') return { minX: Math.min(e.a.x, e.b.x), minY: Math.min(e.a.y, e.b.y), maxX: Math.max(e.a.x, e.b.x), maxY: Math.max(e.a.y, e.b.y) };
   return { minX: e.c.x - e.r, minY: e.c.y - e.r, maxX: e.c.x + e.r, maxY: e.c.y + e.r };
 }
