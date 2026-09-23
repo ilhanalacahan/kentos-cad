@@ -280,7 +280,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
 
 ### 4.8 Belge modeli (`model/`)
 
-- **`CadDocument`:** varlıklar `Map<id, Entity>` içinde durur. Bütün düzenlemeler `add`, `update`, `remove` ve bunları gruplayan `transact(label, fn)` üzerinden yapılır. Her işlem tersine çevrilebilir bir `Op` olarak kaydedilir; geri alma yığını 200 adımla sınırlıdır.
+- **`CadDocument`:** varlıklar `Map<id, Entity>` içinde durur. Bütün düzenlemeler `add`, `update`, `remove` ve bunları gruplayan `transact(label, fn)` üzerinden yapılır. Her işlem tersine çevrilebilir bir `Op` olarak kaydedilir; geri alma yığını 200 adımla sınırlıdır. `transact` ya hep ya hiç çalışır: `fn` hata fırlatırsa yaptıkları geri alınır, hiçbir şey kaydedilmez ve `dirty` değişmez. İç içe çağrı bir kayıt noktasıdır; gerekçe [docs/adr/0003-transaction-semantics.md](docs/adr/0003-transaction-semantics.md)'de.
 - **Olaylar:**
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
   - `attrs { ids }`: yalnızca öznitelik değişti; tampon kurulmaz, etiket ve panel yenilenir.
