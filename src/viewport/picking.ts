@@ -120,9 +120,9 @@ export class PickIndex {
       const t = e.kind === 'point' || e.kind === 'text' ? tol * 1.5 : tol;
       if (d <= t && (!edge || d < edge.d)) edge = { e, d };
       if (layers.get(e.layerId)?.style.pickInterior === false) continue;
-      if (e.kind === 'hatch' && pointInPolygon(p, e.ring)) {
+      if (e.kind === 'hatch' && pointInPolygon(p, e.ring) && !(e.holes ?? []).some((h) => pointInPolygon(p, h))) {
         // Slightly smaller than its boundary so the hatch wins over the parcel it fills.
-        const a = Math.abs(signedArea(e.ring)) * 0.999;
+        const a = (entityArea(e) ?? 0) * 0.999;
         if (!area || a < area.a) area = { e, a };
       } else if (e.kind === 'polygon' && insidePolygon(e, p)) {
         // Net area: a parcel with a building hole still loses to the building.
@@ -361,7 +361,7 @@ function touchesRect(e: Entity, r: Bounds): boolean {
   const inR = (q: Vec2) => q.x >= r.minX && q.x <= r.maxX && q.y >= r.minY && q.y <= r.maxY;
   if (pts.some(inR)) return true;
   const centre = { x: (r.minX + r.maxX) / 2, y: (r.minY + r.maxY) / 2 };
-  if (e.kind === 'polygon' ? insidePolygon(e, centre) : e.kind === 'hatch' && pointInPolygon(centre, e.ring)) return true;
+  if (e.kind === 'polygon' ? insidePolygon(e, centre) : e.kind === 'hatch' && pointInPolygon(centre, e.ring) && !(e.holes ?? []).some((h) => pointInPolygon(centre, h))) return true;
   // A window crossing a hole's boundary touches the polygon.
   for (const h of polygonHoles(e)) for (let i = 0; i < h.length; i++) for (let j = 0; j < 4; j++) if (segSeg(h[i], h[(i + 1) % h.length], rectCorner(r, j), rectCorner(r, j + 1))) return true;
   const rect: Vec2[] = [

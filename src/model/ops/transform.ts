@@ -56,7 +56,12 @@ export function transformEntity<E extends Entity>(e: E, m: Affine): E {
       const rad = (e.pattern.angle * Math.PI) / 180;
       const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
       const angle = ((((Math.atan2(dir.y, dir.x) * 180) / Math.PI) % 180) + 180) % 180;
-      return { ...e, ring: e.ring.map((p) => apply(m, p)), pattern: { ...e.pattern, angle, spacing: e.pattern.spacing * s } };
+      return {
+        ...e,
+        ring: e.ring.map((p) => apply(m, p)),
+        ...(e.holes && { holes: e.holes.map((h) => h.map((p) => apply(m, p))) }),
+        pattern: { ...e.pattern, angle, spacing: e.pattern.spacing * s },
+      };
     }
     case 'text': {
       const rad = (e.rotation * Math.PI) / 180;

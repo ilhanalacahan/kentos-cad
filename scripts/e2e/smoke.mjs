@@ -420,6 +420,13 @@ try {
   const holedE = await b.eval(`window.kentos.doc.get(${holedId})`);
   check('Alt+C with an inner area leaves a hole (adalı alan)', holedE?.holes?.length === 1 && Math.abs((await netOf(holedId)) - 384) < 1e-6 && !!(await b.eval(`window.kentos.doc.get(${island})`)));
   await key('Escape');
+  await key('Escape');
+  await key('h');
+  await b.click(...(await toScreen(AX + 2, N + 2)));
+  await sleep(100);
+  const hatchE = await b.eval('[...window.kentos.doc.all()].at(-1)');
+  check('hatching a holed area leaves its island empty', hatchE.kind === 'hatch' && hatchE.holes?.length === 1);
+  await key('Escape');
   for (const [x1, y1, x2, y2] of [[60, -2, 90, -2], [88, -4, 88, 26], [90, 24, 60, 24], [62, 26, 62, -4]]) await addGeom({ kind: 'line', a: { x: AX + x1, y: N + y1 }, b: { x: AX + x2, y: N + y2 } });
   await key('b', { shift: true });
   await b.click(...(await toScreen(AX + 70, N + 10)));

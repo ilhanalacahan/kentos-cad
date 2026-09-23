@@ -4,6 +4,7 @@ import { LayerStore } from '../layers';
 import { entityArea, entityLength, entityVertices, type Entity, type EntityGeometry } from '../entities';
 import type { Vec2 } from '../geometry';
 import { mirror } from '../geom/affine';
+import { hatchLines } from '../geom/hatch';
 import { netArea, subtractAreas, unionAreas } from '../geom/region';
 import { areaOfEntity, lineSource, polygonOfArea, polylinesOfPolygon } from './areas';
 import { entityEdges } from './edges';
@@ -91,5 +92,23 @@ describe('polygon with holes', () => {
     const [u] = unionAreas([a, b]);
     expect(u.holes).toHaveLength(2);
     expect(netArea(u)).toBeCloseTo(192, 10);
+  });
+});
+
+describe('hatch with islands', () => {
+  const ring = square(0.5, 0.5, 10);
+  const hole = square(4.5, 4.5, 2);
+  it('hatch lines skip the hole', () => {
+    // Ten lines of 10 m; the two through the hole lose 2 m each.
+    const { segments } = hatchLines(ring, 0, 1, [hole]);
+    const total = segments.reduce((s, [a, b]) => s + Math.hypot(b.x - a.x, b.y - a.y), 0);
+    expect(total).toBeCloseTo(96, 9);
+  });
+  it('area and transform follow the hole', () => {
+    const h: Entity = { ...base, kind: 'hatch', ring, holes: [hole], pattern: { type: 'lines', angle: 45, spacing: 1 } };
+    expect(entityArea(h)).toBeCloseTo(96, 12);
+    const m = transformEntity(h, mirror(v(20, 0), v(20, 1)));
+    expect(m.kind === 'hatch' && m.holes![0][0].x).toBeCloseTo(35.5, 12);
+    expect(entityEdges(h)).toHaveLength(8);
   });
 });

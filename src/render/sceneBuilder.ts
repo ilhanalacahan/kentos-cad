@@ -140,12 +140,13 @@ export function buildSceneLayer(id: string, entities: readonly Entity[], style: 
         if (opts.overrideColor) {
           // Highlight: outline plus a light fill regardless of pattern.
           b.lines.path(e.ring, origin, true);
-          if (opts.overrideFill) triangulate(e.ring, [], origin, b.fill);
-        } else if (e.pattern.type === 'solid') triangulate(e.ring, [], origin, b.solid);
+          for (const h of e.holes ?? []) b.lines.path(h, origin, true);
+          if (opts.overrideFill) triangulate(e.ring, e.holes ?? [], origin, b.fill);
+        } else if (e.pattern.type === 'solid') triangulate(e.ring, e.holes ?? [], origin, b.solid);
         else {
-          for (const [p, q] of hatchLines(e.ring, e.pattern.angle, e.pattern.spacing).segments) b.lines.path([p, q], origin, false);
+          for (const [p, q] of hatchLines(e.ring, e.pattern.angle, e.pattern.spacing, e.holes).segments) b.lines.path([p, q], origin, false);
           if (e.pattern.type === 'cross')
-            for (const [p, q] of hatchLines(e.ring, e.pattern.angle + 90, e.pattern.spacing).segments) b.lines.path([p, q], origin, false);
+            for (const [p, q] of hatchLines(e.ring, e.pattern.angle + 90, e.pattern.spacing, e.holes).segments) b.lines.path([p, q], origin, false);
         }
         break;
       case 'point':

@@ -42,8 +42,8 @@ export function explodeEntity(e: Entity, valueText: (length: number) => string):
     }
     case 'hatch': {
       if (e.pattern.type === 'solid') return { error: 'Dolu tarama patlatılamaz; sınır olarak taranan şekli kullanın.' };
-      const segs = hatchLines(e.ring, e.pattern.angle, e.pattern.spacing).segments;
-      if (e.pattern.type === 'cross') segs.push(...hatchLines(e.ring, e.pattern.angle + 90, e.pattern.spacing).segments);
+      const segs = hatchLines(e.ring, e.pattern.angle, e.pattern.spacing, e.holes).segments;
+      if (e.pattern.type === 'cross') segs.push(...hatchLines(e.ring, e.pattern.angle + 90, e.pattern.spacing, e.holes).segments);
       return { pieces: segs.map(([a, b]) => ({ kind: 'line', a, b })) };
     }
     case 'circle':

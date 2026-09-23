@@ -117,6 +117,8 @@ export interface HatchPattern {
 export interface HatchEntity extends EntityBase {
   kind: 'hatch';
   ring: Vec2[];
+  /** Islands left unhatched (the holes of a holed polygon). */
+  holes?: Vec2[][];
   pattern: HatchPattern;
 }
 export interface TextEntity extends EntityBase {
@@ -202,7 +204,7 @@ export function entityVertices(e: EntityGeometry): Vec2[] {
     case 'dimension':
       return [e.a, e.b];
     case 'hatch':
-      return e.ring;
+      return e.holes?.length ? [...e.ring, ...e.holes.flat()] : e.ring;
   }
 }
 
@@ -238,8 +240,8 @@ export function entityOutline(e: EntityGeometry, segments = 72): Vec2[] {
 /** Closed ring of a polygon, arcs tessellated — for fills, hit tests and hatching. */
 export const polygonRing = (e: RingGeometry): Vec2[] => (hasBulges(e.bulges) ? bulgePathOutline(e.pts, e.bulges, true) : e.pts);
 
-/** Hole rings of a polygon, arcs tessellated (empty for anything else). */
-export const polygonHoles = (e: EntityGeometry): Vec2[][] => (e.kind === 'polygon' && e.holes ? e.holes.map(polygonRing) : []);
+/** Hole rings of a polygon (arcs tessellated) or a hatch; empty for anything else. */
+export const polygonHoles = (e: EntityGeometry): Vec2[][] => (e.kind === 'polygon' && e.holes ? e.holes.map(polygonRing) : e.kind === 'hatch' && e.holes ? e.holes : []);
 
 /** Whether p is inside a polygon's outer ring but not inside one of its holes (tessellated test). */
 export function insidePolygon(e: Extract<EntityGeometry, { kind: 'polyline' | 'polygon' }>, p: Vec2): boolean {
@@ -340,7 +342,7 @@ export function entityArea(e: Entity): number | null {
   if (e.kind === 'polygon') return Math.abs(bulgeRingArea(e.pts, e.bulges)) - (e.holes ?? []).reduce((s, h) => s + Math.abs(bulgeRingArea(h.pts, h.bulges)), 0);
   if (e.kind === 'circle') return Math.PI * e.r * e.r;
   if (e.kind === 'ellipse' && isFullEllipse(e)) return ellipseArea(e);
-  if (e.kind === 'hatch') return Math.abs(signedArea(e.ring));
+  if (e.kind === 'hatch') return Math.abs(signedArea(e.ring)) - (e.holes ?? []).reduce((s, h) => s + Math.abs(signedArea(h)), 0);
   return null;
 }
 

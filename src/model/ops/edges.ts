@@ -20,7 +20,7 @@ export function entityEdges(e: Entity): Edge[] {
       // The tessellated curve already ends on its first point when closed.
       return pathEdges(catmullRom(e.pts, e.closed), false);
     case 'hatch':
-      return pathEdges(e.ring, true);
+      return [...pathEdges(e.ring, true), ...(e.holes ?? []).flatMap((h) => pathEdges(h, true))];
     case 'dimension': {
       const l = layoutDimension(e);
       return l ? [{ kind: 'seg', a: l.d1, b: l.d2 }] : [];
