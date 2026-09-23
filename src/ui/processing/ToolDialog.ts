@@ -2,7 +2,7 @@ import type { AppContext } from '../../app/context';
 import { DisposableStore } from '../../core/disposable';
 import type { Vec2 } from '../../model/geometry';
 import { defaultValues, isVisible, restoreValues, type ValidationIssue } from '../../processing/parameters';
-import type { InputSummary, RunOutcome } from '../../processing/runner';
+import { WORKER_THRESHOLD, type InputSummary, type RunOutcome, type TargetChoice } from '../../processing/runner';
 import type { ExecutionTarget, ParamDef, ProcessingTool } from '../../processing/types';
 import { PickPointTool } from '../../tools/pickPointTool';
 import { h, replaceChildren, type Child } from '../dom';
@@ -24,6 +24,14 @@ export const TARGET_LABEL: Record<ExecutionTarget, string> = {
   postgis: 'PostGIS veritabanında',
 };
 
+/** Lower-case, for "şimdi: …" and history rows. */
+export const TARGET_SHORT: Record<ExecutionTarget, string> = {
+  client: 'bu tarayıcıda',
+  worker: 'arka planda',
+  server: 'sunucuda',
+  postgis: 'PostGIS’te',
+};
+
 export function openToolDialog(ctx: AppContext, toolId: string, values?: Record<string, unknown>): void {
   const tool = ctx.processing.registry.get(toolId);
   if (!tool) {
@@ -35,7 +43,7 @@ export function openToolDialog(ctx: AppContext, toolId: string, values?: Record<
 
 type Status =
   | { kind: 'idle' }
-  | { kind: 'running'; fraction: number; label: string }
+  | { kind: 'running'; fraction: number; label: string; where?: ExecutionTarget }
   /** `pick`: objects "Sonuçları seç" selects; `selected`: the run set the selection itself; `undo`: it edited the drawing. */
   | { kind: 'ok'; text: string; pick: readonly number[]; selected: boolean; undo: boolean }
   | { kind: 'error' | 'invalid'; text: string };
@@ -57,6 +65,8 @@ class ToolDialog {
   private readonly form = h('div', { class: 'ptool__form' });
   private readonly preview = h('div', { class: 'ptool__preview-value num' });
   private readonly statusEl = h('div', { class: 'ptool__status', role: 'status', 'aria-live': 'polite' });
+  private readonly targetsEl = h('div', { class: 'ptool__targets', role: 'radiogroup', 'aria-label': 'Nerede çalışır' });
+  private choice: TargetChoice;
   private readonly runBtn: HTMLButtonElement;
   private readonly closeBtn: HTMLButtonElement;
 
@@ -65,6 +75,7 @@ class ToolDialog {
     this.tool = tool;
     const runner = ctx.processing.runner;
     this.values = restoreValues(tool, values ?? ctx.processing.lastValues(tool.id), runner.defaults());
+    this.choice = ctx.processing.targetChoice(tool.id);
     this.advancedOpen = tool.parameters.some((p) => p.advanced && values && p.name in values && JSON.stringify(values[p.name]) !== JSON.stringify(defaultValues(tool, runner.defaults())[p.name]));
 
     const reset = h('button', { class: 'btn btn--ghost', type: 'button', title: 'Bütün alanları varsayılan değerlerine döndürür' }, 'Varsayılanlar');
@@ -99,7 +110,7 @@ class ToolDialog {
     this.d.add(
       runner.running.subscribe((r) => {
         if (!r || r.toolId !== tool.id || this.status.kind !== 'running') return;
-        this.status = { kind: 'running', fraction: r.fraction, label: r.label };
+        this.status = { ...this.status, fraction: r.fraction, label: r.label };
         this.renderStatus();
       }),
     );
@@ -155,6 +166,43 @@ class ToolDialog {
     }
     this.renderPreview();
     this.renderStatus();
+    this.renderTargets();
+  }
+
+  /**
+   * Nerede çalışır: Otomatik (and what it picks for these inputs now), then
+   * each place the tool declares. Places without an executor here are
+   * listed as coming, so the user sees what the tool will be able to do.
+   */
+  private renderTargets(): void {
+    const { runner } = this.ctx.processing;
+    const available = new Set(runner.executorsFor(this.tool).map((e) => e.target));
+    const auto = runner.executorFor(this.tool, 'auto', runner.inputSize(this.tool, this.values))?.target;
+    const option = (value: TargetChoice, label: string, note: string | null, disabled = false) => {
+      const checked = this.choice === value;
+      const b = h(
+        'button',
+        { class: 'ptool__target', type: 'button', role: 'radio', 'aria-checked': String(checked), disabled, tabindex: checked ? '0' : '-1' },
+        h('span', { class: 'ptool__radio' }),
+        h('span', { class: 'ptool__target-label' }, label),
+        note ? h('span', { class: 'ptool__target-note' }, note) : null,
+      );
+      b.addEventListener('click', () => {
+        this.choice = value;
+        this.ctx.processing.setTargetChoice(this.tool.id, value);
+        this.renderTargets();
+      });
+      return b;
+    };
+    const several = available.size > 1;
+    replaceChildren(
+      this.targetsEl,
+      several ? option('auto', 'Otomatik', auto ? `şimdi: ${TARGET_SHORT[auto]}` : null) : null,
+      several && this.choice === 'auto' ? h('div', { class: 'ptool__target-hint' }, `${WORKER_THRESHOLD.toLocaleString('tr-TR')} nesneden büyük işler arka planda çalışır; sayfa donmaz.`) : null,
+      this.tool.targets.map((t) =>
+        available.has(t) ? option(t, TARGET_LABEL[t], !several ? 'bu çalıştırmada' : null) : option(t, TARGET_LABEL[t], 'yakında', true),
+      ),
+    );
   }
 
   private group(title: string, params: ParamDef[]): HTMLElement {
@@ -217,7 +265,7 @@ class ToolDialog {
     const fieldIssues = this.attempted ? this.issues.filter((i) => i.param).length : 0;
     let content: Child[] = [];
     if (running) {
-      content = [h('div', { class: 'ptool__progress' }, h('span', { style: `width:${Math.round(s.fraction * 100)}%` })), h('span', { class: 'ptool__status-text' }, s.label || 'Çalışıyor…')];
+      content = [h('div', { class: 'ptool__progress' }, h('span', { style: `width:${Math.round(s.fraction * 100)}%` })), h('span', { class: 'ptool__status-text' }, s.label || (s.where === 'worker' ? 'Arka planda çalışıyor; sayfayı kullanmaya devam edebilirsiniz.' : 'Çalışıyor…'))];
     } else if (s.kind === 'ok') {
       // A selection result is already applied: offer to look at it; otherwise to select what changed.
       const show = s.selected || s.pick.length ? h('button', { class: 'btn btn--ghost btn--small', type: 'button' }, s.selected ? 'Seçime yakınlaştır' : 'Sonuçları seç') : null;
@@ -244,9 +292,8 @@ class ToolDialog {
   }
 
   private side(): HTMLElement {
-    const { registry, runner } = this.ctx.processing;
+    const { registry } = this.ctx.processing;
     const cat = registry.category(this.tool.category);
-    const chosen = runner.executorFor(this.tool)?.target;
     const help = (this.tool.help ?? '').split(/\n\s*\n/).filter(Boolean);
     return h(
       'aside',
@@ -259,19 +306,7 @@ class ToolDialog {
         'div',
         { class: 'ptool__facts' },
         h('div', { class: 'ptool__side-title' }, 'Nerede çalışır'),
-        h(
-          'ul',
-          { class: 'ptool__targets' },
-          this.tool.targets.map((t) =>
-            h(
-              'li',
-              { 'data-state': t === chosen ? 'active' : 'planned' },
-              h('span', { class: 'ptool__dot' }),
-              TARGET_LABEL[t],
-              h('span', { class: 'ptool__target-note' }, t === chosen ? 'bu çalıştırmada' : t === 'client' ? '' : 'yakında'),
-            ),
-          ),
-        ),
+        this.targetsEl,
         this.tool.aliases?.length ? h('div', { class: 'ptool__side-title' }, 'Komut satırından') : null,
         this.tool.aliases?.length ? h('div', { class: 'ptool__aliases' }, this.tool.aliases.map((a) => h('code', null, a))) : null,
       ),
@@ -315,10 +350,11 @@ class ToolDialog {
       return;
     }
     this.ctx.processing.remember(this.tool.id, this.values);
-    this.status = { kind: 'running', fraction: 0, label: '' };
+    const where = runner.executorFor(this.tool, this.choice, runner.inputSize(this.tool, this.values))?.target;
+    this.status = { kind: 'running', fraction: 0, label: '', where };
     this.renderStatus();
     const log = (level: 'info' | 'warn', m: string) => (level === 'warn' ? this.ctx.log.warn(m) : this.ctx.log.info(m));
-    const out: RunOutcome = await runner.run(this.tool, this.values, log);
+    const out: RunOutcome = await runner.run(this.tool, this.values, log, this.choice);
     switch (out.status) {
       case 'ok': {
         const ch = out.result.changes;

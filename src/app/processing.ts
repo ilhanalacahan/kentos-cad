@@ -4,7 +4,9 @@ import type { Bounds } from '../model/geometry';
 import type { Selection } from '../model/selection';
 import { BUILTIN_TOOLS } from '../processing/builtin';
 import { ProcessingRegistry } from '../processing/registry';
-import { ProcessingRunner } from '../processing/runner';
+import { clientExecutor, type Executor } from '../processing/job';
+import { ProcessingRunner, type TargetChoice } from '../processing/runner';
+import { workerExecutor, type WorkerLike } from '../processing/worker/workerExecutor';
 import type { AppContext } from './context';
 import { persistedSignals } from './state';
 
@@ -19,22 +21,35 @@ export interface ProcessingService {
   /** Values of the tool's last run in this browser, if any. */
   lastValues(toolId: string): Record<string, unknown> | undefined;
   remember(toolId: string, values: Record<string, unknown>): void;
+  /** Where the user wants the tool to run (Otomatik unless changed). */
+  targetChoice(toolId: string): TargetChoice;
+  setTargetChoice(toolId: string, choice: TargetChoice): void;
 }
 
 interface ProcessingMemory {
   lastValues: Record<string, Record<string, unknown>>;
+  targets: Record<string, TargetChoice>;
+}
+
+/** The page, and a Web Worker where the browser has one (the worker carries the built-in tools). */
+function createExecutors(): Executor[] {
+  if (typeof Worker === 'undefined') return [clientExecutor];
+  const spawn = () => new Worker(new URL('../processing/worker/processingWorker.ts', import.meta.url), { type: 'module', name: 'KentOS işlemleri' }) as unknown as WorkerLike;
+  return [clientExecutor, workerExecutor(spawn, new Set(BUILTIN_TOOLS.map((t) => t.id)))];
 }
 
 export function createProcessing(doc: CadDocument, selection: Selection, visibleBounds: () => Bounds | null): ProcessingService {
   const registry = new ProcessingRegistry();
   for (const t of BUILTIN_TOOLS) registry.register(t);
-  const runner = new ProcessingRunner({ doc, selectedIds: () => [...selection.ids.value], visibleBounds, select: (ids) => selection.set(ids) });
-  const memory = persistedSignals<ProcessingMemory>('kentos.processing.v1', { lastValues: {} });
+  const runner = new ProcessingRunner({ doc, selectedIds: () => [...selection.ids.value], visibleBounds, select: (ids) => selection.set(ids) }, createExecutors());
+  const memory = persistedSignals<ProcessingMemory>('kentos.processing.v1', { lastValues: {}, targets: {} });
   return {
     registry,
     runner,
     lastValues: (id) => memory.lastValues.value[id],
     remember: (id, values) => memory.lastValues.set({ ...memory.lastValues.value, [id]: JSON.parse(JSON.stringify(values)) }),
+    targetChoice: (id) => memory.targets.value[id] ?? 'auto',
+    setTargetChoice: (id, choice) => memory.targets.set({ ...memory.targets.value, [id]: choice }),
   };
 }
 

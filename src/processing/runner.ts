@@ -3,28 +3,25 @@ import { foldTurkish } from '../core/text';
 import type { Entity, NewEntity } from '../model/entities';
 import { compileExpression, previewExpression } from './expression';
 import { resolveFeatures, summarizeFeatures, type FeatureHost, type InputSummary } from './features';
+import { clientExecutor, type Executor, type FeatureRef, type RunJob } from './job';
 import { isVisible, validateValues, type ValidationIssue } from './parameters';
-import type { DefaultsContext, ExecutionTarget, Feedback, FeaturesValue, LayerParam, LayerValue, ProcessingTool, RunContext, RunResult, TargetLayer } from './types';
+import type { DefaultsContext, ExecutionTarget, Feedback, FeaturesValue, LayerParam, LayerValue, ProcessingTool, RunResult, TargetLayer } from './types';
 
 /**
- * Runs processing tools: validate → resolve inputs → execute on the first
- * available target → apply the ChangeSet as one undo step → record
- * history. Only the "client" executor exists today; worker, server and
- * PostGIS executors plug in through the same Executor interface.
+ * Runs processing tools: validate → resolve what depends on the host into
+ * a RunJob → execute where the user or the size of the job says (in the
+ * page, or a Web Worker) → apply the ChangeSet as one undo step → record
+ * history. Server and PostGIS executors plug in through the same
+ * Executor interface (job.ts).
  */
 
-export interface Executor {
-  readonly target: ExecutionTarget;
-  available(): boolean;
-  execute(tool: ProcessingTool, values: Record<string, unknown>, ctx: RunContext, feedback: Feedback): Promise<RunResult>;
-}
+export { clientExecutor, type Executor } from './job';
 
-/** Runs the tool in the page, on the live document. */
-export const clientExecutor: Executor = {
-  target: 'client',
-  available: () => true,
-  execute: async (tool, values, ctx, feedback) => tool.run(values as never, ctx, feedback),
-};
+/** Where the user wants a tool to run; "auto" sends big jobs to the worker. */
+export type TargetChoice = 'auto' | ExecutionTarget;
+
+/** Input size (objects) from which "auto" prefers the worker. */
+export const WORKER_THRESHOLD = 2000;
 
 export interface RunRecord {
   readonly seq: number;
@@ -40,6 +37,8 @@ export interface RunRecord {
   readonly added: readonly number[];
   /** Ids the run changed or selected (what "Sonuçları seç" offers when nothing was added). */
   readonly touched: readonly number[];
+  /** Where it ran; absent when it did not start. */
+  readonly target?: ExecutionTarget;
 }
 
 export type RunOutcome =
@@ -124,38 +123,50 @@ export class ProcessingRunner {
     return previewExpression(r.expr, set.entities, def.returns, (id) => layers.get(id)?.name ?? id);
   }
 
-  /** The executor that will run the tool, or null when none of its targets is available here. */
-  executorFor(tool: ProcessingTool): Executor | null {
-    for (const t of tool.targets) {
-      const ex = this.executors.find((e) => e.target === t && e.available());
-      if (ex) return ex;
+  /** Executors here that can run the tool, in the tool's order of preference. */
+  executorsFor(tool: ProcessingTool): Executor[] {
+    return tool.targets.flatMap((t) => this.executors.filter((e) => e.target === t && e.available() && (e.supports?.(tool) ?? true)));
+  }
+
+  /**
+   * The executor for this run: the one the user chose, or on "auto" the
+   * worker for inputs of WORKER_THRESHOLD objects and more, else the
+   * tool's first choice. Null when none can run it here.
+   */
+  executorFor(tool: ProcessingTool, choice: TargetChoice = 'auto', size = 0): Executor | null {
+    const all = this.executorsFor(tool);
+    if (choice !== 'auto') return all.find((e) => e.target === choice) ?? null;
+    if (size >= WORKER_THRESHOLD) {
+      const worker = all.find((e) => e.target === 'worker');
+      if (worker) return worker;
     }
-    return null;
+    return all[0] ?? null;
+  }
+
+  /** Objects the features inputs resolve to now (what "auto" weighs). */
+  inputSize(tool: ProcessingTool, values: Record<string, unknown>): number {
+    return Object.values(this.describeInputs(tool, values)).reduce((n, s) => n + s.count, 0);
   }
 
   cancel(): void {
     this.canceled = true;
   }
 
-  async run(tool: ProcessingTool, values: Record<string, unknown>, log?: (level: 'info' | 'warn', message: string) => void): Promise<RunOutcome> {
+  async run(tool: ProcessingTool, values: Record<string, unknown>, log?: (level: 'info' | 'warn', message: string) => void, choice: TargetChoice = 'auto'): Promise<RunOutcome> {
     const issues = this.validate(tool, values);
     if (issues.length) return { status: 'invalid', issues };
     const started = Date.now();
     const copy = JSON.parse(JSON.stringify(values)) as Record<string, unknown>;
+    let target: ExecutionTarget | undefined;
     const record = (status: RunRecord['status'], summary: string, added: number[] = [], touched: number[] = []): RunRecord => {
-      const r: RunRecord = { seq: ++this.seq, toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added, touched };
+      const r: RunRecord = { seq: ++this.seq, toolId: tool.id, label: tool.label, values: copy, started, ms: Date.now() - started, status, summary, added, touched, target };
       this.history.set([r, ...this.history.value].slice(0, HISTORY_LIMIT));
       return r;
     };
-    const executor = this.executorFor(tool);
-    if (!executor) {
-      const message = `“${tool.label}” bu ortamda çalıştırılamıyor (${tool.targets.join(', ')} gerekli).`;
-      return { status: 'error', message, record: record('error', message) };
-    }
-
-    // Resolve inputs: features to objects, layers to a target (new layers are made only on apply).
-    const resolved: Record<string, unknown> = { ...values };
+    // Resolve what depends on the host: features to ids, layers to a target (new layers are made only on apply).
+    const jobValues: Record<string, unknown> = { ...values };
     const newLayers = new Map<string, { name: string; def: LayerParam }>();
+    let size = 0;
     for (const p of tool.parameters) {
       const v = values[p.name];
       if (!isVisible(p, values) || v === null || v === undefined) continue;
@@ -164,20 +175,30 @@ export class ProcessingRunner {
         // Running on nothing is a mistake worth stopping (usually: nothing selected);
         // an empty output passed along a model is not.
         if (!set.entities.length && !p.optional && (v as FeaturesValue).scope !== 'ids') return { status: 'invalid', issues: [{ param: p.name, message: emptyInputMessage(p.label, v as FeaturesValue) }] };
-        resolved[p.name] = set;
+        size += set.entities.length;
+        jobValues[p.name] = { ids: set.entities.map((e) => e.id), description: set.description } satisfies FeatureRef;
       }
-      if (p.type === 'expression') {
-        const src = (v as string).trim();
-        const r = src ? compileExpression(src) : null;
-        resolved[p.name] = r?.ok ? r.expr : null;
-      }
-      if (p.type === 'field') resolved[p.name] = (v as string).trim();
       if (p.type === 'layer') {
-        const target = this.resolveLayer(v as LayerValue);
-        if (target.isNew) newLayers.set(target.id, { name: target.name, def: p });
-        resolved[p.name] = target;
+        const t = this.resolveLayer(v as LayerValue);
+        if (t.isNew) newLayers.set(t.id, { name: t.name, def: p });
+        jobValues[p.name] = t;
       }
     }
+    const executor = this.executorFor(tool, choice, size);
+    if (!executor) {
+      const where = choice === 'auto' ? tool.targets.join(', ') : choice;
+      const message = `“${tool.label}” bu ortamda çalıştırılamıyor (${where} gerekli).`;
+      return { status: 'error', message, record: record('error', message) };
+    }
+    target = executor.target;
+    const layers = this.host.doc.layers;
+    const job: RunJob = {
+      toolId: tool.id,
+      values: jobValues,
+      units: this.defaults(),
+      selection: [...this.host.selectedIds()],
+      layers: layers.leaves().map((l) => [l.id, l.name] as const),
+    };
 
     this.canceled = false;
     let lastYield = performance.now();
@@ -201,9 +222,7 @@ export class ProcessingRunner {
     };
     this.running.set({ toolId: tool.id, fraction: 0, label: '' });
     try {
-      const layers = this.host.doc.layers;
-      const context: RunContext = { doc: this.host.doc, units: this.defaults(), layerName: (id) => layers.get(id)?.name ?? id, selection: [...this.host.selectedIds()] };
-      const result = await executor.execute(tool, resolved, context, feedback);
+      const result = await executor.execute(tool, job, this.host.doc, feedback);
       if (this.canceled) {
         const message = 'İşlem iptal edildi; çizim değişmedi.';
         return { status: 'canceled', message, record: record('canceled', message) };

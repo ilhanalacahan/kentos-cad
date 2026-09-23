@@ -40,11 +40,18 @@ src/processing/
   features.ts        Nesne kapsamını çözme (seçili, görünen, tümü, katman, kimlikler) ve "12 kapalı alan" özetleri
   categories.ts      Araç kutusu kategorileri (üst kategori destekli)
   registry.ts        ProcessingRegistry: kayıt, kategori ağacı, Türkçe katlamalı arama, version sinyali
-  runner.ts          ProcessingRunner: doğrula → çöz → çalıştır → tek geri alma adımıyla uygula → geçmiş; Executor arayüzü
+  runner.ts          ProcessingRunner: doğrula → sayfaya bağlıyı çöz (RunJob) → çalışma yerini seç → çalıştır → tek geri alma adımıyla uygula → geçmiş
+  job.ts             RunJob, FeatureRef, Executor arayüzü, materialize, EntitySnapshot, clientExecutor
   model.ts           Modeller (akış diyagramı) veri yapısı, sıralama ve denetim
   expression.ts      İfade dili: sözcüklere ayırma, ayrıştırma, closure'a derleme, hata mesajları, önizleme
   expressionLib.ts   İfade değerleri (tür dönüşümleri, eşitlik, sıralama), değişkenler ($alan …), işlevler
   processing.test.ts, expression.test.ts   Birim testleri
+  worker/
+    protocol.ts      Sayfa ↔ worker mesajları
+    handleJob.ts     Worker içinde bir işi çalıştırma (sahte worker'la test edilir)
+    workerExecutor.ts  Executor: worker'ı başlatır, işi gönderir, Durdur'da sonlandırır
+    processingWorker.ts  Worker girişi (yerleşik araçlar)
+    worker.test.ts   Sayfa ile worker aynı sonucu verir, Otomatik seçim, hata ve Durdur
   builtin/
     index.ts         BUILTIN_TOOLS listesi
     numbering.ts     Saf numaralandırma çekirdeği (biçim, halka yönü, başlangıç köşesi, ortak köşe)
@@ -180,28 +187,30 @@ Yeni işlev eklemek için `EXPR_FUNCTIONS` listesine ad, İngilizce karşılık,
 ## 6. Çalışma yerleri (client, worker, server, postgis)
 
 Her araç `targets` ile nerelerde çalışabileceğini tercih sırasıyla bildirir.
-Çalıştırıcı, listedeki ilk **kullanılabilir** `Executor`'ı seçer:
+Bir çalıştırma iki yarıya ayrılır:
+
+1. **Sayfada, çalıştırıcı** (`runner.ts`) sayfaya bağlı olanı çözer: `features` değerlerini nesne kimliklerine (`FeatureRef { ids, description }`), `layer` değerlerini hedef katmana (`TargetLayer`). Sonuç, kopyalanabilir bir veridir (`RunJob`, `job.ts`): araç kimliği, değerler, birimler, çalıştırma başındaki seçim, katman adları.
+2. **Çalışma yerinde, `Executor`** işi alır, elindeki belgeye göre `materialize` eder (kimlikler → nesneler, ifadeler → derlenmiş), aracı çalıştırır ve `RunResult` döndürür. Sonucu her zaman sayfadaki çalıştırıcı uygular (tek geri alma adımı).
 
 ```ts
 interface Executor {
   readonly target: 'client' | 'worker' | 'server' | 'postgis';
   available(): boolean;
-  execute(tool, values, ctx, feedback): Promise<RunResult>;
+  supports?(tool): boolean;                 // worker yalnızca kendi içindeki araçları bilir
+  execute(tool, job: RunJob, doc: DocumentSnapshot, feedback): Promise<RunResult>;
 }
 ```
 
-Bugün yalnızca `clientExecutor` vardır (araç sayfada, canlı belge üzerinde
-çalışır). Diğerleri aynı arayüzle eklenecek; araç kodu değişmeyecek:
-
-| Yer | Ne zaman | Tasarım |
+| Yer | Durum | Nasıl |
 |---|---|---|
-| `client` | Küçük ve orta işler | Bugünkü yol. |
-| `worker` | Binlerce nesne, ağır geometri (tampon, sadeleştirme, TIN) | Worker, aynı `BUILTIN_TOOLS` kaydını içe aktarır. Çalıştırıcı çözülmüş girdileri ve belge anlık görüntüsünü (`DocumentSnapshot` için gereken nesneler) yapılandırılmış kopya ya da `Float64Array` havuzu olarak gönderir; `progress` ve `warn` mesajla gelir, iptal `postMessage` ile gider; `ChangeSet` geri döner ve ana iş parçacığında aynı `apply` ile uygulanır. Bu yüzden `run` DOM ve `ctx` dışı hiçbir şeye erişmez. |
-| `server` | Belge sunucuda yaşadığında, paylaşılan projelerde, uzun işler | KentOS servisine iş gönderilir (araç kimliği, değerler, belge sürümü). İlerleme bir akıştan (SSE/WebSocket) gelir. Sonuç yine `ChangeSet`'tir; istemci uygular ya da sunucu belgeye yazıp olay yayınlar. Aynı TypeScript araçları Node'da çalışabilir. |
-| `postgis` | Çok büyük veri, mekânsal sorgular (kesişim, birleşim, tampon, alan istatistiği) | Araç, `run`'a ek olarak (planlı) bir `sql` üreticisi verir; sunucu bunu PostGIS'te parametreli sorgu olarak çalıştırır. Sonuç nesneleri `ChangeSet`'e çevrilir ya da doğrudan veritabanında kalır. |
+| `client` | Var (`clientExecutor`) | Araç sayfada, canlı belge üzerinde çalışır. |
+| `worker` | Var (`worker/workerExecutor.ts`) | Web Worker ilk kullanımda başlar ve açık kalır (`worker/processingWorker.ts`, yerleşik araçları taşır). Belge, nesnelerinin kopyasıyla gider (`EntitySnapshot`); ifadeler worker'da derlenir. İlerleme ve günlük satırları mesajla gelir. **Durdur** worker'ı sonlandırır (sıkı döngüdeki bir araca rica edilemez); sonraki iş yeni bir worker açar. Worker çökerse iş hata olarak biter. Mesaj alışverişi `worker/protocol.ts`'te, iş yürütme `worker/handleJob.ts`'te durur (testler sahte bir worker'la sürer). |
+| `server` | Planlı | Aynı `RunJob` KentOS servisine gider (belge sürümüyle); ilerleme bir akıştan (SSE/WebSocket) gelir. Sonuç yine `ChangeSet`'tir. Aynı TypeScript araçları Node'da çalışabilir (`handleJob` sunucuda da kullanılabilir). |
+| `postgis` | Planlı | Araç, `run`'a ek olarak bir `sql` üreticisi verir; sunucu bunu PostGIS'te parametreli sorgu olarak çalıştırır. Sonuç `ChangeSet`'e çevrilir ya da veritabanında kalır. |
 
-Pencere, aracın hangi yerlerde çalışabildiğini ve bu çalıştırmada hangisinin
-seçildiğini sağ panelde gösterir ("Nerede çalışır").
+- **Seçim:** kullanıcı pencerenin sağ panelindeki "Nerede çalışır" listesinden seçer ve seçim araç başına hatırlanır (`kentos.processing.v1`). **Otomatik** (varsayılan), girdiler `WORKER_THRESHOLD` (2 000) nesne ve üstündeyse worker'ı, değilse aracın ilk tercihini kullanır; pencere o anki kararı yazar ("şimdi: bu tarayıcıda"). Aracın bildirdiği ama bu ortamda olmayan yerler "yakında" diye, seçilemez olarak listelenir.
+- **Kural:** `run` DOM'a, `ctx` dışındaki servislere ve modül düzeyinde değişen duruma dokunmaz; sonuç `RunResult` yapılandırılmış kopyayla taşınabilir olmalıdır (işlev, sınıf örneği yok). Yalnızca yerleşik araçlar worker'dadır; eklenti araçları `targets`'ta `worker` bildirse de worker onları bilmedikçe (`supports`) sayfada çalışır.
+- Geçmiş, her çalıştırmanın nerede çalıştığını saklar ve gösterir ("130 ms, arka planda").
 
 ## 7. Modeller (akış diyagramları)
 
@@ -257,7 +266,7 @@ türünün işaretidir (bkz. §10).
 ## 10. Genişletme noktaları
 
 - **Yeni parametre türü:** `types.ts` (tanım + `ValueOf` + gerekirse `ResolvedOf`), `parameters.ts` (`defaultValue`, `fits`, `checkParam`), `runner.ts` (çözme), `ui/processing/paramFields.ts` (kontrol). Planlananlar: çoklu seçim, dosya, CRS, mesafe (birimli), renk, tablo (satır listesi).
-- **Yeni çalışma yeri:** bir `Executor` yazıp `createProcessing` içinde `ProcessingRunner`'a verin.
+- **Yeni çalışma yeri:** bir `Executor` yazıp `app/processing.ts` içindeki `createExecutors` listesine ekleyin. İşi `RunJob` olarak alır; `materialize` ve `jobContext` ile aracı çalıştırır ya da işi uzağa gönderir.
 - **Eklenti araçları:** `registry.register(tool)` bir `Disposable` döndürür; eklenti kaldırılınca araç ve menü öğeleri kaybolur (`version` sinyali).
 
 ## 11. Yerleşik araçlar

@@ -433,36 +433,62 @@
   border-top: 1px solid var(--c-line);
 }
 .ptool__targets {
-  margin: 0 0 12px;
-  padding: 0;
-  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 -8px 12px;
 }
-.ptool__targets li {
+/* Where the tool runs: radio rows like the engine cards, lighter. */
+.ptool__target {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: calc(24px * var(--ui-scale));
+  height: calc(28px * var(--ui-scale));
+  padding: 0 8px;
+  border-radius: var(--r-sm);
   color: var(--c-text-2);
   font-size: var(--fs-sm);
+  text-align: left;
 }
-.ptool__targets li[data-state='planned'] {
+.ptool__target:hover:not(:disabled) {
+  background: var(--c-hover);
+  color: var(--c-text);
+}
+.ptool__target[aria-checked='true'] {
+  color: var(--c-text);
+  font-weight: 500;
+}
+.ptool__target:disabled {
   color: var(--c-text-3);
 }
-.ptool__dot {
-  width: 7px;
-  height: 7px;
+.ptool__radio {
   flex: none;
-  border: 1.5px solid currentColor;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--c-line-strong);
   border-radius: 50%;
 }
-.ptool__targets li[data-state='active'] .ptool__dot {
-  border-color: var(--c-ok);
-  background: var(--c-ok);
+.ptool__target[aria-checked='true'] .ptool__radio {
+  border: 4.5px solid var(--c-accent);
+}
+.ptool__target:disabled .ptool__radio {
+  border-style: dashed;
+}
+.ptool__target-label {
+  flex: 1;
+  min-width: 0;
 }
 .ptool__target-note {
-  margin-left: auto;
+  flex: none;
   color: var(--c-text-3);
   font-size: var(--fs-2xs);
+  font-weight: 400;
+}
+.ptool__target-hint {
+  margin: -1px 8px 4px 30px;
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
 }
 .ptool__aliases {
   display: flex;

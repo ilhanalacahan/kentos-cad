@@ -12,7 +12,7 @@ import { icon } from '../icons';
 import { segmented } from '../widgets/controls';
 import { tooltip } from '../widgets/tooltip';
 import { TreeView } from '../widgets/TreeView';
-import { openToolDialog } from './ToolDialog';
+import { openToolDialog, TARGET_SHORT } from './ToolDialog';
 
 type Node = { kind: 'category'; id: string; category: ProcessingCategory; children: Node[]; count: number } | { kind: 'tool'; id: string; tool: ProcessingTool; children: Node[] };
 
@@ -185,7 +185,7 @@ export class ProcessingPanel extends Panel {
       this.ctx.view.zoomToSelection();
     });
     const time = new Date(r.started).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const took = r.ms < 1000 ? `${r.ms} ms` : `${(r.ms / 1000).toFixed(1)} sn`;
+    const took = `${r.ms < 1000 ? `${r.ms} ms` : `${(r.ms / 1000).toFixed(1)} sn`}${r.target && r.target !== 'client' ? `, ${TARGET_SHORT[r.target]}` : ''}`;
     const state = r.status === 'ok' ? 'success' : r.status === 'canceled' ? 'warning' : 'error';
     return h(
       'div',
