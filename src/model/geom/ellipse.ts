@@ -95,35 +95,78 @@ export function ellipseLength(e: EllipseGeom): number {
 /** Area of a whole ellipse (π·a·b). */
 export const ellipseArea = (e: EllipseGeom) => Math.PI * majorLength(e) * majorLength(e) * e.ratio;
 
-/** Parameter of the point on the curve nearest to p (within the arc range). */
+/**
+ * Parameter of the point on the curve nearest to p (within the arc range).
+ * The nearest of 65 samples tells which way the distance falls; the foot
+ * between it and the next sample that way is found by Newton steps on
+ * f(t) = (P(t) − p)·P′(t), bisecting whenever a step would leave that
+ * bracket, so the search always converges. When the distance only grows
+ * past an arc end, the end is the answer. Offsets are taken from p before
+ * the steps: TM coordinates would otherwise cancel the digits they are
+ * made of (§4.8.1).
+ */
 export function closestParam(e: EllipseGeom, p: Vec2): number {
   const sw = ellipseSweep(e);
-  let best = { t: e.t0, d: Infinity };
+  const full = sw >= TAU - 1e-12;
+  const m = minorAxis(e);
+  const ox = e.c.x - p.x;
+  const oy = e.c.y - p.y;
   const samples = 64;
+  const at = (i: number) => e.t0 + (sw * i) / samples;
+  // Squared distance and f at t.
+  const dist2 = (t: number) => {
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    const x = ox + e.major.x * c + m.x * s;
+    const y = oy + e.major.y * c + m.y * s;
+    return x * x + y * y;
+  };
+  const slope = (t: number) => {
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    const x = ox + e.major.x * c + m.x * s;
+    const y = oy + e.major.y * c + m.y * s;
+    return x * (-e.major.x * s + m.x * c) + y * (-e.major.y * s + m.y * c);
+  };
+  let bi = 0;
+  let bd = Infinity;
   for (let i = 0; i <= samples; i++) {
-    const t = e.t0 + (sw * i) / samples;
-    const q = ellipsePoint(e, t);
-    const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
-    if (d < best.d) best = { t, d };
+    const d = dist2(at(i));
+    if (d < bd) {
+      bi = i;
+      bd = d;
+    }
   }
-  // Newton on f(t) = (P(t) − p)·P'(t).
-  let t = best.t;
-  for (let k = 0; k < 30; k++) {
-    const q = ellipsePoint(e, t);
-    const d1 = ellipseDerivative(e, t);
-    const d2 = { x: -(q.x - e.c.x), y: -(q.y - e.c.y) }; // P'' = −(P − c)
-    const f = (q.x - p.x) * d1.x + (q.y - p.y) * d1.y;
-    const fp = d1.x * d1.x + d1.y * d1.y + (q.x - p.x) * d2.x + (q.y - p.y) * d2.y;
-    if (Math.abs(fp) < 1e-18) break;
-    const step = f / fp;
-    t -= step;
-    if (Math.abs(step) < 1e-15) break;
-  }
-  if (!onEllipse(e, t)) {
-    // Outside an arc: the nearer end wins.
-    const s = ellipsePoint(e, e.t0);
-    const f = ellipsePoint(e, e.t0 + sw);
-    return (s.x - p.x) ** 2 + (s.y - p.y) ** 2 <= (f.x - p.x) ** 2 + (f.y - p.y) ** 2 ? e.t0 : normAngle(e.t0 + sw);
+  const tb = at(bi);
+  const fb = slope(tb);
+  // Falling ahead (fb < 0): the foot lies before the next sample; rising: before the previous one.
+  const j = fb < 0 ? bi + 1 : fb > 0 ? bi - 1 : bi;
+  if (j === bi || (!full && (j < 0 || j > samples))) return normAngle(tb);
+  let lo = Math.min(tb, at(j));
+  let hi = Math.max(tb, at(j));
+  // The sign has to change across the bracket; otherwise the sample stays.
+  if (!(slope(lo) < 0 && slope(hi) > 0)) return normAngle(tb);
+  let t = tb;
+  for (let k = 0; k < 100; k++) {
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    const ux = e.major.x * c + m.x * s;
+    const uy = e.major.y * c + m.y * s;
+    const x = ox + ux;
+    const y = oy + uy;
+    const dx = -e.major.x * s + m.x * c;
+    const dy = -e.major.y * s + m.y * c;
+    const f = x * dx + y * dy;
+    if (f === 0) break;
+    if (f < 0) lo = t;
+    else hi = t;
+    // f′ = |P′|² + (P − p)·P″, with P″ = −(P − c).
+    const fp = dx * dx + dy * dy - (x * ux + y * uy);
+    const newton = t - f / fp;
+    const next = fp > 0 && newton > lo && newton < hi ? newton : (lo + hi) / 2;
+    const done = Math.abs(next - t) <= 4e-16 * Math.max(1, Math.abs(t)) || hi - lo <= 4e-16 * Math.max(1, Math.abs(t));
+    t = next;
+    if (done) break;
   }
   return normAngle(t);
 }

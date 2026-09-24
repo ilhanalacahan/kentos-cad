@@ -93,6 +93,10 @@ describe('extendEntity', () => {
   it('reports when no boundary lies ahead', () => {
     expect('error' in extendEntity(line(0, 0, 5, 0), { x: 5, y: 0 }, edgesOf(line(-9, -1, -9, 1)))).toBe(true);
   });
+  it('refuses a polyline without an end segment instead of throwing', () => {
+    const one: PolylineEntity = { ...base, kind: 'polyline', pts: [{ x: 0, y: 0 }] };
+    expect(extendEntity(one, { x: 0, y: 0 }, edgesOf(line(-5, -5, 5, -5)))).toEqual({ error: 'Uzatmak için en az iki köşe gerekir.' });
+  });
 });
 
 describe('offsetEntity', () => {

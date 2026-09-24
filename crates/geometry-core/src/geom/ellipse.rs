@@ -4,7 +4,7 @@
 use crate::api::Op;
 use crate::geom::arc::{norm_angle, sweep};
 use crate::geom::intersect::{line_circle_params, tangent_points};
-use crate::jsmath::{PI, TAU, atan2, cos, js_hypot, js_max, sin};
+use crate::jsmath::{PI, TAU, atan2, cos, js_hypot, js_max, js_min, sin};
 use crate::op;
 use crate::vec2::Vec2;
 
@@ -128,52 +128,92 @@ pub fn ellipse_area(e: &EllipseGeom) -> f64 {
     PI * major_length(e) * major_length(e) * e.ratio
 }
 
-fn sq(x: f64) -> f64 {
-    x * x
-}
-
-/// Parameter of the curve point nearest to p (within the arc range).
+/// Parameter of the curve point nearest to p (within the arc range). The
+/// nearest of 65 samples tells which way the distance falls; the foot between
+/// it and the next sample that way is found by Newton steps on
+/// f(t) = (P(t) − p)·P′(t), bisecting whenever a step would leave that
+/// bracket. When the distance only grows past an arc end, the end is the
+/// answer. Offsets are taken from p first, so TM coordinates do not cancel.
 pub fn closest_param(e: &EllipseGeom, p: Vec2) -> f64 {
     let sw = ellipse_sweep(e);
-    let (mut best_t, mut best_d) = (e.t0, f64::INFINITY);
+    let full = sw >= TAU - 1e-12;
+    let m = minor_axis(e);
+    let (ox, oy) = (e.c.x - p.x, e.c.y - p.y);
     let samples = 64.0;
+    let at = |i: f64| e.t0 + (sw * i) / samples;
+    // Offset from p to P(t), and f at t.
+    let rel = |t: f64| {
+        let (c, s) = (cos(t), sin(t));
+        (ox + e.major.x * c + m.x * s, oy + e.major.y * c + m.y * s)
+    };
+    let slope = |t: f64| {
+        let (c, s) = (cos(t), sin(t));
+        let x = ox + e.major.x * c + m.x * s;
+        let y = oy + e.major.y * c + m.y * s;
+        x * (-e.major.x * s + m.x * c) + y * (-e.major.y * s + m.y * c)
+    };
+    let (mut bi, mut bd) = (0.0, f64::INFINITY);
     let mut i = 0.0;
     while i <= samples {
-        let t = e.t0 + (sw * i) / samples;
-        let q = ellipse_point(e, t);
-        let d = sq(q.x - p.x) + sq(q.y - p.y);
-        if d < best_d {
-            best_t = t;
-            best_d = d;
+        let (x, y) = rel(at(i));
+        let d = x * x + y * y;
+        if d < bd {
+            bi = i;
+            bd = d;
         }
         i += 1.0;
     }
-    // Newton on f(t) = (P(t) − p)·P'(t).
-    let mut t = best_t;
-    for _ in 0..30 {
-        let q = ellipse_point(e, t);
-        let d1 = ellipse_derivative(e, t);
-        let d2 = Vec2::new(-(q.x - e.c.x), -(q.y - e.c.y)); // P'' = −(P − c)
-        let f = (q.x - p.x) * d1.x + (q.y - p.y) * d1.y;
-        let fp = d1.x * d1.x + d1.y * d1.y + (q.x - p.x) * d2.x + (q.y - p.y) * d2.y;
-        if fp.abs() < 1e-18 {
-            break;
-        }
-        let step = f / fp;
-        t -= step;
-        if step.abs() < 1e-15 {
-            break;
-        }
+    let tb = at(bi);
+    let fb = slope(tb);
+    // Falling ahead (fb < 0): the foot lies before the next sample; rising: before the previous one.
+    let j = if fb < 0.0 {
+        bi + 1.0
+    } else if fb > 0.0 {
+        bi - 1.0
+    } else {
+        bi
+    };
+    if j == bi || (!full && (j < 0.0 || j > samples)) {
+        return norm_angle(tb);
     }
-    if !on_ellipse(e, t, 1e-9) {
-        // Outside an arc: the nearer end wins.
-        let s = ellipse_point(e, e.t0);
-        let f = ellipse_point(e, e.t0 + sw);
-        return if sq(s.x - p.x) + sq(s.y - p.y) <= sq(f.x - p.x) + sq(f.y - p.y) {
-            e.t0
+    let tj = at(j);
+    let (mut lo, mut hi) = (js_min(tb, tj), js_max(tb, tj));
+    // The sign has to change across the bracket; otherwise the sample stays.
+    if !(slope(lo) < 0.0 && slope(hi) > 0.0) {
+        return norm_angle(tb);
+    }
+    let mut t = tb;
+    for _ in 0..100 {
+        let (c, s) = (cos(t), sin(t));
+        let ux = e.major.x * c + m.x * s;
+        let uy = e.major.y * c + m.y * s;
+        let x = ox + ux;
+        let y = oy + uy;
+        let dx = -e.major.x * s + m.x * c;
+        let dy = -e.major.y * s + m.y * c;
+        let f = x * dx + y * dy;
+        if f == 0.0 {
+            break;
+        }
+        if f < 0.0 {
+            lo = t;
         } else {
-            norm_angle(e.t0 + sw)
+            hi = t;
+        }
+        // f′ = |P′|² + (P − p)·P″, with P″ = −(P − c).
+        let fp = dx * dx + dy * dy - (x * ux + y * uy);
+        let newton = t - f / fp;
+        let next = if fp > 0.0 && newton > lo && newton < hi {
+            newton
+        } else {
+            (lo + hi) / 2.0
         };
+        let scale = js_max(1.0, t.abs());
+        let done = (next - t).abs() <= 4e-16 * scale || hi - lo <= 4e-16 * scale;
+        t = next;
+        if done {
+            break;
+        }
     }
     norm_angle(t)
 }

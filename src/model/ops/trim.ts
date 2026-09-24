@@ -53,6 +53,7 @@ export function extendEntity(target: Entity, pick: Vec2, boundaries: readonly Ed
     const pts = target.kind === 'line' ? [target.a, target.b] : [...target.pts];
     const bulges = target.kind === 'polyline' && target.bulges ? [...target.bulges] : null;
     const n = pts.length;
+    if (n < 2) return { error: 'Uzatmak için en az iki köşe gerekir.' };
     const atEnd = Math.hypot(pick.x - pts[n - 1].x, pick.y - pts[n - 1].y) <= Math.hypot(pick.x - pts[0].x, pick.y - pts[0].y);
     const seg = atEnd ? n - 2 : 0;
     const arc = bulgeArc(pts[seg], pts[seg + 1], bulgeAt(bulges ?? undefined, seg));

@@ -96,6 +96,7 @@ Kullanıcının kararları (2026-09-24):
   | P3 (+10 işlem) | 454 KB | 156 KB | Fonksiyon başına döküm (kod 365 KB): serde 155 KB (serde_json ayrıştırma 53, türetilmiş okuyucular 43, yazıcı 60), her `sort_by` için ayrı sıralama kodu ~25 KB, geometri 74 KB, libm 11 KB, bellek ayırıcı 19 KB |
   | serde'siz JSON | 303 KB | 105 KB | Kendi JSON modülü (27 KB kod) ve tek bir kararlı sıralama (`jsmath::stable_sort`; std `sort_by` her karşılaştırıcı için yeniden üretiliyordu). Kod 244 KB, geometri 70 KB |
   | P4 + P5 (+40 işlem) | 494 KB | 170 KB | Düzlem bindirme motoru, alan cebiri, nesne modeli ve işlemleri |
+  | P6 (+23 işlem) | 559 KB | 190 KB | Yol parametresi, budama, uzatma, kırma, uzat-kısalt; elips ve yardımcı çizgi kesimleri |
 
 ### Doğrulama
 
@@ -105,13 +106,24 @@ Kullanıcının kararları (2026-09-24):
   - Bir rastgele çağrının bütün noktaları tek bir çerçevededir (başlangıç yakını ya da TM dilimi). Eksen ve yön vektörleri konum değil vektör olarak üretilir. 4 400 km'yi aşan bir “şekil” çizim değildir ve yalnız son bit farklarını büyütür.
   - Sayılar golden toleransıyla (1e-9 + 1e-14·büyüklük) karşılaştırılır.
   - Metin, mantıksal değer, dizi uzunluğu ve nesne anahtarları tam eşit olmalıdır.
-- **Kaydedici** (`scripts/fixtures/record-calls.test.ts`, `GOLDEN_WRITE=1`): TS varken her kümeyi `fixtures/geometry/v1/calls-*.json` dosyasına dondurur; işlem başına 25 rastgele durum, satır başına bir durum.
+- **Kaydedici** (`scripts/fixtures/record-calls.test.ts`, `GOLDEN_WRITE=1`): TS varken her kümeyi `fixtures/geometry/v1/calls-*.json` dosyasına dondurur; satır başına bir durum. Adlı durumların hepsi, rastgelelerden ise üretim sırasıyla işlem başına en çok 25 durum ve 48 KB girer (en az 3; 512 noktalı bir elips ötelemesi tek başına 25 KB).
 - **Aynı dosyaları okuyanlar:**
   - native: `crates/geometry-core/tests/calls.rs`;
   - WASM, uygulamanın yolundan: `src/wasm/calls.wasm.test.ts`.
 - **Bağımsız referanslar** her dilimde kapalı biçimli ölçülerle genişletilir (§23.4): `reference.json` (alanlar) ve `reference-calls.json` (adıyla çağrılan işlemler: TM doğru kesişimi, üç noktadan çember, yarım daire yayı, parçaya uzaklık, güzergâh uzunluğu, iki çember kesişimi, teğet noktaları, yay uzunluğu; `scripts/fixtures/geometry_call_reference.py`). Native (`tests/calls.rs`), WASM ve TS varken TS (`src/wasm/parity/reference.test.ts`) hata sınırı içinde kalmalıdır.
 - **Eşit ölçülü sonuçların sırası:** alana göre sıralanan listelerde (alan cebiri, yüzler) eşit alanlı iki öğenin sırasını yayın alanındaki sin'in son biti belirleyebilir. Kümeler `ties` ile ölçüyü bildirir; parity testi, ölçüler aynı sırada ve öğeler eşleşiyorsa bu yer değişimini kabul eder. Kaydedici böyle durumları dondurmaz.
 - **Taşırken bulunan kırılgan karar (TS de düzeltildi):** bindirmede halka izleme, “aynı parçadan geri dönme” durumunu açıyla sınıyordu (`cw < 1e-12`). Kısa bir yayda iki açı 10⁻⁴'lük kirişlerden gelir ve sin/cos'un son bit farkı 2,4·10⁻¹²'ye büyür. TS bunu şans eseri tutturuyordu, libm tutturamadı; izleme yanlış yöne dönüp yüzleri kaybetti. Şimdi iki tarafta da ikiz parça yapısal olarak tanınır (aynı parça, ters yön). TS geometri testleri değişmeden geçer. Bu, §23.3'ün istediği türden sağlam bir karardır.
+- **Elipste en yakın nokta (TS de düzeltildi, P6):** `closestParam` en yakın örnekten 30 Newton adımı atıyordu.
+  - Yayın ucu en yakın noktaysa ya da nokta evrimin (evolute) içindeyse Newton uzaktaki bir durağan noktaya, bazen en uzak noktaya kaçıyordu. Nokta yay üzerindeyse onu döndürüyordu; elips kırma ve budama yanlış parametreyi alıyordu.
+  - TM koordinatında `P(t) − p` 4 400 km'lik sayıların farkıydı; adımlar yuvarlama gürültüsünde gezinip durmuyordu. V8 ile libm'in son bit farkı iki tarafı farklı yerlere götürüyordu.
+  - Şimdi iki tarafta aynı algoritma çalışır:
+    - fark önce merkezden alınır;
+    - en yakın örnek ile uzaklığın düştüğü yöndeki komşu örnek bir aralık kurar;
+    - aralıktan çıkan Newton adımı yerine ikiye bölme yapılır;
+    - uzaklık yay ucunun ötesinde düşüyorsa uç kalır.
+  - Eski iki beklenti yanlıştı: “yay dışında en yakın uç” 15,97 m uzaktaki noktayı veriyordu (doğru uç 11,18 m), bir diğeri ise normalleştirilmemiş açıydı (2π farkı). P2 dosyası yeniden kaydedildi.
+  - Hatayı `ellipse.test.ts` yeniden üretir: yay ucu olan beş durum ve TM'de dik ayak.
+- **TS'in çöktüğü yer:** tek köşeli çoklu çizgiyi uzatmak TS'te `TypeError` fırlatıyordu. İki taraf da “Uzatmak için en az iki köşe gerekir.” der (`ops.test.ts`). Uzat-kısalt böyle bir çizgiyi zaten “Nesnenin uzunluğu yok.” diyerek reddeder; Rust'taki denetim yalnız dizin erişimini korur.
 - **Golden sahipliği:** TS silindikten sonra dosyalar donmuş davranış kilididir. Bilinçli bir davranış değişikliği (ör. §23.3 robust kararlar) dosyayı incelemeyle günceller.
 
 ## Sonuçlar

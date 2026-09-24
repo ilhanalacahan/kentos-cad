@@ -29,6 +29,11 @@ pub fn js_round(x: f64) -> f64 {
     }
 }
 
+/// `Math.floor` (the same as f64::floor; named for symmetry with the other helpers).
+pub fn js_floor(x: f64) -> f64 {
+    x.floor()
+}
+
 /// `Math.sign`: NaN stays NaN and a zero keeps its sign.
 pub fn js_sign(x: f64) -> f64 {
     if x.is_nan() || x == 0.0 {
