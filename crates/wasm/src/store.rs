@@ -131,6 +131,14 @@ impl GeometryStore {
         })
     }
 
+    /// `[minX, minY, maxX, maxY]` around these objects (all of them without
+    /// `ids`), or nothing when there are none.
+    pub fn extent(&self, ids: Option<Box<[f64]>>) -> Vec<f64> {
+        self.inner
+            .extent(ids.as_deref())
+            .map_or_else(Vec::new, |b| vec![b.min_x, b.min_y, b.max_x, b.max_y])
+    }
+
     /// The object picked at a point, if any.
     pub fn hit(&self, x: f64, y: f64, tol: f64) -> Option<f64> {
         self.inner.hit(Vec2::new(x, y), tol)

@@ -347,13 +347,18 @@ export class ViewportController {
   }
 
   zoomExtents(): void {
-    const b = this.ctx.doc.bounds();
+    const b = this.picker.extent();
     if (b) this.camera.fit(b);
   }
 
   zoomToSelection(): void {
-    const b = this.ctx.doc.bounds(this.ctx.selection.ids.value);
+    const b = this.picker.extent(this.ctx.selection.ids.value);
     if (b) this.camera.fit(b, 96);
+  }
+
+  /** The box around these objects (all of them without `ids`), from the geometry store; null when empty. */
+  extent(ids?: Iterable<number>): Bounds | null {
+    return this.picker.extent(ids);
   }
 
   zoomBy(factor: number): void {

@@ -37,7 +37,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 882 KB, gzip ile 297 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16, S4'te +14 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; 3 KB kaldı (§6 madde 8).
+- **WASM paketi:** 882 KB, gzip ile 298 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16, S4'te +14, S3b'de +0,3 KB gzip; S3b'de kullanılmayan eski girişler silindi). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; ~2 KB kaldı (§6 madde 8).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -71,10 +71,11 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Parity kümelerinin `fns` alanı yalnız TS'i duran işlemleri tutar; çevrilenler donmuş fixture'larla sınanır. Kaydedici TS'i olmayan işlemde çekirdeğin sonucunu yazar.
   - Yeni sınır girişleri: WASM `FaceIndex` sınıfı (tarama ve içine tıklayarak alanın yüz dizini), `offsetPathXY`, `hatchLinesXY`, `transformEntities` (taşı/kopyala/dizi/yapıştır tek çağrı), `divisionPoints` (Böl önizlemesi tek çağrı).
   - Bilinen maliyet: 10 000 nesneyi taşımak JSON yüzünden ~0,15 s (TS ~0,01 s). İyileştirme: dönüşümü depoda yapıp sonucu paketli döndürmek.
-- **S3b (sıradaki):** ilkel modüller `model/geometry.ts`, `geom/affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `model/entities.ts`, `render/triangulate.ts`.
-  - Bunlar arayüzde sıcak döngülerde çağrılıyor (araç önizlemeleri, üst katman çizimi, stil motoru, SVG düzenleyicisi, `doc.bounds`). Önce çağrı yerlerini ölçün; JSON tablosu çağrı başına birkaç mikrosaniyedir (`dist` 4 µs, TS 0,08 µs). Tipli girişler (`Float64Array`) ve toplu API'ler gerekir.
-  - `entities.ts`'in nesne işlevleri (sınır kutusu, anahat, uzunluk, alan) çoğu yerde depodan gelebilir (nesneler zaten orada).
-- **S3c:** tek kaynak bekçisi (bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği, `Math.`, olmadığını denetler), `src/wasm/parity/reference/*` ve `parity.test.ts`'in silinmesi (derin koşudan sonra), belgeler.
+- **S3b yapıldı:** ilkel modüller (`model/geometry.ts`'in ölçüleri, `geom/affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `model/entities.ts`, `render/triangulate.ts`) de cephe; stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi dışında TS'te geometri algoritması kalmadı. Ayrıntılar ADR 0008 “İlkel modüller (S3b)”.
+  - `dist`, `angleDeg`, `bearingGrad`, `distToSegment` sayı alan girişlerden; halka ölçüleri çekirdeğin belleğindeki kazıma tamponundan (bellek ayırmadan) geçer.
+  - Tümünü göster, pano taban noktası ve kutupsal dizinin seçim ortası depodaki `extent(ids)` sorgusundan gelir.
+  - TS'te kalan kayıt işleri: tipler, kutu büyütme, `bulgeAt`, `entityGeometry`, sabitler.
+- **S3c (sıradaki):** tek kaynak bekçisi (bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği, `Math.`, olmadığını denetler), `src/wasm/parity/reference/*` ve `parity.test.ts`'in silinmesi (derin koşudan sonra), belgeler.
 - Kare başına binlerce çağrı yapan yerler toplu API alır; bölme noktaları ve tarama önizlemesi S3a'da yapıldı.
 
 ### S4: worker (yapıldı)
@@ -200,7 +201,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 5. ADR 0005 (performans hedefleri) hâlâ taslak; onay bekliyor.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
-8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına dayandı (S3a'da 267 KB, S5 ile 283 KB, S4 ile 297 KB; 3 KB kaldı, bir sonraki dilim aşar). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
+8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına dayandı (S3a'da 267 KB, S5 ile 283 KB, S4 ile 297 KB, S3b'de kullanılmayan girişler silinince 298 KB; ~2 KB kaldı, bir sonraki dilim aşar). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
 9. Dosya biçimleri (ADR 0009) main'e alındı; ADR'nin onayı bekliyor.
 10. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
 11. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.

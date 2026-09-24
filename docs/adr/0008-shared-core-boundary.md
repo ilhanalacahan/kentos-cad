@@ -124,6 +124,15 @@ Kullanıcının kararları (2026-09-24):
 - **Tam elipsin yolu kapalıdır (TS'ten gelen hata, S3a'dan sonra):** `pathOf` tam elipsi açık yol sayıyordu; Böl 4 parçada 3 nokta koyuyordu (dairede 4) ve başlangıç noktası eksik kalıyordu. Artık tam elips daire gibi kapalıdır (`edit.test.ts`). Donmuş dosyalarda tam elipsin yolu yoktu, hiçbir durum değişmedi.
 - **Sarım dizini testleri** TS'teki `WindingIndex` ile birlikte Rust'a geçti (`geom/arrangement.rs`): aynı halka ve noktalarda açı toplamıyla aynı sarım sayıları; ışın bir yay ucundan geçince açı toplamına düşüş.
 
+### İlkel modüller (S3b)
+
+- **Kapsam:** `model/geometry.ts`'in ölçüleri, `geom/affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `model/entities.ts` ve `render/triangulate.ts` çekirdeğin cepheleridir; TS algoritmaları silindi. Stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi dışında TS'te geometri algoritması kalmadı. TS'te kalanlar hesap değil kayıttır: `Vec2` ve `Bounds` tipleri, kutu büyütme (`emptyBounds`, `extendBounds`, `isEmptyBounds`), `bulgeAt` (diziden okuma), `entityGeometry` (alanları ayıklama), sabitler (`TAU` sayı olarak, `IDENTITY`, `CONSTRUCTION_REACH`), etiket tabloları ve `polygonRing`'in yaysız halkayı çağrısız, olduğu gibi döndürmesi.
+- **Sayı alan girişler:** `dist`, `angleDeg`, `bearingGrad` ve `distToSegment` araçlarda imleç hareketi başına çağrılır. JSON yerine sayı alan girişlerden geçer (`coreDist` …; çağrı başına kapanış ya da dizi ayrılmaz): `dist` çağrı başına ~0,05 µs, JS `Math.hypot` 0,02 µs.
+- **Kazıma tamponu:** halka ölçüleri (`signedArea`, `pathLength`, `centroid`, `pointInPolygon`) noktaları çekirdeğin belleğindeki kalıcı bir tampona doğrudan yazar, yanıt da oradan okunur (`crates/wasm` `scratch`); çağrı iki tarafta da bellek ayırmaz. Stil motoru katman kurarken yazı ve merkez işaretleri için her alanda `interiorPoint` → `centroid` çağırır. 50 000 beş köşeli halkada `centroid`: `Float64Array` giren ve dönen ilk sürüm 44–81 ms, tamponla 16–31 ms, eski TS 2–10 ms; `interiorPoint` 53–58 ms'den 13–25 ms'ye.
+- **Çok nesneye bakan yerler depodan:** tümünü göster ve seçime yakınlaş, panonun taban noktası ve kutupsal dizinin seçim ortası (her önizleme karesinde) geometri deposunun `extent(ids)` sorgusunu kullanır (`view.extent`). Nesne başına `entityBounds` JSON çağrısı 80 bin nesnede ~1 s olurdu. `CadDocument.bounds` testler için kalır (nesne başına çağrı).
+- **Kullanılmayan tipli girişler silindi:** P0–P1 döneminden kalan `bulgeArc`, `bulgePathLength`, `bulgeRingArea`, `signedArea`, `pointInPolygon`, `polygonArea` ve `polygonPerimeter` girişlerini sayfa hiç çağırmıyordu. Paket S4'e göre yalnız +0,3 KB gzip büyüdü.
+- **Doğrulama:** P0, P1, P2, P5 ve P8 kümelerinin TS referansı kalmadı; donmuş fixture'lar (native ve WASM) ile aynı adlı birim testleri çekirdeği sınar. Silmeden önceki son derin koşu S3a'da bütün kümelerle yapıldı; P8'den bu yana bu modüllerde iki tarafta da değişiklik yoktu. `golden.wasm.test.ts` silinen tipli girişleri kullanıyordu; artık yalnız paketin sürümünü denetler, golden durumlar ve bağımsız referanslar `golden.test.ts` ve `reference.test.ts`'te uygulamanın yolundan WASM'a gider.
+
 ### İşlem araçları ve worker (S4)
 
 - **Çalıştırmanın deposu:** bir işlem çalıştırması okuduğu nesneleri (features girdilerinin nesneleri, her biri bir kez) kendi geometri deposuna paketler: `ObjectStore` (`src/processing/geometry.ts`; `CoreStore` ve `wasm/pack.ts`, `PickIndex` gibi). Sayfadaki `clientExecutor` ile worker'ın `handleJob`'ı aynı `runJob`'ı çağırır (`processing/job.ts`): girdiler çözülür, depo ilk soruda kurulur, araç `ctx.geometry` ile kimlikten sorar, çalıştırma bitince depo bırakılır. Worker'da nesneler işin kopyalarıdır, sayfada canlı belgenin nesneleri paketlenir; iki yer aynı kodu çalıştırır.
@@ -203,6 +212,7 @@ Kullanıcının kararları (2026-09-24):
   | S3a (cepheler) | 784 KB | 267 KB | Durum tutan `FaceIndex` sınıfı, `offsetPathXY` ve `hatchLinesXY` tipli girişleri, `transformEntities`, `divisionPoints`; işlemlerin kendisi zaten tablodaydı |
   | S5 (+39 işlem) | 845 KB | 283 KB | Nokta girişi, nesne izleme, araçların yapı hesapları |
   | S4 (işlem araçları, S5'in üstüne) | 882 KB | 297 KB | Köşe numaralama (halka sırası, ortak köşe ızgarası) ~10 KB kod, kenar ölçüleri ve ortak kenar anahtarları ~4,5 KB, dört adlı işlemin JSON okuyucu ve yazıcıları ~6 KB; iki yeni hash tablosu ve bir sıralama örneği (S2'nin üstünde de +37 KB ham, +14 KB gzip). 300 KB gzip sınırına 3 KB kaldı (DEVIR §6) |
+  | S3b (ilkel modüller, S4'ün üstüne) | 882 KB | 298 KB | Sayı alan küçük ölçüler, kazıma tamponlu halka ölçüleri, depoda `extent`; kullanılmayan yedi eski giriş silindi |
 
 ### Doğrulama
 

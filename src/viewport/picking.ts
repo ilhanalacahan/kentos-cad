@@ -271,6 +271,13 @@ export class PickIndex {
     return this.store.stretchOutlines(Float64Array.from(ids), window.minX, window.minY, window.maxX, window.maxY, dx, dy);
   }
 
+  /** The box around these objects (all of them without `ids`), as `CadDocument.bounds` gives it; null when empty. */
+  extent(ids?: Iterable<number>): Bounds | null {
+    this.sync();
+    const b = this.store.extent(ids ? Float64Array.from(ids) : null);
+    return b.length ? { minX: b[0], minY: b[1], maxX: b[2], maxY: b[3] } : null;
+  }
+
   /** Total length (polygons' perimeters left out) and total area, summed in the given order. */
   measure(ids: Iterable<number>): { length: number; area: number } {
     this.sync();

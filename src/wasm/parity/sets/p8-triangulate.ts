@@ -1,6 +1,5 @@
 import { polygonHoles, polygonRing } from '../../../model/entities';
 import type { Vec2 } from '../../../model/geometry';
-import { triangulate } from '../../../render/triangulate';
 import { repeat, type CallSet, type Gen } from '../harness';
 import { entity } from './p5-entities';
 
@@ -13,13 +12,6 @@ const O = v(0, 0);
 const E = 486512.34;
 const N = 4420187.52;
 const tm = (pts: Vec2[]) => pts.map((p) => v(E + p.x, N + p.y));
-
-/** The TypeScript wrote into a fill array; the core returns the numbers. */
-function triangulated(outer: readonly Vec2[], holes: readonly (readonly Vec2[])[], origin: Vec2): number[] {
-  const out: number[] = [];
-  triangulate(outer, holes, origin, out);
-  return out;
-}
 
 /** An orthogonal polygon on a grid (a staircase of cells): equal x and y everywhere, flat corners, vertices on rays. */
 function staircase(g: Gen): Vec2[] {
@@ -84,7 +76,7 @@ export function fillPolygon(g: Gen): [Vec2[], Vec2[][]] {
 
 export const P8: CallSet = {
   file: 'calls-p8-triangulate.json',
-  fns: { triangulate: triangulated },
+  fns: {},
   named: [
     { name: 'düz halka, saat yönünde', fn: 'triangulate', args: [[...square(0, 0, 10)].reverse(), [], O] },
     { name: 'kare delikli kare', fn: 'triangulate', args: [square(0, 0, 10), [square(4, 4, 2)], O] },

@@ -1,5 +1,6 @@
-import { entityBounds, type Entity } from '../model/entities';
-import { dist, emptyBounds, type Vec2 } from '../model/geometry';
+import type { AppContext } from '../app/context';
+import type { Entity } from '../model/entities';
+import { dist, type Vec2 } from '../model/geometry';
 import type { Affine } from '../model/geom/affine';
 import { alignTransform, midpoint, polarArrayTransforms } from './constructions';
 import { parseNumber } from './coordinateInput';
@@ -11,16 +12,9 @@ import { SelectionFirstTool } from './modifyTools';
  * with ghosts previewing the result.
  */
 
-/** Middle of the selection's bounds: the point a non-rotating polar copy is placed by. */
-function centreOf(list: readonly Entity[]): Vec2 {
-  const b = emptyBounds();
-  for (const e of list) {
-    const eb = entityBounds(e);
-    b.minX = Math.min(b.minX, eb.minX);
-    b.minY = Math.min(b.minY, eb.minY);
-    b.maxX = Math.max(b.maxX, eb.maxX);
-    b.maxY = Math.max(b.maxY, eb.maxY);
-  }
+/** Middle of the selection's bounds (from the geometry store): the point a non-rotating polar copy is placed by. */
+function centreOf(ctx: AppContext, list: readonly Entity[]): Vec2 {
+  const b = ctx.view.extent(list.map((e) => e.id)) ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   return midpoint({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY });
 }
 
@@ -97,7 +91,7 @@ export class PolarArrayTool extends SelectionFirstTool {
     if (!c) return [];
     const { count, fill, rotate } = PolarArrayTool.last;
     // A full turn shares the circle out; a partial fill puts the last copy on the end angle.
-    return polarArrayTransforms(c, count, fill, rotate, centreOf(this.targets()));
+    return polarArrayTransforms(c, count, fill, rotate, centreOf(this.ctx, this.targets()));
   }
 
   protected override previewTransforms(): Affine[] {

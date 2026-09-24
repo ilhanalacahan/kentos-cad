@@ -1,4 +1,23 @@
-import { callOp, cornerTexts as wasmCornerTexts, FaceIndex, GeometryStore, hatchLinesXY as wasmHatchLinesXY, initSync, offsetPathXY as wasmOffsetPathXY, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
+import {
+  angleDeg as wasmAngleDeg,
+  bearingGrad as wasmBearingGrad,
+  callOp,
+  cornerTexts as wasmCornerTexts,
+  dist as wasmDist,
+  distToSegment as wasmDistToSegment,
+  FaceIndex,
+  GeometryStore,
+  hatchLinesXY as wasmHatchLinesXY,
+  initSync,
+  offsetPathXY as wasmOffsetPathXY,
+  opId,
+  scratch as wasmScratch,
+  scratchCentroid as wasmScratchCentroid,
+  scratchPathLength as wasmScratchPathLength,
+  scratchPointInPolygon as wasmScratchPointInPolygon,
+  scratchSignedArea as wasmScratchSignedArea,
+  triangulateMany as wasmTriangulateMany,
+} from './pkg/kentos_wasm.js';
 import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
 
 /**
@@ -27,10 +46,13 @@ export async function initCore(): Promise<void> {
   initCoreFrom(module);
 }
 
+/** The core's memory: the small ring measures write their points straight into it. */
+let memory: WebAssembly.Memory | null = null;
+
 /** Starts the core from a compiled module (the worker, the tests). */
 export function initCoreFrom(module: WebAssembly.Module): void {
   if (compiled) return;
-  initSync({ module });
+  memory = initSync({ module }).memory;
   compiled = module;
 }
 
@@ -132,6 +154,96 @@ export function callNamed(name: string, args: unknown[]): unknown {
  */
 export function triangulateMany(xy: Float64Array, ringSizes: Uint32Array, polyRings: Uint32Array): Uint32Array {
   return typed(() => wasmTriangulateMany(xy, ringSizes, polyRings));
+}
+
+/**
+ * `model/geometry.ts` on plain numbers (docs/adr/0008, S3b). The tools call
+ * these on every pointer move: no JSON, and no closure or array per call.
+ * A trap is reported as `op` reports it.
+ */
+export function coreDist(ax: number, ay: number, bx: number, by: number): number {
+  try {
+    return wasmDist(ax, ay, bx, by);
+  } catch (err) {
+    fault(err);
+    throw err;
+  }
+}
+
+export function coreAngleDeg(ax: number, ay: number, bx: number, by: number): number {
+  try {
+    return wasmAngleDeg(ax, ay, bx, by);
+  } catch (err) {
+    fault(err);
+    throw err;
+  }
+}
+
+export function coreBearingGrad(ax: number, ay: number, bx: number, by: number): number {
+  try {
+    return wasmBearingGrad(ax, ay, bx, by);
+  } catch (err) {
+    fault(err);
+    throw err;
+  }
+}
+
+export function coreDistToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  try {
+    return wasmDistToSegment(px, py, ax, ay, bx, by);
+  } catch (err) {
+    fault(err);
+    throw err;
+  }
+}
+
+/**
+ * Ring and path measures through the core's scratch buffer: the points go
+ * straight into its memory and the answer comes back there, so a call
+ * allocates nothing on either side (the style engine asks for a centroid
+ * per object while a layer is built). Returns where the points start.
+ */
+function toScratch(pts: readonly { x: number; y: number }[]): number {
+  const n = pts.length;
+  // At least two numbers: the centroid comes back in the first two.
+  const at = wasmScratch(Math.max(2, 2 * n));
+  const view = new Float64Array(memory!.buffer, at, 2 * n);
+  for (let i = 0; i < n; i++) {
+    view[2 * i] = pts[i].x;
+    view[2 * i + 1] = pts[i].y;
+  }
+  return at;
+}
+
+export function ringSignedArea(pts: readonly { x: number; y: number }[]): number {
+  return typed(() => {
+    toScratch(pts);
+    return wasmScratchSignedArea(pts.length);
+  });
+}
+
+export function ringPathLength(pts: readonly { x: number; y: number }[], closed: boolean): number {
+  return typed(() => {
+    toScratch(pts);
+    return wasmScratchPathLength(pts.length, closed);
+  });
+}
+
+export function ringCentroid(pts: readonly { x: number; y: number }[]): { x: number; y: number } {
+  return typed(() => {
+    const at = toScratch(pts);
+    wasmScratchCentroid(pts.length);
+    // The call may have grown the memory: a fresh view of the same place.
+    const out = new Float64Array(memory!.buffer, at, 2);
+    return { x: out[0], y: out[1] };
+  });
+}
+
+export function ringPointInPolygon(px: number, py: number, pts: readonly { x: number; y: number }[]): boolean {
+  return typed(() => {
+    toScratch(pts);
+    return wasmScratchPointInPolygon(pts.length, px, py);
+  });
 }
 
 /** Points as flat coordinates (x0, y0, x1, y1, …), for the typed entry points. */
@@ -335,6 +447,11 @@ export class CoreStore {
   /** An object as the store holds it (id, layer, label flag, geometry), as JSON; for tests. */
   itemJson(id: number): string | undefined {
     return typed(() => this.raw.itemJson(id));
+  }
+
+  /** `[minX, minY, maxX, maxY]` around these objects (all of them when `ids` is null), or empty. */
+  extent(ids: Float64Array | null): Float64Array {
+    return typed(() => this.raw.extent(ids ?? undefined));
   }
 
   /** `[minX, minY, maxX, maxY]`, or empty for an unknown id. */

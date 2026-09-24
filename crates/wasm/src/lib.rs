@@ -5,11 +5,12 @@
 //! (CLAUDE.md §14); this is for a responsive interface.
 
 use kentos_geometry_core::Vec2;
-use kentos_geometry_core::geom::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
 use kentos_geometry_core::geom::hatch::hatch_lines;
 use kentos_geometry_core::geom::offset::offset_path;
-use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
-use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
+use kentos_geometry_core::geometry::{
+    angle_deg, bearing_grad, centroid, dist, dist_to_segment, path_length, point_in_polygon,
+    signed_area,
+};
 use kentos_geometry_core::processing::numbering::corner_text_at;
 use kentos_geometry_core::triangulate::triangulate_many;
 use wasm_bindgen::prelude::*;
@@ -41,58 +42,84 @@ pub fn core_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// `[cx, cy, r, a0, sweep]` of a bulged segment, or `undefined` when straight.
-#[wasm_bindgen(js_name = bulgeArc)]
-pub fn bulge_arc_js(ax: f64, ay: f64, bx: f64, by: f64, bulge: f64) -> Option<Box<[f64]>> {
-    bulge_arc(Vec2::new(ax, ay), Vec2::new(bx, by), bulge)
-        .map(|a| vec![a.c.x, a.c.y, a.r, a.a0, a.sweep].into_boxed_slice())
+// `model/geometry.ts` on numbers (S3b): the tools call these on every
+// pointer move, and a JSON call would cost a hundred times the arithmetic.
+
+#[wasm_bindgen(js_name = dist)]
+pub fn dist_js(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    dist(Vec2::new(ax, ay), Vec2::new(bx, by))
 }
 
-#[wasm_bindgen(js_name = bulgePathLength)]
-pub fn bulge_path_length_js(xy: &[f64], bulges: Option<Box<[f64]>>, closed: bool) -> f64 {
-    bulge_path_length(&points(xy), bulges.as_deref(), closed)
+#[wasm_bindgen(js_name = angleDeg)]
+pub fn angle_deg_js(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    angle_deg(Vec2::new(ax, ay), Vec2::new(bx, by))
 }
 
-#[wasm_bindgen(js_name = bulgeRingArea)]
-pub fn bulge_ring_area_js(xy: &[f64], bulges: Option<Box<[f64]>>) -> f64 {
-    bulge_ring_area(&points(xy), bulges.as_deref())
+#[wasm_bindgen(js_name = bearingGrad)]
+pub fn bearing_grad_js(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    bearing_grad(Vec2::new(ax, ay), Vec2::new(bx, by))
 }
 
-#[wasm_bindgen(js_name = signedArea)]
-pub fn signed_area_js(xy: &[f64]) -> f64 {
-    signed_area(&points(xy))
+#[wasm_bindgen(js_name = distToSegment)]
+pub fn dist_to_segment_js(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    dist_to_segment(Vec2::new(px, py), Vec2::new(ax, ay), Vec2::new(bx, by))
 }
 
-#[wasm_bindgen(js_name = pointInPolygon)]
-pub fn point_in_polygon_js(px: f64, py: f64, xy: &[f64]) -> bool {
-    point_in_polygon(Vec2::new(px, py), &points(xy))
+// A scratch buffer in the core's memory for the small ring measures (S3b):
+// the page writes a ring's coordinates straight into it and reads the answer
+// back from it, so a call allocates nothing on either side. The style engine
+// asks for a centroid per object while a layer is built.
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Vec<f64>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Rings of a polygon across the boundary: the outer ring, then every hole's
-/// coordinates one after another with `hole_sizes` giving each hole's vertex
-/// count. `hole_bulges`, when given, has one bulge per hole vertex (0 for a
-/// straight edge, which the core treats exactly like no bulges).
-fn rings(
-    xy: &[f64],
-    bulges: Option<Box<[f64]>>,
-    holes: &[f64],
-    hole_bulges: Option<Box<[f64]>>,
-    hole_sizes: &[u32],
-) -> (Ring, Vec<Ring>) {
-    let outer = Ring {
-        pts: points(xy),
-        bulges: bulges.map(|b| b.into_vec()),
-    };
-    let inner = ranges(holes.len() / 2, hole_sizes)
-        .into_iter()
-        .map(|(start, end)| Ring {
-            pts: points(&holes[2 * start..2 * end]),
-            bulges: hole_bulges
-                .as_deref()
-                .map(|b| b[start.min(b.len())..end.min(b.len())].to_vec()),
-        })
-        .collect();
-    (outer, inner)
+/// Where `len` numbers can be written (valid until the next `scratch` call
+/// asks for more); the page views it through the module's memory.
+#[wasm_bindgen]
+pub fn scratch(len: usize) -> *const f64 {
+    SCRATCH.with(|s| {
+        let mut v = s.borrow_mut();
+        if v.len() < len {
+            v.resize(len, 0.0);
+        }
+        v.as_ptr()
+    })
+}
+
+fn with_scratch<R>(n: usize, f: impl FnOnce(&[Vec2], &mut [f64]) -> R) -> R {
+    SCRATCH.with(|s| {
+        let mut v = s.borrow_mut();
+        let n = n.min(v.len() / 2);
+        let pts = points(&v[..2 * n]);
+        f(&pts, &mut v)
+    })
+}
+
+/// Centroid of the `n` points in the scratch buffer, written back to its first two numbers.
+#[wasm_bindgen(js_name = scratchCentroid)]
+pub fn scratch_centroid(n: usize) {
+    with_scratch(n, |pts, out| {
+        let c = centroid(pts);
+        if out.len() >= 2 {
+            out[0] = c.x;
+            out[1] = c.y;
+        }
+    });
+}
+
+#[wasm_bindgen(js_name = scratchSignedArea)]
+pub fn scratch_signed_area(n: usize) -> f64 {
+    with_scratch(n, |pts, _| signed_area(pts))
+}
+
+#[wasm_bindgen(js_name = scratchPathLength)]
+pub fn scratch_path_length(n: usize, closed: bool) -> f64 {
+    with_scratch(n, |pts, _| path_length(pts, closed))
+}
+
+#[wasm_bindgen(js_name = scratchPointInPolygon)]
+pub fn scratch_point_in_polygon(n: usize, px: f64, py: f64) -> bool {
+    with_scratch(n, |pts, _| point_in_polygon(Vec2::new(px, py), pts))
 }
 
 /// Point ranges of rings laid one after another (`sizes`: vertex counts),
@@ -107,32 +134,6 @@ fn ranges(points: usize, sizes: &[u32]) -> Vec<(usize, usize)> {
         at = end;
     }
     out
-}
-
-/// Net area of a polygon with holes (rings as in [`rings`]).
-#[wasm_bindgen(js_name = polygonArea)]
-pub fn polygon_area_js(
-    xy: &[f64],
-    bulges: Option<Box<[f64]>>,
-    holes: &[f64],
-    hole_bulges: Option<Box<[f64]>>,
-    hole_sizes: &[u32],
-) -> f64 {
-    let (outer, inner) = rings(xy, bulges, holes, hole_bulges, hole_sizes);
-    polygon_area(&outer, &inner)
-}
-
-/// Perimeter of a polygon, holes included (rings as in [`rings`]).
-#[wasm_bindgen(js_name = polygonPerimeter)]
-pub fn polygon_perimeter_js(
-    xy: &[f64],
-    bulges: Option<Box<[f64]>>,
-    holes: &[f64],
-    hole_bulges: Option<Box<[f64]>>,
-    hole_sizes: &[u32],
-) -> f64 {
-    let (outer, inner) = rings(xy, bulges, holes, hole_bulges, hole_sizes);
-    polygon_perimeter(&outer, &inner)
 }
 
 /// `offsetPath` on flat coordinates: the style engine offsets a path per
@@ -203,29 +204,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn splits_holes_and_their_bulges() {
-        let holes = [
-            0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 5.0, 5.0, 6.0, 5.0, 6.0, 6.0, 5.0, 6.0,
-        ];
-        let b = Some(vec![0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 1.0].into_boxed_slice());
-        let (_, inner) = rings(&[0.0, 0.0], None, &holes, b, &[3, 4]);
-        assert_eq!(inner.len(), 2);
-        assert_eq!(inner[0].pts.len(), 3);
-        assert_eq!(inner[0].bulges.as_deref(), Some(&[0.0, 0.5, 0.0][..]));
-        assert_eq!(inner[1].pts[0], Vec2::new(5.0, 5.0));
-        assert_eq!(inner[1].bulges.as_deref(), Some(&[0.0, 0.0, 0.0, 1.0][..]));
+    fn splits_rings_laid_one_after_another() {
+        assert_eq!(ranges(7, &[3, 4]), [(0, 3), (3, 7)]);
     }
 
     #[test]
     fn sizes_beyond_the_data_are_clamped_not_a_panic() {
-        let (_, inner) = rings(
-            &[],
-            None,
-            &[0.0, 0.0, 1.0],
-            Some(vec![0.0].into_boxed_slice()),
+        assert_eq!(ranges(1, &[5, 2]), [(0, 1), (1, 1)]);
+        let segs = hatch_lines_xy(
+            &[0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0],
+            &[1.0],
             &[5, 2],
+            0.0,
+            2.5,
         );
-        assert_eq!(inner[0].pts.len(), 1);
-        assert!(inner[1].pts.is_empty());
+        // [capped, then four numbers a segment]: the stray hole numbers are ignored.
+        assert_eq!(segs[0], 0.0);
+        assert_eq!((segs.len() - 1) % 4, 0);
     }
 }

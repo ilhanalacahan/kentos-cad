@@ -1,6 +1,6 @@
 import { Signal } from '../core/signal';
-import { entityBounds, type Entity, type NewEntity } from '../model/entities';
-import type { Vec2 } from '../model/geometry';
+import type { Entity, NewEntity } from '../model/entities';
+import type { Bounds, Vec2 } from '../model/geometry';
 
 /**
  * In-app clipboard (session scope). Holds deep copies of entities and the
@@ -12,16 +12,10 @@ export class Clipboard {
   private items: NewEntity[] = [];
   private basePoint: Vec2 = { x: 0, y: 0 };
 
-  set(entities: readonly Entity[]): void {
+  /** `extent`: the box around the entities (the geometry store has them already; see `ViewportController.extent`). */
+  set(entities: readonly Entity[], extent: Bounds | null): void {
     this.items = entities.map(({ id: _id, ...rest }) => structuredClone(rest) as NewEntity);
-    let minX = Infinity;
-    let minY = Infinity;
-    for (const e of entities) {
-      const b = entityBounds(e);
-      minX = Math.min(minX, b.minX);
-      minY = Math.min(minY, b.minY);
-    }
-    this.basePoint = entities.length ? { x: minX, y: minY } : { x: 0, y: 0 };
+    this.basePoint = entities.length && extent ? { x: extent.minX, y: extent.minY } : { x: 0, y: 0 };
     this.count.set(this.items.length);
   }
 

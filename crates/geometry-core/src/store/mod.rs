@@ -25,7 +25,8 @@ use std::collections::HashMap;
 
 use crate::api::json::{FromJson, Json};
 use crate::entity::{Entity, Shape, entity_bounds};
-use crate::geometry::Bounds;
+use crate::geometry::{Bounds, empty_bounds, is_empty_bounds};
+use crate::jsmath::{js_max, js_min};
 use rtree::{PackedTree, overlaps};
 
 /// What queries need from an object's layer (`LayerStore.isVisible`,
@@ -260,6 +261,25 @@ impl Store {
         self.all_items().iter().map(|it| it.id).collect()
     }
 
+    /// The box around these objects, or around all of them (S3b): the
+    /// union of their boxes as `CadDocument.bounds` takes it, None when
+    /// there is nothing. Zoom to extents and the clipboard's base point ask
+    /// here instead of sending every object through JSON.
+    pub fn extent(&self, ids: Option<&[f64]>) -> Option<Bounds> {
+        let mut b = empty_bounds();
+        let mut add = |it: &Item| {
+            b.min_x = js_min(b.min_x, it.bounds.min_x);
+            b.min_y = js_min(b.min_y, it.bounds.min_y);
+            b.max_x = js_max(b.max_x, it.bounds.max_x);
+            b.max_y = js_max(b.max_y, it.bounds.max_y);
+        };
+        match ids {
+            Some(ids) => ids.iter().filter_map(|&id| self.get(id)).for_each(&mut add),
+            None => self.slots.iter().flatten().for_each(&mut add),
+        }
+        if is_empty_bounds(&b) { None } else { Some(b) }
+    }
+
     /// An object by id.
     pub fn get(&self, id: f64) -> Option<&Item> {
         let s = *self.by_id.get(&id.to_bits())?;
@@ -443,6 +463,27 @@ mod tests {
         format!(
             r#"{{"id":{id},"layerId":"{layer}","attrs":{{"Ada":"1"}},"kind":"line","a":{{"x":{x},"y":0}},"b":{{"x":{x},"y":10}}}}"#
         )
+    }
+
+    #[test]
+    fn the_extent_is_the_union_of_the_boxes() {
+        let mut s = Store::new();
+        assert_eq!(s.extent(None), None);
+        s.put_json(&format!(
+            "[{},{},{}]",
+            line(1.0, "a", 3.0),
+            line(2.0, "a", -4.0),
+            r#"{"id":3,"layerId":"a","attrs":{},"kind":"circle","c":{"x":50,"y":5},"r":2}"#
+        ))
+        .unwrap();
+        let all = s.extent(None).unwrap();
+        assert_eq!(
+            (all.min_x, all.min_y, all.max_x, all.max_y),
+            (-4.0, 0.0, 52.0, 10.0)
+        );
+        let some = s.extent(Some(&[1.0, 2.0, 99.0])).unwrap();
+        assert_eq!((some.min_x, some.max_x), (-4.0, 3.0));
+        assert_eq!(s.extent(Some(&[99.0])), None);
     }
 
     #[test]

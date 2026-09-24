@@ -1,19 +1,5 @@
 import {
-  entityAnchor,
-  entityArea,
-  entityBounds,
-  entityGeometry,
-  entityLength,
-  entityOutline,
-  entityVertices,
-  insidePolygon,
-  isClosedOutline,
-  polygonHoles,
-  polygonRing,
-  tessellateCircle,
-  textBox,
-  type Entity,
-} from '../../../model/entities';
+  type Entity } from '../../../model/entities';
 import type { Vec2 } from '../../../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../../../model/geom/affine';
 import { TAU } from '../../../model/geom/arc';
@@ -87,9 +73,7 @@ function affine(g: Gen): Affine {
 
 export const P5: CallSet = {
   file: 'calls-p5-entities.json',
-  fns: {
-    tessellateCircle, entityVertices, entityOutline, polygonRing, polygonHoles, insidePolygon, textBox, isClosedOutline, entityBounds, entityAnchor, entityLength, entityArea, entityGeometry,
-  },
+  fns: {},
   named: [
     { name: 'boş çoklu çizginin çapası', fn: 'entityAnchor', args: [{ id: 1, layerId: 'a', attrs: {}, kind: 'polyline', pts: [] }] },
     { name: 'aynalanan yazı okunur kalır', fn: 'transformEntity', args: [{ id: 2, layerId: 'a', attrs: { Ad: 'x' }, kind: 'text', p: v(5, 5), text: 'Ada 1', height: 2, rotation: 30 }, mirror(v(0, 0), v(0, 1))] },

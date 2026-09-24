@@ -1,39 +1,8 @@
-import { angleDeg, bearingGrad, centroid, dist, distToSegment, pathLength, pointInPolygon, signedArea, type Vec2 } from '../../../model/geometry';
-import { apply, applyLinear, compose, determinant, isReflection, lengthScale, mirror, rotation, scaling, translation, type Affine } from '../../../model/geom/affine';
-import { arcEnd, arcLength, arcMid, arcParam, arcStart, arcThrough, bulgeFromArc, circleThrough, normAngle, onArc, pointOnCircle, sweep, tessellateArc, TAU, type ArcGeom } from '../../../model/geom/arc';
+import type { Vec2 } from '../../../model/geometry';
+import { mirror, rotation, scaling, translation, type Affine } from '../../../model/geom/affine';
+import { TAU, type ArcGeom } from '../../../model/geom/arc';
 import {
-  bulgeArc,
-  bulgeAt,
-  bulgeOfSweep,
-  bulgePathEdges,
-  bulgePathLength,
-  bulgePathOutline,
-  bulgeRingArea,
-  bulgeThrough,
-  cleanBulgePath,
-  hasBulges,
-  isArcBulge,
-  reverseBulgePath,
-  segmentMid,
-  segmentTangent,
-  tangentBulge,
-} from '../../../model/geom/bulge';
-import {
-  circleCircle,
-  closestOnEdge,
-  fullCircle,
-  intersectEdges,
-  lineCircleParams,
-  lineLine,
-  onEdgeArc,
-  paramOn,
-  perpendicularFoot,
-  pointAt,
-  rayEdge,
-  segSeg,
-  tangentPoints,
-  type Edge,
-} from '../../../model/geom/intersect';
+  type Edge } from '../../../model/geom/intersect';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P1: points and rings, affine transforms, arcs, edge intersections, bulges (docs/adr/0008). */
@@ -88,13 +57,7 @@ function path(g: Gen): Vec2[] {
 
 export const P1: CallSet = {
   file: 'calls-p1-primitives.json',
-  fns: {
-    dist, signedArea, pathLength, centroid, pointInPolygon, distToSegment, angleDeg, bearingGrad,
-    translation, rotation, scaling, mirror, compose, apply, applyLinear, determinant, lengthScale, isReflection,
-    normAngle, sweep, onArc, arcParam, pointOnCircle, circleThrough, arcThrough, tessellateArc, arcStart, arcEnd, arcMid, arcLength, bulgeFromArc,
-    onEdgeArc, lineLine, segSeg, lineCircleParams, circleCircle, paramOn, pointAt, intersectEdges, rayEdge, closestOnEdge, perpendicularFoot, fullCircle, tangentPoints,
-    bulgeAt, isArcBulge, hasBulges, bulgeArc, bulgeOfSweep, segmentMid, bulgeThrough, tangentBulge, segmentTangent, bulgePathEdges, bulgePathOutline, bulgePathLength, bulgeRingArea, reverseBulgePath, cleanBulgePath,
-  },
+  fns: {},
   named: [
     { name: 'boş halkanın ağırlık merkezi (NaN)', fn: 'centroid', args: [[]] },
     { name: 'doğrusal noktalar', fn: 'centroid', args: [[v(0, 0), v(1, 1), v(2, 2)]] },

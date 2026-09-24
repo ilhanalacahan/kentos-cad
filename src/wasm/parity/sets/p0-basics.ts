@@ -1,10 +1,9 @@
-import { dist, pointInPolygon, signedArea } from '../../../model/geometry';
 import { repeat, type CallSet } from '../harness';
 
 /** The first operations, which set up the call path itself (Dilim 0). */
 export const P0: CallSet = {
   file: 'calls-p0-basics.json',
-  fns: { dist, signedArea, pointInPolygon },
+  fns: {},
   named: [
     { name: 'aynı nokta', fn: 'dist', args: [{ x: 1, y: 2 }, { x: 1, y: 2 }] },
     { name: '3-4-5', fn: 'dist', args: [{ x: 0, y: 0 }, { x: 3, y: 4 }] },

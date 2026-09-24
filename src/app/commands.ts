@@ -180,7 +180,7 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
         const editable = ents.filter((e) => !doc.layers.isLocked(e.layerId));
         if (editable.length < ents.length) log.warn(`${ents.length - editable.length} nesne kilitli katmanda olduğu için kesilmedi.`);
         if (!editable.length) return;
-        ctx.clipboard.set(editable);
+        ctx.clipboard.set(editable, ctx.view.extent(editable.map((e) => e.id)));
         doc.transact('Kes', () => doc.remove(editable.map((e) => e.id)));
         selection.retain((id) => !!doc.get(id));
         log.success(`${editable.length} nesne panoya kesildi.`);
@@ -196,7 +196,7 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       run: () => {
         const ents = selected();
         if (!ents.length) return;
-        ctx.clipboard.set(ents);
+        ctx.clipboard.set(ents, ctx.view.extent(ents.map((e) => e.id)));
         log.success(`${ents.length} nesne panoya kopyalandı.`);
       },
       isEnabled: () => selection.size > 0,

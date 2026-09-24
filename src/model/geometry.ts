@@ -1,3 +1,12 @@
+import { coreAngleDeg, coreBearingGrad, coreDist, coreDistToSegment, ringCentroid, ringPathLength, ringPointInPolygon, ringSignedArea } from '../wasm/core';
+
+/**
+ * Points, boxes and the small measures on them. The measures are computed
+ * by the geometry core (docs/adr/0008, S3b) through numbers-only entry
+ * points: the tools call them on every pointer move. Growing a box is
+ * bookkeeping, not a calculation, and stays here.
+ */
+
 /** World coordinates in metres. x = easting (Y, sağa), y = northing (X, yukarı). */
 export interface Vec2 {
   x: number;
@@ -12,7 +21,7 @@ export interface Bounds {
 }
 
 export const vec = (x: number, y: number): Vec2 => ({ x, y });
-export const dist = (a: Vec2, b: Vec2) => Math.hypot(b.x - a.x, b.y - a.y);
+export const dist = (a: Vec2, b: Vec2): number => coreDist(a.x, a.y, b.x, b.y);
 
 export function emptyBounds(): Bounds {
   return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
@@ -29,68 +38,25 @@ export function extendBounds(b: Bounds, p: Vec2, pad = 0): Bounds {
 export const isEmptyBounds = (b: Bounds) => !(b.maxX >= b.minX && b.maxY >= b.minY);
 
 /**
- * Signed shoelace area; positive for counter-clockwise rings. Coordinates
- * are taken relative to the first vertex: products of raw TM coordinates
- * (4.4·10⁶ m) would cancel away the fourth decimal of a parcel area.
+ * Signed shoelace area; positive for counter-clockwise rings, taken
+ * relative to the first vertex (raw TM products would cancel away the
+ * fourth decimal of a parcel area).
  */
-export function signedArea(pts: readonly Vec2[]): number {
-  if (pts.length < 3) return 0;
-  const ox = pts[0].x;
-  const oy = pts[0].y;
-  let a = 0;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j].x - ox) * (pts[i].y - oy) - (pts[i].x - ox) * (pts[j].y - oy);
-  return a / 2;
-}
+export const signedArea = (pts: readonly Vec2[]): number => ringSignedArea(pts);
 
-export function pathLength(pts: readonly Vec2[], closed = false): number {
-  let l = 0;
-  for (let i = 1; i < pts.length; i++) l += dist(pts[i - 1], pts[i]);
-  if (closed && pts.length > 2) l += dist(pts[pts.length - 1], pts[0]);
-  return l;
-}
+export const pathLength = (pts: readonly Vec2[], closed = false): number => ringPathLength(pts, closed);
 
-export function centroid(pts: readonly Vec2[]): Vec2 {
-  const a = signedArea(pts);
-  if (Math.abs(a) < 1e-9) {
-    const s = pts.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
-    return { x: s.x / pts.length, y: s.y / pts.length };
-  }
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    const f = pts[j].x * pts[i].y - pts[i].x * pts[j].y;
-    cx += (pts[j].x + pts[i].x) * f;
-    cy += (pts[j].y + pts[i].y) * f;
-  }
-  return { x: cx / (6 * a), y: cy / (6 * a) };
-}
+export const centroid = (pts: readonly Vec2[]): Vec2 => ringCentroid(pts);
 
-export function pointInPolygon(p: Vec2, pts: readonly Vec2[]): boolean {
-  let inside = false;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    const a = pts[i];
-    const b = pts[j];
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
+export const pointInPolygon = (p: Vec2, pts: readonly Vec2[]): boolean => ringPointInPolygon(p.x, p.y, pts);
 
-export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
+export const distToSegment = (p: Vec2, a: Vec2, b: Vec2): number => coreDistToSegment(p.x, p.y, a.x, a.y, b.x, b.y);
 
 /** Angle in degrees, counter-clockwise from east (CAD convention). */
-export const angleDeg = (a: Vec2, b: Vec2) => (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+export const angleDeg = (a: Vec2, b: Vec2): number => coreAngleDeg(a.x, a.y, b.x, b.y);
 
 /**
  * Surveying bearing (semt) in grads, clockwise from grid north — the unit
  * Turkish surveyors read off a total station.
  */
-export function bearingGrad(a: Vec2, b: Vec2): number {
-  const g = (Math.atan2(b.x - a.x, b.y - a.y) * 200) / Math.PI;
-  return (g + 400) % 400;
-}
+export const bearingGrad = (a: Vec2, b: Vec2): number => coreBearingGrad(a.x, a.y, b.x, b.y);
