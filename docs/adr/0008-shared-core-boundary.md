@@ -189,6 +189,12 @@ Kullanıcının kararları (2026-09-24):
   - Birim testleri: `apps/web/src/tools/constructions.test.ts` (araç yapıları) ve `apps/web/src/tools/tracking.test.ts` (imleç kısıtlaması). `coordinateInput.test.ts` ve `objectTracking.test.ts` aynı adlarla artık çekirdeği sınar.
 - **Bulunan kırılganlık (TS de düzeltildi):** kutupsal dizide dönmeyen kopyaların ötelemesi, seçimin ortası TM koordinatında döndürülüp yeniden çıkarılarak bulunuyordu. 4,4 milyonluk sayıların farkı sin/cos'un son bitini ~2·10⁻⁹ m'ye büyütüyordu; 20 000 durumda 2 kez iki taraf ayrıştı. Artık ortanın merkeze göre farkı döndürülür; aynı dizi TM'de ve başlangıç yakınında bit bit aynı ötelemeyi verir (`constructions.test.ts`, `tools::editing` testi).
 
+### Sağlam kararlar (§23.3)
+
+- **R1, yön yüklemi:** `geometry-core::predicates::orient2d`, Shewchuk'un uyarlamalı yüklemidir (1997, `predicates.c`, kamu malı); bağımlılık olarak alınmadı, çekirdeğe yeniden yazıldı. Önce düz determinant hesaplanır; hata sınırı işareti kanıtlamıyorsa farkların ve çarpımların kesin açılımına (expansion) aşama aşama geçilir. Yalnız float64 toplama, çıkarma ve çarpma kullanılır (kaynaşık çarpma-toplama yok, `clippy.toml`), bu yüzden native ve WASM aynı bitleri verir. Sonucun işareti float64 girdiler için kesindir (taşma altı yok sayılır; koordinatlar metredir). `orientation(a, b, c)` işareti −1, 0, 1 olarak verir; çağrı tablosunda `orientation` adıyla durur.
+  - **Doğrulama:** birim testleri Kettner ve arkadaşlarının “sınıf ızgarası”nda (0,5 çevresinde ulp adımlı 4 096 nokta, (12, 12)–(24, 24) doğrusu, dört permütasyon) sonucu 2⁻⁵³ ızgarasında tam sayı aritmetiğiyle (i128) karşılaştırır; yuvarlanmış determinant bunların bir kısmında yanılır, yüklem hiçbirinde. TM koordinatlarında 200 000 neredeyse aynı doğrultudaki üçlü (2⁻³⁴ ızgarası) aynı biçimde ve permütasyon tutarlılığıyla sınanır. Orada yuvarlanmış determinant da nadiren yanılır, çünkü TM koordinatlarının farkları kesindir; zor olan, birbirinden uzak ya da hesaplanmış noktalardır. Bağımsız referans (`scripts/fixtures/geometry_call_reference.py`): Python kesirleriyle, okuyucunun aldığı float64'lerin tam değerinde 85 kesin işaret (sınıf ızgarası, TM doğrusundan bir ulp, rastgele TM üçlüleri); native ve WASM'da geçer. Donmuş çağrılar: `calls-r1-predicates.json` (16 adlı, 25 rastgele).
+  - **Kararlar henüz geçmedi:** bindirme, kesişim ve nokta-halka kararları sonraki dilimlerde tek tek bu yükleme geçer; her birinde golden dosyaları kaydediciyle yeniden kaydedilir ve fark satır satır okunur.
+
 ### Başlatma, worker ve hata
 
 - **Sayfa:** `apps/web/src/main.ts`, `createApp`'tan önce `initCore()` çalıştırır (`WebAssembly.compileStreaming`; tür başlığı yanlışsa baytlardan derler). Yüklenemezse Türkçe hata ve “Yeniden dene” gösterilir.
@@ -226,6 +232,7 @@ Kullanıcının kararları (2026-09-24):
   | S4 (işlem araçları, S5'in üstüne) | 882 KB | 297 KB | Köşe numaralama (halka sırası, ortak köşe ızgarası) ~10 KB kod, kenar ölçüleri ve ortak kenar anahtarları ~4,5 KB, dört adlı işlemin JSON okuyucu ve yazıcıları ~6 KB; iki yeni hash tablosu ve bir sıralama örneği (S2'nin üstünde de +37 KB ham, +14 KB gzip). 300 KB gzip sınırına 3 KB kaldı (DEVIR §6) |
   | S3b (ilkel modüller, S4'ün üstüne) | 882 KB | 298 KB | Sayı alan küçük ölçüler, kazıma tamponlu halka ölçüleri, depoda `extent`; kullanılmayan yedi eski giriş silindi |
   | Kesişim keneti budaması | 883 KB | 298 KB | 882 317 → 883 087 bayt, gzip 297 662 → 297 912 (+250 bayt): uzak parçanın çiftlerini atlayan döngü ve `crossing_gap` |
+  | Sağlam kararlar R1 (yön yüklemi) | 887 KB | 299 KB | 883 626 (dizin düzeninden sonra) → 887 220 bayt, gzip 297 902 → 299 263 (+1,4 KB): uyarlamalı `orient2d` ve `orientation` işlemi |
 
 ### Doğrulama
 

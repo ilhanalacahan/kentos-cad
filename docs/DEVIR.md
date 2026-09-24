@@ -102,6 +102,7 @@ Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gere
   - `GOLDEN_WRITE=1 pnpm -C apps/web exec vitest run scripts/fixtures/record-calls.test.ts` (depo için `record-store.test.ts`, `record-store-processing.test.ts`); kaydediciler S3c'den beri yanıtı çekirdekten alır, yeniden kayıt bilinçli bir golden değişikliğidir;
   - sonra `pnpm -C apps/web exec vitest run src/wasm` ve `cargo test -p kentos-geometry-core --test calls`.
   - Kaydedici işlem başına en çok 25 rastgele durum ve 48 KB tutar.
+  - Kaydedici bütün kümeleri yeniden yazar. TS'ten kaydedilmiş eski dosyalar sin/cos'a duyarlı işlemlerde çekirdekten son bitte ayrılır (tolerans içinde, ADR 0008); yeni bir küme eklerken yalnız onun dosyasını alın, ötekileri `git checkout -- fixtures/geometry/v1/calls-*.json` ile geri koyun.
 - **Boyut:** `apps/web/src/wasm/pkg/kentos_wasm_bg.wasm` ham ve `gzip -9` boyutu ADR 0008 tablosuna yeni satır olarak yazılır.
 
 ## 5. Ortam ve çalışma kuralları
