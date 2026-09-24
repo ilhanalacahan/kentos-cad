@@ -1,22 +1,21 @@
 //! Points, bounds, rings and bearings (`src/model/geometry.ts`), ported
 //! operation for operation (docs/adr/0008).
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::jsmath::{PI, atan2, js_hypot, js_max, js_min};
 use crate::op;
 use crate::vec2::Vec2;
 
 /// Axis-aligned box; empty when min > max (`emptyBounds`: ±∞).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bounds {
     pub min_x: f64,
     pub min_y: f64,
     pub max_x: f64,
     pub max_y: f64,
 }
+
+crate::json_struct!(Bounds { min_x => "minX", min_y => "minY", max_x => "maxX", max_y => "maxY" });
 
 pub fn dist(a: Vec2, b: Vec2) -> f64 {
     js_hypot(b.x - a.x, b.y - a.y)

@@ -2,15 +2,13 @@
 //! centred on each edge, lifted outside a ring (left of an open path) by a
 //! gap proportional to the text height; arcs labelled with their length.
 
-use serde::Serialize;
-
 use crate::api::Op;
 use crate::geom::bulge::{bulge_arc, bulge_at, bulge_ring_area, segment_mid};
 use crate::jsmath::{PI, atan2, cos, js_hypot, js_max, sin};
 use crate::op;
 use crate::vec2::Vec2;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EdgeLabel {
     /// Text anchor (baseline centre).
     pub p: Vec2,
@@ -21,6 +19,8 @@ pub struct EdgeLabel {
     /// Segment index: the edge from pts[index] to pts[index + 1].
     pub index: usize,
 }
+
+crate::json_struct!(out EdgeLabel { p, rotation, length, index });
 
 pub fn edge_labels(
     pts: &[Vec2],

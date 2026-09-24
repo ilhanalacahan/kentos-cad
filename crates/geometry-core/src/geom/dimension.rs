@@ -2,8 +2,6 @@
 //! gap, the dimension line or arc with oblique ticks, the value readable
 //! left to right. `dimensionLabel` (formatting) stays in TypeScript.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::norm_angle;
 use crate::geom::intersect::Edge;
@@ -13,22 +11,28 @@ use crate::vec2::Vec2;
 
 const SQRT1_2: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DimensionGeom {
     pub a: Vec2,
     pub b: Vec2,
     pub offset: f64,
     pub height: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub angle: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub c: Option<Vec2>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+crate::json_struct!(DimensionGeom {
+    a,
+    b,
+    offset,
+    height,
+    style,
+    angle,
+    c
+});
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct DimensionLayout {
     pub lines: Vec<[Vec2; 2]>,
     pub d1: Vec2,
@@ -41,6 +45,8 @@ pub struct DimensionLayout {
     pub pick: Vec<Edge>,
     pub handle: Vec2,
 }
+
+crate::json_struct!(out DimensionLayout { lines, d1, d2, text_at => "textAt", rotation, value, unit, prefix, pick, handle });
 
 fn add(p: Vec2, v: Vec2, k: f64) -> Vec2 {
     Vec2::new(p.x + v.x * k, p.y + v.y * k)

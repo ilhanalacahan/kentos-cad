@@ -1,41 +1,254 @@
-//! JSON writer for the WASM boundary and the golden fixtures (docs/adr/0008).
-//! serde_json writes NaN and ±∞ as `null`, which the TypeScript core never
-//! did: a degenerate result would silently turn into a number (null · 2 = 0).
-//! This writer keeps them as the strings `"#NaN"`, `"#Inf"` and `"#-Inf"`
-//! (`src/wasm/core.ts` turns them back into numbers) and writes every finite
-//! number in its shortest round-trip form, so values cross bit for bit.
-//! Anything serde derives is supported; map keys must be strings or integers.
+//! JSON for the WASM boundary and the golden fixtures (docs/adr/0008),
+//! without serde: the core's types read and write themselves through two
+//! small traits and the `json_struct!` / `json_tagged!` macros. serde's
+//! per-type visitor and serializer code was 42 % of the WASM package.
+//!
+//! - Numbers parse with `str::parse::<f64>` (correctly rounded) and are
+//!   written in their shortest round-trip form, so values cross bit for bit.
+//! - NaN and ±∞ are written as the strings `"#NaN"`, `"#Inf"` and `"#-Inf"`
+//!   (`src/wasm/core.ts` turns them back into numbers). JSON.stringify
+//!   writes them as `null`, so `null` reads back as NaN where a number is
+//!   required: the TypeScript would have carried the NaN along.
+//! - A missing object field reads as `null`; `Option` fields that are
+//!   `None` are left out, as TypeScript leaves out undefined properties.
+//! - Unknown fields are ignored (an Entity carries id, layer and attributes).
 
-use std::fmt::{self, Display, Write};
+use std::fmt::Write;
 
-use serde::ser::{self, Serialize};
+/// A parsed JSON value. Objects keep their fields in order.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Json {
+    Null,
+    Bool(bool),
+    Num(f64),
+    Str(String),
+    Arr(Vec<Json>),
+    Obj(Vec<(String, Json)>),
+}
 
-#[derive(Debug)]
-pub struct Error(pub String);
+const NULL: Json = Json::Null;
 
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+impl Json {
+    pub fn parse(text: &str) -> Result<Json, String> {
+        let mut p = Parser {
+            s: text.as_bytes(),
+            i: 0,
+            text,
+        };
+        let v = p.value(0)?;
+        p.ws();
+        if p.i != p.s.len() {
+            return Err(p.err("fazladan karakter"));
+        }
+        Ok(v)
+    }
+
+    /// A field of an object; `null` when absent (or when this is not an object).
+    pub fn get(&self, key: &str) -> &Json {
+        match self {
+            Json::Obj(fields) => fields
+                .iter()
+                .rev()
+                .find(|(k, _)| k == key)
+                .map_or(&NULL, |(_, v)| v),
+            _ => &NULL,
+        }
+    }
+
+    fn kind(&self) -> &'static str {
+        match self {
+            Json::Null => "null",
+            Json::Bool(_) => "mantıksal değer",
+            Json::Num(_) => "sayı",
+            Json::Str(_) => "metin",
+            Json::Arr(_) => "dizi",
+            Json::Obj(_) => "nesne",
+        }
     }
 }
 
-impl std::error::Error for Error {}
+/// Nesting deeper than this is refused (a hostile input cannot overflow the stack).
+const MAX_DEPTH: usize = 64;
 
-impl ser::Error for Error {
-    fn custom<T: Display>(msg: T) -> Self {
-        Error(msg.to_string())
+struct Parser<'a> {
+    s: &'a [u8],
+    i: usize,
+    text: &'a str,
+}
+
+impl Parser<'_> {
+    fn err(&self, what: &str) -> String {
+        format!("JSON okunamadı ({}. karakter): {what}", self.i + 1)
+    }
+
+    fn ws(&mut self) {
+        while self.i < self.s.len() && matches!(self.s[self.i], b' ' | b'\t' | b'\n' | b'\r') {
+            self.i += 1;
+        }
+    }
+
+    fn eat(&mut self, lit: &str) -> Result<(), String> {
+        if self.s[self.i..].starts_with(lit.as_bytes()) {
+            self.i += lit.len();
+            Ok(())
+        } else {
+            Err(self.err("beklenmeyen değer"))
+        }
+    }
+
+    fn value(&mut self, depth: usize) -> Result<Json, String> {
+        if depth > MAX_DEPTH {
+            return Err(self.err("çok derin iç içe yapı"));
+        }
+        self.ws();
+        match self.s.get(self.i) {
+            None => Err(self.err("beklenmedik son")),
+            Some(b'n') => self.eat("null").map(|_| Json::Null),
+            Some(b't') => self.eat("true").map(|_| Json::Bool(true)),
+            Some(b'f') => self.eat("false").map(|_| Json::Bool(false)),
+            Some(b'"') => self.string().map(Json::Str),
+            Some(b'[') => {
+                self.i += 1;
+                let mut items = Vec::new();
+                self.ws();
+                if self.s.get(self.i) == Some(&b']') {
+                    self.i += 1;
+                    return Ok(Json::Arr(items));
+                }
+                loop {
+                    items.push(self.value(depth + 1)?);
+                    self.ws();
+                    match self.s.get(self.i) {
+                        Some(b',') => self.i += 1,
+                        Some(b']') => {
+                            self.i += 1;
+                            return Ok(Json::Arr(items));
+                        }
+                        _ => return Err(self.err("',' ya da ']' bekleniyordu")),
+                    }
+                }
+            }
+            Some(b'{') => {
+                self.i += 1;
+                let mut fields = Vec::new();
+                self.ws();
+                if self.s.get(self.i) == Some(&b'}') {
+                    self.i += 1;
+                    return Ok(Json::Obj(fields));
+                }
+                loop {
+                    self.ws();
+                    if self.s.get(self.i) != Some(&b'"') {
+                        return Err(self.err("alan adı bekleniyordu"));
+                    }
+                    let key = self.string()?;
+                    self.ws();
+                    if self.s.get(self.i) != Some(&b':') {
+                        return Err(self.err("':' bekleniyordu"));
+                    }
+                    self.i += 1;
+                    fields.push((key, self.value(depth + 1)?));
+                    self.ws();
+                    match self.s.get(self.i) {
+                        Some(b',') => self.i += 1,
+                        Some(b'}') => {
+                            self.i += 1;
+                            return Ok(Json::Obj(fields));
+                        }
+                        _ => return Err(self.err("',' ya da '}' bekleniyordu")),
+                    }
+                }
+            }
+            Some(_) => self.number(),
+        }
+    }
+
+    fn number(&mut self) -> Result<Json, String> {
+        let start = self.i;
+        while self.i < self.s.len()
+            && matches!(
+                self.s[self.i],
+                b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9'
+            )
+        {
+            self.i += 1;
+        }
+        let t = &self.text[start..self.i];
+        // Rust's parser is correctly rounded: the nearest float64, as JSON.parse gives.
+        // JSON numbers start with '-' or a digit ('.5' and '+1' are not JSON).
+        let starts_well = t
+            .bytes()
+            .next()
+            .is_some_and(|b| b == b'-' || b.is_ascii_digit());
+        match t.parse::<f64>() {
+            Ok(x) if starts_well => Ok(Json::Num(x)),
+            _ => Err(self.err("sayı okunamadı")),
+        }
+    }
+
+    fn hex4(&mut self) -> Result<u32, String> {
+        let h = self
+            .text
+            .get(self.i..self.i + 4)
+            .ok_or_else(|| self.err("eksik \\u kaçışı"))?;
+        let v = u32::from_str_radix(h, 16).map_err(|_| self.err("geçersiz \\u kaçışı"))?;
+        self.i += 4;
+        Ok(v)
+    }
+
+    fn string(&mut self) -> Result<String, String> {
+        self.i += 1; // opening quote
+        let mut out = String::new();
+        loop {
+            let run = self.i;
+            while self.i < self.s.len() && self.s[self.i] != b'"' && self.s[self.i] != b'\\' {
+                self.i += 1;
+            }
+            out.push_str(&self.text[run..self.i]);
+            match self.s.get(self.i) {
+                None => return Err(self.err("kapanmamış metin")),
+                Some(b'"') => {
+                    self.i += 1;
+                    return Ok(out);
+                }
+                Some(_) => {
+                    self.i += 1;
+                    let c = *self
+                        .s
+                        .get(self.i)
+                        .ok_or_else(|| self.err("kapanmamış metin"))?;
+                    self.i += 1;
+                    match c {
+                        b'"' => out.push('"'),
+                        b'\\' => out.push('\\'),
+                        b'/' => out.push('/'),
+                        b'b' => out.push('\u{8}'),
+                        b'f' => out.push('\u{c}'),
+                        b'n' => out.push('\n'),
+                        b'r' => out.push('\r'),
+                        b't' => out.push('\t'),
+                        b'u' => {
+                            let hi = self.hex4()?;
+                            let code = if (0xD800..0xDC00).contains(&hi)
+                                && self.s[self.i..].starts_with(b"\\u")
+                            {
+                                self.i += 2;
+                                let lo = self.hex4()?;
+                                0x10000 + ((hi - 0xD800) << 10) + (lo.wrapping_sub(0xDC00) & 0x3FF)
+                            } else {
+                                hi
+                            };
+                            out.push(char::from_u32(code).unwrap_or('\u{FFFD}'));
+                        }
+                        _ => return Err(self.err("geçersiz kaçış")),
+                    }
+                }
+            }
+        }
     }
 }
 
-pub fn to_string<T: Serialize + ?Sized>(value: &T) -> Result<String, String> {
-    let mut s = Writer { out: String::new() };
-    value.serialize(&mut s).map_err(|e| e.0)?;
-    Ok(s.out)
-}
-
-pub struct Writer {
-    out: String,
-}
+// ── Writing ─────────────────────────────────────────────────────────────
 
 /// A finite number in the shortest form that reads back to the same bits;
 /// exponents outside [1e-6, 1e21), as JavaScript prints them.
@@ -59,7 +272,7 @@ pub fn write_number(out: &mut String, x: f64) {
     }
 }
 
-fn write_str(out: &mut String, s: &str) {
+pub fn write_str(out: &mut String, s: &str) {
     out.push('"');
     for c in s.chars() {
         match c {
@@ -77,333 +290,284 @@ fn write_str(out: &mut String, s: &str) {
     out.push('"');
 }
 
-pub struct Compound<'a> {
-    w: &'a mut Writer,
-    first: bool,
-    /// Closing text: "]" or "}" (and one more "}" for a variant wrapper).
-    close: &'static str,
+// ── The two traits ──────────────────────────────────────────────────────
+
+pub trait FromJson: Sized {
+    fn from_json(v: &Json) -> Result<Self, String>;
 }
 
-impl Compound<'_> {
-    fn comma(&mut self) {
-        if !self.first {
-            self.w.out.push(',');
+pub trait ToJson {
+    fn write_json(&self, out: &mut String);
+    /// Left out when a struct field (`None`, as TypeScript leaves out undefined).
+    fn is_absent(&self) -> bool {
+        false
+    }
+}
+
+pub fn to_string<T: ToJson + ?Sized>(v: &T) -> String {
+    let mut out = String::new();
+    v.write_json(&mut out);
+    out
+}
+
+fn expected(what: &str, v: &Json) -> String {
+    format!("{what} bekleniyordu, {} geldi", v.kind())
+}
+
+impl FromJson for f64 {
+    fn from_json(v: &Json) -> Result<f64, String> {
+        match v {
+            Json::Num(x) => Ok(*x),
+            // JSON.stringify writes NaN and ±∞ as null.
+            Json::Null => Ok(f64::NAN),
+            Json::Str(s) if s == "#NaN" => Ok(f64::NAN),
+            Json::Str(s) if s == "#Inf" => Ok(f64::INFINITY),
+            Json::Str(s) if s == "#-Inf" => Ok(f64::NEG_INFINITY),
+            _ => Err(expected("sayı", v)),
         }
-        self.first = false;
     }
 }
 
-impl<'a> ser::Serializer for &'a mut Writer {
-    type Ok = ();
-    type Error = Error;
-    type SerializeSeq = Compound<'a>;
-    type SerializeTuple = Compound<'a>;
-    type SerializeTupleStruct = Compound<'a>;
-    type SerializeTupleVariant = Compound<'a>;
-    type SerializeMap = Compound<'a>;
-    type SerializeStruct = Compound<'a>;
-    type SerializeStructVariant = Compound<'a>;
-
-    fn serialize_bool(self, v: bool) -> Result<(), Error> {
-        self.out.push_str(if v { "true" } else { "false" });
-        Ok(())
-    }
-    fn serialize_i8(self, v: i8) -> Result<(), Error> {
-        self.serialize_i64(v.into())
-    }
-    fn serialize_i16(self, v: i16) -> Result<(), Error> {
-        self.serialize_i64(v.into())
-    }
-    fn serialize_i32(self, v: i32) -> Result<(), Error> {
-        self.serialize_i64(v.into())
-    }
-    fn serialize_i64(self, v: i64) -> Result<(), Error> {
-        let _ = write!(self.out, "{v}");
-        Ok(())
-    }
-    fn serialize_i128(self, v: i128) -> Result<(), Error> {
-        let _ = write!(self.out, "{v}");
-        Ok(())
-    }
-    fn serialize_u8(self, v: u8) -> Result<(), Error> {
-        self.serialize_u64(v.into())
-    }
-    fn serialize_u16(self, v: u16) -> Result<(), Error> {
-        self.serialize_u64(v.into())
-    }
-    fn serialize_u32(self, v: u32) -> Result<(), Error> {
-        self.serialize_u64(v.into())
-    }
-    fn serialize_u64(self, v: u64) -> Result<(), Error> {
-        let _ = write!(self.out, "{v}");
-        Ok(())
-    }
-    fn serialize_u128(self, v: u128) -> Result<(), Error> {
-        let _ = write!(self.out, "{v}");
-        Ok(())
-    }
-    fn serialize_f32(self, v: f32) -> Result<(), Error> {
-        self.serialize_f64(v.into())
-    }
-    fn serialize_f64(self, v: f64) -> Result<(), Error> {
-        write_number(&mut self.out, v);
-        Ok(())
-    }
-    fn serialize_char(self, v: char) -> Result<(), Error> {
-        write_str(&mut self.out, v.encode_utf8(&mut [0; 4]));
-        Ok(())
-    }
-    fn serialize_str(self, v: &str) -> Result<(), Error> {
-        write_str(&mut self.out, v);
-        Ok(())
-    }
-    fn serialize_bytes(self, v: &[u8]) -> Result<(), Error> {
-        use ser::SerializeSeq;
-        let mut seq = self.serialize_seq(Some(v.len()))?;
-        for b in v {
-            seq.serialize_element(b)?;
+impl FromJson for usize {
+    fn from_json(v: &Json) -> Result<usize, String> {
+        match v {
+            Json::Num(x) if *x >= 0.0 && x.fract() == 0.0 && *x < 9.007_199_254_740_992e15 => {
+                Ok(*x as usize)
+            }
+            _ => Err(expected("sıfır ya da pozitif tamsayı", v)),
         }
-        seq.end()
-    }
-    fn serialize_none(self) -> Result<(), Error> {
-        self.out.push_str("null");
-        Ok(())
-    }
-    fn serialize_some<T: Serialize + ?Sized>(self, value: &T) -> Result<(), Error> {
-        value.serialize(self)
-    }
-    fn serialize_unit(self) -> Result<(), Error> {
-        self.out.push_str("null");
-        Ok(())
-    }
-    fn serialize_unit_struct(self, _name: &'static str) -> Result<(), Error> {
-        self.serialize_unit()
-    }
-    fn serialize_unit_variant(
-        self,
-        _name: &'static str,
-        _index: u32,
-        variant: &'static str,
-    ) -> Result<(), Error> {
-        write_str(&mut self.out, variant);
-        Ok(())
-    }
-    fn serialize_newtype_struct<T: Serialize + ?Sized>(
-        self,
-        _name: &'static str,
-        value: &T,
-    ) -> Result<(), Error> {
-        value.serialize(self)
-    }
-    fn serialize_newtype_variant<T: Serialize + ?Sized>(
-        self,
-        _name: &'static str,
-        _index: u32,
-        variant: &'static str,
-        value: &T,
-    ) -> Result<(), Error> {
-        self.out.push('{');
-        write_str(&mut self.out, variant);
-        self.out.push(':');
-        value.serialize(&mut *self)?;
-        self.out.push('}');
-        Ok(())
-    }
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Compound<'a>, Error> {
-        self.out.push('[');
-        Ok(Compound {
-            w: self,
-            first: true,
-            close: "]",
-        })
-    }
-    fn serialize_tuple(self, len: usize) -> Result<Compound<'a>, Error> {
-        self.serialize_seq(Some(len))
-    }
-    fn serialize_tuple_struct(
-        self,
-        _name: &'static str,
-        len: usize,
-    ) -> Result<Compound<'a>, Error> {
-        self.serialize_seq(Some(len))
-    }
-    fn serialize_tuple_variant(
-        self,
-        _name: &'static str,
-        _index: u32,
-        variant: &'static str,
-        _len: usize,
-    ) -> Result<Compound<'a>, Error> {
-        self.out.push('{');
-        write_str(&mut self.out, variant);
-        self.out.push_str(":[");
-        Ok(Compound {
-            w: self,
-            first: true,
-            close: "]}",
-        })
-    }
-    fn serialize_map(self, _len: Option<usize>) -> Result<Compound<'a>, Error> {
-        self.out.push('{');
-        Ok(Compound {
-            w: self,
-            first: true,
-            close: "}",
-        })
-    }
-    fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Compound<'a>, Error> {
-        self.serialize_map(Some(len))
-    }
-    fn serialize_struct_variant(
-        self,
-        _name: &'static str,
-        _index: u32,
-        variant: &'static str,
-        _len: usize,
-    ) -> Result<Compound<'a>, Error> {
-        self.out.push('{');
-        write_str(&mut self.out, variant);
-        self.out.push_str(":{");
-        Ok(Compound {
-            w: self,
-            first: true,
-            close: "}}",
-        })
     }
 }
 
-impl ser::SerializeSeq for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        self.comma();
-        value.serialize(&mut *self.w)
-    }
-    fn end(self) -> Result<(), Error> {
-        self.w.out.push_str(self.close);
-        Ok(())
-    }
-}
-
-impl ser::SerializeTuple for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        ser::SerializeSeq::serialize_element(self, value)
-    }
-    fn end(self) -> Result<(), Error> {
-        ser::SerializeSeq::end(self)
-    }
-}
-
-impl ser::SerializeTupleStruct for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        ser::SerializeSeq::serialize_element(self, value)
-    }
-    fn end(self) -> Result<(), Error> {
-        ser::SerializeSeq::end(self)
-    }
-}
-
-impl ser::SerializeTupleVariant for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        ser::SerializeSeq::serialize_element(self, value)
-    }
-    fn end(self) -> Result<(), Error> {
-        ser::SerializeSeq::end(self)
-    }
-}
-
-impl ser::SerializeMap for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_key<T: Serialize + ?Sized>(&mut self, key: &T) -> Result<(), Error> {
-        self.comma();
-        let mut k = Writer { out: String::new() };
-        key.serialize(&mut k)?;
-        // Integer keys are written as strings, as JSON requires.
-        if k.out.starts_with('"') {
-            self.w.out.push_str(&k.out);
-        } else {
-            write_str(&mut self.w.out, &k.out);
+impl FromJson for bool {
+    fn from_json(v: &Json) -> Result<bool, String> {
+        match v {
+            Json::Bool(b) => Ok(*b),
+            _ => Err(expected("mantıksal değer", v)),
         }
-        self.w.out.push(':');
-        Ok(())
-    }
-    fn serialize_value<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        value.serialize(&mut *self.w)
-    }
-    fn end(self) -> Result<(), Error> {
-        self.w.out.push_str(self.close);
-        Ok(())
     }
 }
 
-impl ser::SerializeStruct for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Error> {
-        self.comma();
-        write_str(&mut self.w.out, key);
-        self.w.out.push(':');
-        value.serialize(&mut *self.w)
-    }
-    fn end(self) -> Result<(), Error> {
-        self.w.out.push_str(self.close);
-        Ok(())
+impl FromJson for String {
+    fn from_json(v: &Json) -> Result<String, String> {
+        match v {
+            Json::Str(s) => Ok(s.clone()),
+            _ => Err(expected("metin", v)),
+        }
     }
 }
 
-impl ser::SerializeStructVariant for Compound<'_> {
-    type Ok = ();
-    type Error = Error;
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Error> {
-        ser::SerializeStruct::serialize_field(self, key, value)
+impl<T: FromJson> FromJson for Option<T> {
+    fn from_json(v: &Json) -> Result<Option<T>, String> {
+        match v {
+            Json::Null => Ok(None),
+            v => T::from_json(v).map(Some),
+        }
     }
-    fn end(self) -> Result<(), Error> {
-        self.w.out.push_str(self.close);
-        Ok(())
+}
+
+impl<T: FromJson> FromJson for Vec<T> {
+    fn from_json(v: &Json) -> Result<Vec<T>, String> {
+        match v {
+            Json::Arr(items) => items.iter().map(T::from_json).collect(),
+            _ => Err(expected("dizi", v)),
+        }
     }
+}
+
+impl<T: FromJson, const N: usize> FromJson for [T; N] {
+    fn from_json(v: &Json) -> Result<[T; N], String> {
+        let items: Vec<T> = Vec::from_json(v)?;
+        items
+            .try_into()
+            .map_err(|_| format!("{N} öğeli dizi bekleniyordu"))
+    }
+}
+
+impl ToJson for f64 {
+    fn write_json(&self, out: &mut String) {
+        write_number(out, *self);
+    }
+}
+
+macro_rules! int_to_json {
+    ($($t:ty),*) => {$(
+        impl ToJson for $t {
+            fn write_json(&self, out: &mut String) {
+                let _ = write!(out, "{self}");
+            }
+        }
+    )*};
+}
+int_to_json!(i32, i64, u32, u64, usize);
+
+impl ToJson for bool {
+    fn write_json(&self, out: &mut String) {
+        out.push_str(if *self { "true" } else { "false" });
+    }
+}
+
+impl ToJson for str {
+    fn write_json(&self, out: &mut String) {
+        write_str(out, self);
+    }
+}
+
+impl ToJson for String {
+    fn write_json(&self, out: &mut String) {
+        write_str(out, self);
+    }
+}
+
+impl ToJson for &str {
+    fn write_json(&self, out: &mut String) {
+        write_str(out, self);
+    }
+}
+
+impl<T: ToJson> ToJson for Option<T> {
+    fn write_json(&self, out: &mut String) {
+        match self {
+            Some(v) => v.write_json(out),
+            None => out.push_str("null"),
+        }
+    }
+    fn is_absent(&self) -> bool {
+        self.is_none()
+    }
+}
+
+impl<T: ToJson> ToJson for [T] {
+    fn write_json(&self, out: &mut String) {
+        out.push('[');
+        for (i, v) in self.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            v.write_json(out);
+        }
+        out.push(']');
+    }
+}
+
+impl<T: ToJson> ToJson for Vec<T> {
+    fn write_json(&self, out: &mut String) {
+        self.as_slice().write_json(out);
+    }
+}
+
+impl<T: ToJson, const N: usize> ToJson for [T; N] {
+    fn write_json(&self, out: &mut String) {
+        self.as_slice().write_json(out);
+    }
+}
+
+/// Writes `"name":value` for a struct field unless it is absent.
+pub fn field<T: ToJson + ?Sized>(out: &mut String, first: &mut bool, name: &str, v: &T) {
+    if v.is_absent() {
+        return;
+    }
+    if !*first {
+        out.push(',');
+    }
+    *first = false;
+    write_str(out, name);
+    out.push(':');
+    v.write_json(out);
+}
+
+/// Reads a struct field, naming it in the error.
+pub fn read_field<T: FromJson>(v: &Json, name: &str) -> Result<T, String> {
+    T::from_json(v.get(name)).map_err(|e| format!("“{name}”: {e}"))
+}
+
+/// The JSON name of a field: its Rust name, or the one given after `=>`.
+#[macro_export]
+macro_rules! json_name {
+    ($f:ident) => {
+        stringify!($f)
+    };
+    ($f:ident, $n:literal) => {
+        $n
+    };
+}
+
+/// A struct read from and written as a JSON object:
+/// `json_struct!(Vec2 { x, y })`, `json_struct!(Bounds { min_x => "minX", … })`.
+/// `json_struct!(out Layout { … })` only writes (results holding borrowed text).
+#[macro_export]
+macro_rules! json_struct {
+    (out $t:ident { $($f:ident $(=> $n:literal)?),* $(,)? }) => {
+        impl $crate::api::json::ToJson for $t {
+            fn write_json(&self, out: &mut String) {
+                out.push('{');
+                let mut first = true;
+                $($crate::api::json::field(out, &mut first, $crate::json_name!($f $(, $n)?), &self.$f);)*
+                out.push('}');
+            }
+        }
+    };
+    ($t:ident { $($f:ident $(=> $n:literal)?),* $(,)? }) => {
+        $crate::json_struct!(out $t { $($f $(=> $n)?),* });
+        impl $crate::api::json::FromJson for $t {
+            fn from_json(v: &$crate::api::json::Json) -> Result<$t, String> {
+                if !matches!(v, $crate::api::json::Json::Obj(_)) {
+                    return Err(format!("{} nesnesi bekleniyordu", stringify!($t)));
+                }
+                Ok($t { $($f: $crate::api::json::read_field(v, $crate::json_name!($f $(, $n)?))?,)* })
+            }
+        }
+    };
+}
+
+/// An enum tagged by a field, like TypeScript's discriminated unions:
+/// `json_tagged!(Edge, "kind", Seg => "seg" { a, b }, Arc => "arc" { c, r, a0, sweep })`.
+#[macro_export]
+macro_rules! json_tagged {
+    ($t:ident, $tag:literal, $($v:ident => $name:literal { $($f:ident $(=> $n:literal)?),* $(,)? }),* $(,)?) => {
+        impl $crate::api::json::ToJson for $t {
+            fn write_json(&self, out: &mut String) {
+                match self {
+                    $($t::$v { $($f),* } => {
+                        out.push('{');
+                        let mut first = true;
+                        $crate::api::json::field(out, &mut first, $tag, $name);
+                        $($crate::api::json::field(out, &mut first, $crate::json_name!($f $(, $n)?), $f);)*
+                        out.push('}');
+                    })*
+                }
+            }
+        }
+        impl $crate::api::json::FromJson for $t {
+            fn from_json(v: &$crate::api::json::Json) -> Result<$t, String> {
+                let tag: String = $crate::api::json::read_field(v, $tag)?;
+                match tag.as_str() {
+                    $($name => Ok($t::$v { $($f: $crate::api::json::read_field(v, $crate::json_name!($f $(, $n)?))?),* }),)*
+                    other => Err(format!("{}: bilinmeyen tür “{}”", stringify!($t), other)),
+                }
+            }
+        }
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::Serialize;
-    use std::collections::BTreeMap;
 
-    #[derive(Serialize)]
-    #[serde(tag = "kind", rename_all = "lowercase")]
+    #[derive(Debug, PartialEq)]
+    struct P {
+        x: f64,
+        y_axis: f64,
+        note: Option<String>,
+    }
+    crate::json_struct!(P { x, y_axis => "yAxis", note });
+
+    #[derive(Debug, PartialEq)]
     enum Shape {
-        Line {
-            a: [f64; 2],
-            b: [f64; 2],
-        },
-        Circle {
-            r: f64,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            note: Option<String>,
-        },
+        Line { a: [f64; 2], b: [f64; 2] },
+        Circle { r: f64 },
     }
-
-    #[derive(Serialize)]
-    #[serde(untagged)]
-    enum Outcome {
-        Ok(Shape),
-        Err { error: String },
-    }
+    crate::json_tagged!(Shape, "kind", Line => "line" { a, b }, Circle => "circle" { r });
 
     #[test]
     fn numbers_keep_their_bits_and_non_finite_values() {
@@ -418,17 +582,17 @@ mod tests {
             f64::NEG_INFINITY,
             3.0,
         ];
-        let s = to_string(&v).unwrap();
+        let s = to_string(&v);
         assert_eq!(
             s,
             r##"[0.1,-0,1e21,1.5e-7,4426815.485128365,"#NaN","#Inf","#-Inf",3]"##
         );
-        // Every finite number reads back exactly.
-        let back: Vec<serde_json::Value> = serde_json::from_str(&s).unwrap();
+        let back: Vec<f64> = Vec::from_json(&Json::parse(&s).unwrap()).unwrap();
         for (x, b) in v.iter().zip(&back) {
-            if x.is_finite() && *x != 0.0 {
-                assert_eq!(b.as_f64().unwrap().to_bits(), x.to_bits());
-            }
+            assert!(
+                x.to_bits() == b.to_bits() || (x.is_nan() && b.is_nan()),
+                "{x} → {b}"
+            );
         }
         for x in [
             f64::MIN_POSITIVE,
@@ -437,37 +601,89 @@ mod tests {
             123456789.12345678,
             1e-6,
             9.999999999999999e20,
+            4420187.52,
         ] {
-            let t = to_string(&x).unwrap();
-            assert_eq!(t.parse::<f64>().unwrap().to_bits(), x.to_bits(), "{t}");
+            let t = to_string(&x);
+            assert_eq!(
+                f64::from_json(&Json::parse(&t).unwrap()).unwrap().to_bits(),
+                x.to_bits(),
+                "{t}"
+            );
         }
+        // JSON.stringify writes NaN as null: it reads back as NaN where a number is needed.
+        assert!(f64::from_json(&Json::Null).unwrap().is_nan());
     }
 
     #[test]
-    fn serde_shapes_match_serde_json() {
-        let shapes = vec![
-            // Whole numbers aside (serde_json writes 1.0, JavaScript and this writer 1).
-            Outcome::Ok(Shape::Line {
-                a: [0.5, 1.5],
-                b: [2.5, -3.25],
-            }),
-            Outcome::Ok(Shape::Circle { r: 2.5, note: None }),
-            Outcome::Ok(Shape::Circle {
-                r: 0.125,
-                note: Some("a\"b\\c\n\u{1}".into()),
-            }),
-            Outcome::Err {
-                error: "Yarıçap çok büyük.".into(),
-            },
-        ];
+    fn structs_and_tagged_enums_read_and_write_like_typescript() {
+        let p = P {
+            x: 1.5,
+            y_axis: -2.0,
+            note: None,
+        };
+        assert_eq!(to_string(&p), r#"{"x":1.5,"yAxis":-2}"#);
+        let q = P::from_json(
+            &Json::parse(r#"{"yAxis":3,"x":0.25,"extra":[1,{"a":null}],"note":"a\"b\\c\nç😀"}"#)
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            to_string(&shapes).unwrap(),
-            serde_json::to_string(&shapes).unwrap()
+            q,
+            P {
+                x: 0.25,
+                y_axis: 3.0,
+                note: Some("a\"b\\c\nç😀".into())
+            }
         );
-        let mut m = BTreeMap::new();
-        m.insert(3u32, Some(vec![(1u8, true)]));
-        m.insert(7u32, None);
-        assert_eq!(to_string(&m).unwrap(), serde_json::to_string(&m).unwrap());
-        assert_eq!(to_string(&()).unwrap(), "null");
+        assert_eq!(
+            to_string(&q),
+            r#"{"x":0.25,"yAxis":3,"note":"a\"b\\c\nç😀"}"#
+        );
+        let s = vec![
+            Shape::Line {
+                a: [0.5, 1.0],
+                b: [2.0, -3.0],
+            },
+            Shape::Circle { r: 2.0 },
+        ];
+        let text = to_string(&s);
+        assert_eq!(
+            text,
+            r#"[{"kind":"line","a":[0.5,1],"b":[2,-3]},{"kind":"circle","r":2}]"#
+        );
+        assert_eq!(
+            Vec::<Shape>::from_json(&Json::parse(&text).unwrap()).unwrap(),
+            s
+        );
+        assert!(
+            Shape::from_json(&Json::parse(r#"{"kind":"ellipse"}"#).unwrap())
+                .unwrap_err()
+                .contains("bilinmeyen tür")
+        );
+        assert!(
+            P::from_json(&Json::parse(r#"{"x":"a"}"#).unwrap())
+                .unwrap_err()
+                .contains("“x”")
+        );
+    }
+
+    #[test]
+    fn bad_json_is_refused_with_its_position() {
+        for bad in [
+            "",
+            "[1,",
+            "{\"a\" 1}",
+            "[1 2]",
+            "tru",
+            "\"abc",
+            "[1]x",
+            "-",
+            "[.5]",
+        ] {
+            let e = Json::parse(bad).unwrap_err();
+            assert!(e.starts_with("JSON okunamadı"), "{bad}: {e}");
+        }
+        let deep = "[".repeat(100) + &"]".repeat(100);
+        assert!(Json::parse(&deep).unwrap_err().contains("derin"));
     }
 }

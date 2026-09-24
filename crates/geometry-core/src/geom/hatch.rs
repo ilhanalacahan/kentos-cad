@@ -2,21 +2,21 @@
 //! even–odd rule, lines on world-anchored multiples of the spacing so
 //! neighbouring hatches line up across shared boundaries.
 
-use serde::Serialize;
-
 use crate::api::Op;
-use crate::jsmath::{PI, cos, js_cmp, js_max, js_min, sin};
+use crate::jsmath::{PI, cos, js_cmp, js_max, js_min, sin, stable_sort};
 use crate::op;
 use crate::vec2::Vec2;
 
 /// Upper bound on generated hatch lines; beyond this the spacing is unusable anyway.
 pub const MAX_HATCH_LINES: f64 = 20_000.0;
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HatchLines {
     pub segments: Vec<[Vec2; 2]>,
     pub capped: bool,
 }
+
+crate::json_struct!(out HatchLines { segments, capped });
 
 #[derive(Clone, Copy)]
 struct Local {
@@ -80,7 +80,7 @@ pub fn hatch_lines(ring: &[Vec2], angle_deg: f64, spacing: f64, holes: &[Vec<Vec
                 j = i;
             }
         }
-        xs.sort_by(|p, q| js_cmp(*p - *q, 0.0));
+        stable_sort(&mut xs, &mut |p, q| js_cmp(*p - *q, 0.0));
         let mut i = 0;
         while i + 1 < xs.len() {
             if xs[i + 1] - xs[i] > 1e-9 {

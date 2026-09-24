@@ -11,8 +11,7 @@ mod tables;
 
 use std::sync::OnceLock;
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use json::{FromJson, Json, ToJson};
 
 /// One operation: its name and a function from JSON arguments to a JSON result.
 #[derive(Clone, Copy)]
@@ -21,28 +20,29 @@ pub struct Op {
     pub run: fn(&str) -> Result<String, String>,
 }
 
-/// A call's positional arguments. They are read once into JSON values and
-/// each is converted to its type on its own, so the code for a type is
-/// shared by every operation that takes it (the WASM package stays small).
-pub struct Args(std::vec::IntoIter<serde_json::Value>);
+/// A call's positional arguments, read once into JSON values; each is then
+/// converted to its type on its own.
+pub struct Args(std::vec::IntoIter<Json>);
 
 impl Args {
     pub fn parse(text: &str) -> Result<Args, String> {
-        let list: Vec<serde_json::Value> = serde_json::from_str(text)
-            .map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı: {e}"))?;
-        Ok(Args(list.into_iter()))
+        match Json::parse(text).map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı: {e}"))?
+        {
+            Json::Arr(list) => Ok(Args(list.into_iter())),
+            _ => Err("Geometri çekirdeği girdiyi okuyamadı: argümanlar bir dizi olmalı.".into()),
+        }
     }
 
     /// The next argument; a missing one reads as `null` (an omitted optional argument).
-    pub fn next<T: DeserializeOwned>(&mut self, name: &str) -> Result<T, String> {
-        let v = self.0.next().unwrap_or(serde_json::Value::Null);
-        T::deserialize(v).map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı ({name}): {e}"))
+    pub fn next<T: FromJson>(&mut self, name: &str) -> Result<T, String> {
+        let v = self.0.next().unwrap_or(Json::Null);
+        T::from_json(&v).map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı ({name}): {e}"))
     }
 }
 
 /// Writes a result.
-pub fn result<R: Serialize>(r: &R) -> Result<String, String> {
-    json::to_string(r)
+pub fn result<R: ToJson + ?Sized>(r: &R) -> Result<String, String> {
+    Ok(json::to_string(r))
 }
 
 /// Declares an operation: `op!("name", |a: A, b: B| body)`.

@@ -1,8 +1,6 @@
 //! Ellipses and elliptical arcs in the DXF ELLIPSE form (`src/model/geom/ellipse.ts`):
 //! P(t) = c + major·cos t + minor·sin t, minor = major turned +90° × ratio.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::{norm_angle, sweep};
 use crate::geom::intersect::{line_circle_params, tangent_points};
@@ -10,7 +8,7 @@ use crate::jsmath::{PI, TAU, atan2, cos, js_hypot, js_max, sin};
 use crate::op;
 use crate::vec2::Vec2;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EllipseGeom {
     pub c: Vec2,
     pub major: Vec2,
@@ -18,6 +16,14 @@ pub struct EllipseGeom {
     pub t0: f64,
     pub t1: f64,
 }
+
+crate::json_struct!(EllipseGeom {
+    c,
+    major,
+    ratio,
+    t0,
+    t1
+});
 
 const ORIGIN: Vec2 = Vec2::new(0.0, 0.0);
 
@@ -173,11 +179,13 @@ pub fn closest_param(e: &EllipseGeom, p: Vec2) -> f64 {
 }
 
 /// A crossing of a line with the curve: line parameter and ellipse parameter.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineHit {
     pub u: f64,
     pub t: f64,
 }
+
+crate::json_struct!(LineHit { u, t });
 
 pub fn line_ellipse(e: &EllipseGeom, a: Vec2, b: Vec2) -> Vec<LineHit> {
     let qa = to_unit(e, a);

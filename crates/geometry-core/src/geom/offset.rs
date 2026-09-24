@@ -1,13 +1,11 @@
 //! Path offsets (`src/model/geom/offset.ts`): mitred corners with a bevel
 //! past the limit; bulged paths grow or shrink their arcs about the centre.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::norm_angle;
 use crate::geom::bulge::{bulge_arc, bulge_of_sweep, clean_bulge_path};
 use crate::geom::intersect::{circle_circle, line_circle_params, line_line};
-use crate::jsmath::{atan2, js_cmp, js_hypot, js_max, js_min, or};
+use crate::jsmath::{atan2, js_cmp, js_hypot, js_max, js_min, or, stable_sort};
 use crate::op;
 use crate::vec2::Vec2;
 
@@ -118,11 +116,26 @@ struct Piece {
 }
 
 /// A bulged path, or why it could not be offset.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OffsetResult {
     Path { pts: Vec<Vec2>, bulges: Vec<f64> },
     Error { error: String },
+}
+
+impl crate::api::json::ToJson for OffsetResult {
+    fn write_json(&self, out: &mut String) {
+        use crate::api::json::field;
+        out.push('{');
+        let mut first = true;
+        match self {
+            OffsetResult::Path { pts, bulges } => {
+                field(out, &mut first, "pts", pts);
+                field(out, &mut first, "bulges", bulges);
+            }
+            OffsetResult::Error { error } => field(out, &mut first, "error", error),
+        }
+        out.push('}');
+    }
 }
 
 /// Offsets a path with arc segments by `d` (positive = left of travel).
@@ -187,7 +200,7 @@ pub fn offset_bulge_path(pts: &[Vec2], bulges: &[f64], d: f64, closed: bool) -> 
         let corner = corners[k];
         let mut hits = support_hits(&p1, &p2);
         let dist = |u: &Vec2| js_hypot(u.x - corner.x, u.y - corner.y);
-        hits.sort_by(|u, v| js_cmp(dist(u) - dist(v), 0.0));
+        stable_sort(&mut hits, &mut |u, v| js_cmp(dist(u) - dist(v), 0.0));
         match hits.first() {
             Some(&hit) if dist(&hit) <= MITER_LIMIT * d.abs() => {
                 pieces[k].b = hit;

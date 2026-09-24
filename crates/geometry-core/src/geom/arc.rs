@@ -1,7 +1,5 @@
 //! Angles, circles and arcs (`src/model/geom/arc.ts`).
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::jsmath::{TAU, atan2, cos, js_hypot, js_max, sin, tan};
 use crate::op;
@@ -39,11 +37,13 @@ pub fn point_on_circle(c: Vec2, r: f64, a: f64) -> Vec2 {
     Vec2::new(c.x + cos(a) * r, c.y + sin(a) * r)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Circle {
     pub c: Vec2,
     pub r: f64,
 }
+
+crate::json_struct!(Circle { c, r });
 
 pub fn circle_through(p1: Vec2, p2: Vec2, p3: Vec2) -> Option<Circle> {
     let ax = p2.x - p1.x;
@@ -65,13 +65,15 @@ pub fn circle_through(p1: Vec2, p2: Vec2, p3: Vec2) -> Option<Circle> {
 }
 
 /// An arc running counter-clockwise from `a0` to `a1` (radians from east).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ArcGeom {
     pub c: Vec2,
     pub r: f64,
     pub a0: f64,
     pub a1: f64,
 }
+
+crate::json_struct!(ArcGeom { c, r, a0, a1 });
 
 /// Arc from start through mid to end, stored CCW (a clockwise pick order swaps the ends).
 pub fn arc_through(start: Vec2, mid: Vec2, end: Vec2) -> Option<ArcGeom> {

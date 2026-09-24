@@ -2,8 +2,6 @@
 //! segment pts[i] → pts[i+1] carries bulge = tan(θ/4), θ its included
 //! angle, positive counter-clockwise; 0 is a straight segment.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::{DEFAULT_STEP, circle_through, norm_angle};
 use crate::geom::intersect::Edge;
@@ -28,13 +26,15 @@ pub fn has_bulges(bulges: Option<&[f64]>) -> bool {
 }
 
 /// Circle, start angle and signed sweep of an arc segment.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BulgeArc {
     pub c: Vec2,
     pub r: f64,
     pub a0: f64,
     pub sweep: f64,
 }
+
+crate::json_struct!(BulgeArc { c, r, a0, sweep });
 
 /// The arc of a bulged segment; `None` when straight or degenerate.
 pub fn bulge_arc(a: Vec2, b: Vec2, bulge: f64) -> Option<BulgeArc> {
@@ -210,12 +210,13 @@ pub fn bulge_ring_area(pts: &[Vec2], bulges: Option<&[f64]>) -> f64 {
 }
 
 /// A path with its bulges (`reverseBulgePath`, `cleanBulgePath`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BulgePath {
     pub pts: Vec<Vec2>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bulges: Option<Vec<f64>>,
 }
+
+crate::json_struct!(BulgePath { pts, bulges });
 
 /// Path reversed: vertex order flips and every arc turns the other way.
 pub fn reverse_bulge_path(pts: &[Vec2], bulges: Option<&[f64]>, closed: bool) -> BulgePath {

@@ -2,11 +2,9 @@
 //! (`src/model/geom/survey.ts`): abscissa along A→B, ordinate square to it
 //! and positive to the right; horizontal angles clockwise.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::intersect::{circle_circle, line_line};
-use crate::jsmath::{PI, atan2, cos, js_cmp, js_hypot, sin};
+use crate::jsmath::{PI, atan2, cos, js_cmp, js_hypot, sin, stable_sort};
 use crate::op;
 use crate::vec2::Vec2;
 
@@ -34,11 +32,13 @@ pub fn side_point(a: Vec2, b: Vec2, absis: f64, ordinat: f64) -> Option<Vec2> {
     ))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Offsets {
     pub absis: f64,
     pub ordinat: f64,
 }
+
+crate::json_struct!(Offsets { absis, ordinat });
 
 /// Absis and ordinat (+ right) of p relative to the line A→B.
 pub fn side_offsets(a: Vec2, b: Vec2, p: Vec2) -> Option<Offsets> {
@@ -57,7 +57,7 @@ pub fn distance_intersection(a: Vec2, b: Vec2, d1: f64, d2: f64) -> Vec<Vec2> {
     }
     let mut pts = circle_circle(a, d1, b, d2);
     let ord = |p: &Vec2| side_offsets(a, b, *p).map_or(0.0, |o| o.ordinat);
-    pts.sort_by(|p, q| js_cmp(ord(q) - ord(p), 0.0));
+    stable_sort(&mut pts, &mut |p, q| js_cmp(ord(q) - ord(p), 0.0));
     pts
 }
 

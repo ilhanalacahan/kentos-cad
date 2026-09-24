@@ -1233,7 +1233,6 @@ version = "0.1.0"
 dependencies = [
  "libm",
  "rust_decimal",
- "serde",
  "serde_json",
 ]
 

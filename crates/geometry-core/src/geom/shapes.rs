@@ -1,8 +1,6 @@
 //! Constructions behind the drawing tools (`src/model/geom/shapes.ts`):
 //! rectangles, regular polygons, AutoCAD's arc modes, revision clouds.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::{ArcGeom, norm_angle};
 use crate::geom::bulge::{bulge_arc, tangent_bulge};
@@ -247,11 +245,13 @@ pub fn arc_start_end_center(start: Vec2, end: Vec2, center: Vec2) -> Option<ArcG
 /// Bulge of the cloud's scallops: about 106° arcs, outward on a counter-clockwise ring.
 const SCALLOP: f64 = 0.5;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cloud {
     pub pts: Vec<Vec2>,
     pub bulges: Vec<f64>,
 }
+
+crate::json_struct!(Cloud { pts, bulges });
 
 /// Scalloped outline of a ring: sides divided into chords of about `arc` metres, all bulging out.
 pub fn cloud_of(ring: &[Vec2], arc: f64) -> Option<Cloud> {

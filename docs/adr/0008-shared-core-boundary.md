@@ -63,9 +63,11 @@ Kullanıcının kararları (2026-09-24):
   - Argümanlar konumsal JSON dizisi olarak gelir (`undefined` → `null`), sonuç JSON olarak döner.
   - WASM `opId(ad)` ile `callOp(id, argümanlar)` dışa açar; TS cephesi `op(ad)` ile tipli bir çağırıcı kurar (`src/wasm/core.ts`).
   - Yerel golden testleri aynı tablodan geçer, yani iki hedef de uygulamanın yolunu sınar.
+- **JSON serde'siz:** çekirdeğin tipleri kendilerini küçük bir JSON modülüyle okur ve yazar (`api/json.rs`: ayrıştırıcı, yazıcı, `FromJson`/`ToJson`, `json_struct!`/`json_tagged!` makroları). serde'nin tip başına ziyaretçi ve yazıcı kodu paketin %42'siydi; çekirdek artık serde'ye yalnız testlerde bağlıdır.
 - **Sayılar bit bit geçer:**
-  - `serde_json` `float_roundtrip` özelliğiyle kesin ayrıştırır.
-  - Sonuçları çekirdeğin kendi JSON yazıcısı (`api/json.rs`) yazar: en kısa geri dönüşlü biçim; NaN, +∞ ve −∞ sırasıyla `"#NaN"`, `"#Inf"`, `"#-Inf"` olur ve `core.ts` bunları sayıya geri çevirir. serde_json bu değerleri `null` yapardı; `null · 2 = 0` sessizce yanlış sonuç verirdi.
+  - Sayılar Rust'ın doğru yuvarlayan `str::parse::<f64>` işleviyle okunur; JSON.parse ile aynı float64'ü verir.
+  - Sonuçlar en kısa geri dönüşlü biçimde yazılır; NaN, +∞ ve −∞ sırasıyla `"#NaN"`, `"#Inf"`, `"#-Inf"` olur ve `core.ts` bunları sayıya geri çevirir. serde_json bu değerleri `null` yapardı; `null · 2 = 0` sessizce yanlış sonuç verirdi.
+  - JSON.stringify NaN ve ±∞'u `null` yazdığı için, sayı beklenen yerde `null` NaN okunur; TS de NaN'ı taşımaya devam ederdi. Eksik alan `null` sayılır; `None` olan `Option` alanları yazılmaz (TS'in tanımsız özellikleri yazmaması gibi); bilinmeyen alanlar yok sayılır.
   - `JSON.stringify(-0)` `"0"` yazar. Girdideki −0 korunmaz; `.kcad` ve bulut kaydı da bunu zaten korumuyor.
 - **`undefined` ve `null`:** JSON'da `undefined` yoktur. `op(ad, true)`, TS işlevi yokluk için `undefined` döndürüyorsa `null`'u `undefined`'a çevirir. İsteğe bağlı alanlar çekirdekte yazılmaz (`skip_serializing_if`).
 - **Sıcak yollar (S1):** kenet, seçme, etiket, tutamaç, hayaletler ve budama önizlemesi JSON tablosundan geçmez. Belgenin kopyasını tutan bir geometri deposuna (`Store`) tipli, `Float64Array` giriş-çıkışlı toplu sorgular yapılır. Depo `doc.events.touched` ile eşitlenir. Ayrıntısı o dilimde bu ADR'ye eklenir.
@@ -93,6 +95,7 @@ Kullanıcının kararları (2026-09-24):
   | P1 (60 işlem) | 302 KB | 112 KB | `opt-level = "s"` yalnız %10 kazandırır |
   | P2 (+43 işlem) | 388 KB | 135 KB | Argümanlar artık tek bir `Value` yolundan okunuyor (kazanç 1,5 KB) |
   | P3 (+10 işlem) | 454 KB | 156 KB | Fonksiyon başına döküm (kod 365 KB): serde 155 KB (serde_json ayrıştırma 53, türetilmiş okuyucular 43, yazıcı 60), her `sort_by` için ayrı sıralama kodu ~25 KB, geometri 74 KB, libm 11 KB, bellek ayırıcı 19 KB |
+  | serde'siz JSON | 303 KB | 105 KB | Kendi JSON modülü (27 KB kod) ve tek bir kararlı sıralama (`jsmath::stable_sort`; std `sort_by` her karşılaştırıcı için yeniden üretiliyordu). Kod 244 KB, geometri 70 KB |
 
 ### Doğrulama
 

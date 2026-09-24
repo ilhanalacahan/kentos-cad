@@ -3,16 +3,13 @@
 //! the signed `sweep` (negative = clockwise), so path parameters stay
 //! monotonic along polyline arcs.
 
-use serde::{Deserialize, Serialize};
-
 use crate::api::Op;
 use crate::geom::arc::{ON_ARC_EPS, norm_angle, on_arc};
 use crate::jsmath::{TAU, acos, atan2, cos, js_hypot, js_max, js_min, sin};
 use crate::op;
 use crate::vec2::Vec2;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Edge {
     Seg {
         a: Vec2,
@@ -26,6 +23,8 @@ pub enum Edge {
     },
 }
 
+crate::json_tagged!(Edge, "kind", Seg => "seg" { a, b }, Arc => "arc" { c, r, a0, sweep });
+
 /// Whether angle θ lies on an arc edge (either direction).
 pub fn on_edge_arc(a0: f64, sweep: f64, theta: f64) -> bool {
     if sweep >= 0.0 {
@@ -36,12 +35,14 @@ pub fn on_edge_arc(a0: f64, sweep: f64, theta: f64) -> bool {
 }
 
 /// A hit on edge 1 at parameter t (0..1 along it) and on edge 2 at u.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hit {
     pub p: Vec2,
     pub t: f64,
     pub u: f64,
 }
+
+crate::json_struct!(Hit { p, t, u });
 
 const EPS: f64 = 1e-12;
 
@@ -241,12 +242,14 @@ pub fn ray_edge(o: Vec2, dir: Vec2, e: &Edge, min_t: f64) -> Vec<f64> {
 }
 
 /// The closest point on an edge, its parameter and distance.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Closest {
     pub p: Vec2,
     pub t: f64,
     pub d: f64,
 }
+
+crate::json_struct!(Closest { p, t, d });
 
 pub fn closest_on_edge(e: &Edge, p: Vec2) -> Closest {
     match *e {
