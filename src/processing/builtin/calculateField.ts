@@ -1,5 +1,5 @@
 import type { Entity } from '../../model/entities';
-import { toText, truthy } from '../../model/expression/expressionLib';
+import { measuredOf, toText, truthy, type ExprScope } from '../../model/expression/expressionLib';
 import { defineTool, type DefaultsContext } from '../types';
 
 /**
@@ -62,9 +62,11 @@ export const calculateField = defineTool({
     let empty = 0;
     let filtered = 0;
     const list = v.input.entities;
+    // $alan, $uzunluk, $y, $x from the geometry store, for every object at once when an expression first asks.
+    const measured = measuredOf(() => ctx.geometry.measures(list.map((e) => e.id)));
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      const scope = { entity: e, index: i + 1, layerName: ctx.layerName };
+      const scope: ExprScope = { entity: e, index: i + 1, layerName: ctx.layerName, measured: () => measured(i) };
       if (v.where && !truthy(v.where.evaluate(scope))) {
         filtered++;
         continue;

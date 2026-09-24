@@ -5,6 +5,7 @@ import type { Vec2 } from '../../model/geometry';
 import { LayerStore } from '../../model/layers';
 import { BUILTIN_TOOLS } from '../builtin';
 import { calculateField } from '../builtin/calculateField';
+import { edgeLengths } from '../builtin/edgeLengths';
 import { vertexNumbering } from '../builtin/vertexNumbering';
 import { clientExecutor } from '../job';
 import { defaultValues } from '../parameters';
@@ -61,6 +62,22 @@ describe('processing in a worker', () => {
     expect(labels(bg.doc)).toHaveLength(6);
     bg.doc.undo();
     expect(labels(bg.doc)).toHaveLength(0);
+  });
+  it('takes geometry from a store the worker builds of its copies: the page’s edge labels and areas', async () => {
+    const page = setup(() => fakeWorker());
+    const bg = setup(() => fakeWorker());
+    const texts = (d: CadDocument) => [...d.all()].flatMap((e) => (e.kind === 'text' ? [[e.text, e.p, e.rotation]] : []));
+    const edges = defaultValues(edgeLengths, page.runner.defaults());
+    await page.runner.run(edgeLengths, edges, { target: 'client' });
+    await bg.runner.run(edgeLengths, edges, { target: 'worker' });
+    expect(texts(bg.doc)).toEqual(texts(page.doc));
+    expect(texts(bg.doc)).toHaveLength(7);
+    const area = { ...defaultValues(calculateField, page.runner.defaults()), value: 'metin($alan, 3)' };
+    await page.runner.run(calculateField, area, { target: 'client' });
+    const out = await bg.runner.run(calculateField, area, { target: 'worker' });
+    expect(out.status === 'ok' && out.record.target).toBe('worker');
+    expect(bg.doc.get(bg.e2.id)!.attrs['Hesap alanı']).toBe('100.000');
+    expect(bg.doc.get(bg.e2.id)!.attrs).toEqual(page.doc.get(page.e2.id)!.attrs);
   });
   it('compiles expressions in the worker', async () => {
     const { doc, runner, e2 } = setup(() => fakeWorker());

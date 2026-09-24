@@ -9,6 +9,7 @@ import { edgeLengths } from './builtin/edgeLengths';
 import { selectByExpression } from './builtin/selectByExpression';
 import { formatNumber, numberCorners, parseNumber, ringOrder, type NumberingOptions } from './builtin/numbering';
 import { vertexNumbering } from './builtin/vertexNumbering';
+import { resolveFeatures } from './features';
 import { canFeed, orderSteps, checkModel, type ProcessingModel } from './model';
 import { addInput, addStep, autoLayout, copyModel, edgesOf, newModel, removeInput, removeStep, setSource, slug, sourcesFor } from './modelEdit';
 import { modelAsTool, runModel } from './modelRunner';
@@ -80,6 +81,28 @@ describe('numbering corners of many shapes', () => {
   });
   it('the step and the first number', () => {
     expect(numberCorners([two[0]], { ...base, first: 100, step: 10 }).map((x) => x.name)).toEqual(['P00100', 'P00110', 'P00120', 'P00130']);
+  });
+  it('an empty ring has no corners, walked either way', () => {
+    // Counter-clockwise walking used to put an undefined corner first and fail on it.
+    expect(ringOrder([], true, 'ccw', 'northwest')).toEqual([]);
+    const empty = [{ rings: [{ pts: [], closed: true }] }, two[0]];
+    expect(numberCorners(empty, { ...base, dir: 'ccw' }).map((x) => x.name)).toEqual(['P00001', 'P00002', 'P00003', 'P00004']);
+  });
+  it('far from the origin with no tolerance, shared corners still merge (and the search ends)', () => {
+    // Cells of 1e-9 m: cell numbers beyond 2^53, where counting from gx − 1 up to gx + 1 never ended.
+    const far = [{ rings: [{ pts: square(1e10, 0, 10), closed: true }] }, { rings: [{ pts: square(1e10 + 10, 0, 10), closed: true }] }];
+    const c = numberCorners(far, { ...base, tolerance: 0 });
+    expect(c.filter((x) => x.created)).toHaveLength(6);
+  });
+  it('an existing point without a name does not take a corner or a number', () => {
+    // It used to: the corner became a new point with an empty name and P00001 was skipped.
+    const c = numberCorners([two[0]], { ...base, existing: [{ p: v(0, 10), name: '' }] });
+    expect(c.map((x) => [x.name, x.created])).toEqual([
+      ['P00001', true],
+      ['P00002', true],
+      ['P00003', true],
+      ['P00004', true],
+    ]);
   });
 });
 
@@ -197,6 +220,17 @@ describe('expressions, fields and selection in tools', () => {
     const runner = new ProcessingRunner({ doc, selectedIds: () => selected, visibleBounds: () => null, select: (ids) => (selected = [...ids]) });
     return { doc, runner, small, big, road, selection: () => selected };
   };
+  it('"visible" takes the objects whose box overlaps the view, on shown layers, without construction lines', () => {
+    const { doc } = setup();
+    const far = doc.add({ kind: 'polygon', pts: square(500, 500, 10), layerId: 'a', attrs: {} });
+    const xline = doc.add({ kind: 'xline', p: v(5, 5), dir: v(1, 0), layerId: 'a', attrs: {} });
+    doc.layers.toggleVisible('b');
+    const host = { doc, selectedIds: () => [], visibleBounds: () => ({ minX: -1, minY: -1, maxX: 60, maxY: 40 }) };
+    const ids = resolveFeatures({ scope: 'visible' }, {}, host).entities.map((e) => e.id);
+    // The road on the hidden layer, the far parcel and the construction line are left out.
+    expect(ids).toEqual([...doc.byLayer('a')].filter((e) => e.id !== far.id && e.id !== xline.id).map((e) => e.id));
+    expect(ids).toHaveLength(2);
+  });
   it('summarizes kinds and fields, and narrows to the kinds the user keeps', () => {
     const { runner } = setup();
     const values = { ...defaultValues(calculateField, runner.defaults()), input: { scope: 'all' } };

@@ -1,6 +1,6 @@
 import { foldTurkish } from '../../core/text';
 import type { Entity } from '../entities';
-import { compare, equals, findFunction, findVariable, toNumber, toText, truthy, type ExprFunction, type ExprScope, type ExprValue, type ExprVariable } from './expressionLib';
+import { compare, equals, findFunction, findVariable, measuredOf, toNumber, toText, truthy, type ExprFunction, type ExprScope, type ExprValue, type ExprVariable } from './expressionLib';
 
 /**
  * İfadeler: a small, safe expression language for processing tools
@@ -366,13 +366,19 @@ export function compileExpression(source: string): CompileResult {
 /** Message for the dialog: "12. karakterde: …". */
 export const expressionError = (r: Extract<CompileResult, { ok: false }>) => (r.at > 1 ? `${r.at}. karakterde: ${r.error}` : r.error);
 
-/** One line for the dialog: how the expression works out on the objects it will read. */
-export function previewExpression(expr: CompiledExpression, entities: readonly Entity[], kind: 'condition' | 'value', layerName: (id: string) => string): string {
+/**
+ * One line for the dialog: how the expression works out on the objects it
+ * will read. `measures`: the geometry store's values of objects
+ * (`measuredAt` records), asked once for all the previewed objects when the
+ * expression first needs `$alan`, `$uzunluk`, `$y` or `$x`.
+ */
+export function previewExpression(expr: CompiledExpression, entities: readonly Entity[], kind: 'condition' | 'value', layerName: (id: string) => string, measures?: (entities: readonly Entity[]) => Float64Array): string {
   if (!entities.length) return 'Önizleme için uygun nesne yok.';
   const missing = expr.fields.filter((f) => !entities.some((e) => f in e.attrs));
   const note = missing.length ? ` ${missing.map((f) => `“${f}”`).join(', ')} alanı bu nesnelerde yok.` : '';
-  const scope = (entity: Entity, index: number): ExprScope => ({ entity, index, layerName });
   const limit = Math.min(entities.length, 20000);
+  const measured = measures && measuredOf(() => measures(entities.slice(0, limit)));
+  const scope = (entity: Entity, index: number): ExprScope => ({ entity, index, layerName, measured: measured && (() => measured(index - 1)) });
   if (kind === 'condition') {
     let hits = 0;
     for (let i = 0; i < limit; i++) if (truthy(expr.evaluate(scope(entities[i], i + 1)))) hits++;

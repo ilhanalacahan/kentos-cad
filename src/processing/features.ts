@@ -1,12 +1,14 @@
 import type { CadDocument } from '../model/document';
-import { ENTITY_KIND_LABEL, entityBounds, type Entity, type EntityKind } from '../model/entities';
+import { ENTITY_KIND_LABEL, type Entity, type EntityKind } from '../model/entities';
 import type { Bounds } from '../model/geometry';
+import { withObjects, type DocumentGeometry } from './geometry';
 import type { FeatureSet, FeaturesParam, FeaturesValue } from './types';
 
 /**
  * Turns a features value (selection, visible, all, a layer, explicit ids)
- * into the objects a tool works on. Selection and the visible area come
- * from the host, so this module stays free of UI and viewport.
+ * into the objects a tool works on. Selection, the visible area and the
+ * drawing's geometry store come from the host, so this module stays free
+ * of UI and viewport.
  */
 
 export interface FeatureHost {
@@ -14,6 +16,13 @@ export interface FeatureHost {
   selectedIds(): readonly number[];
   /** World box on screen, or null when there is no view (tests, server). */
   visibleBounds(): Bounds | null;
+  /**
+   * The drawing's geometry store as the host keeps it (the viewport's,
+   * docs/adr/0008): it answers the "visible" scope's box test and the
+   * dialog's expression previews. Without one (tests, a server) the
+   * objects asked about get a store of their own.
+   */
+  readonly geometry?: DocumentGeometry;
   /** Replaces the selection (tools that select); absent where there is none. */
   select?(ids: readonly number[]): void;
 }
@@ -26,8 +35,6 @@ export const SCOPE_LABEL: Record<FeaturesValue['scope'], string> = {
   ids: 'Önceki adımın çıktısı',
 };
 
-const overlaps = (a: Bounds, b: Bounds) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
-
 /** Objects in scope, before the kind filter. */
 function inScope(value: FeaturesValue, host: FeatureHost): Entity[] {
   const { doc } = host;
@@ -36,8 +43,16 @@ function inScope(value: FeaturesValue, host: FeatureHost): Entity[] {
     case 'selection':
       return host.selectedIds().flatMap((id) => doc.get(id) ?? []);
     case 'visible': {
+      // Construction lines reach everywhere: they are never "in view".
+      const kept = (e: Entity) => shown(e) && e.kind !== 'xline' && e.kind !== 'ray';
       const view = host.visibleBounds();
-      return [...doc.all()].filter((e) => shown(e) && e.kind !== 'xline' && e.kind !== 'ray' && (!view || overlaps(entityBounds(e), view)));
+      if (!view) return [...doc.all()].filter(kept);
+      // Whose box overlaps the view is the geometry store's answer, in the document's order.
+      const ids = host.geometry ? host.geometry.inBox(view) : withObjects(doc.all(), (s) => s.inBox(view));
+      return ids.flatMap((id) => {
+        const e = doc.get(id);
+        return e && kept(e) ? [e] : [];
+      });
     }
     case 'all':
       return [...doc.all()].filter(shown);

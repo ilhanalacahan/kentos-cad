@@ -32,6 +32,34 @@ export interface Measured {
   readonly anchor: Vec2 | null;
 }
 
+/** Numbers per object in a geometry store `measures` answer: flags, length, area, anchor x and y, spare. */
+const MEASURE_STRIDE = 6;
+
+/**
+ * The geometry values of object `i` in a geometry store `measures` answer
+ * (crates/geometry-core/src/store/draw.rs), for drawing a layer and for
+ * processing runs alike (docs/adr/0008, S2 and S4).
+ */
+export function measuredAt(values: Float64Array, i: number): Measured {
+  const k = i * MEASURE_STRIDE;
+  const flags = values[k];
+  return {
+    length: flags & 1 ? values[k + 1] : null,
+    area: flags & 2 ? values[k + 2] : null,
+    anchor: flags & 4 ? { x: values[k + 3], y: values[k + 4] } : null,
+  };
+}
+
+/**
+ * The geometry values of a list of objects (object `i` of it), fetched from
+ * the geometry store for all of them the first time an expression asks for
+ * one; an expression that asks for none costs nothing.
+ */
+export function measuredOf(fetch: () => Float64Array): (i: number) => Measured {
+  let values: Float64Array | null = null;
+  return (i) => measuredAt((values ??= fetch()), i);
+}
+
 const NUMERIC = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /** A number, or null when the value is empty or not a number (decimal separator is the dot). */

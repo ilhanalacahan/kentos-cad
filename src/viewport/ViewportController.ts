@@ -257,6 +257,16 @@ export class ViewportController {
     return this.picker.overlapping(r);
   }
 
+  /** Ids of objects on every layer whose box overlaps `r`, in the document's order (the processing tools' "visible" scope). */
+  inBox(r: Bounds): number[] {
+    return this.picker.inBox(r);
+  }
+
+  /** Geometry values of these objects for expressions, one record each (`measuredAt`): processing previews and the layer style window. */
+  measures(ids: readonly number[]): Float64Array {
+    return this.picker.measures(ids);
+  }
+
   /** Trim `target` at `at` against the chosen boundaries, or every visible edge in view. */
   trim(target: Entity, at: Vec2, chosen: ReadonlySet<number> | null): TrimResult {
     return this.picker.trim(target, at, this.camera.visibleBounds(), chosen);

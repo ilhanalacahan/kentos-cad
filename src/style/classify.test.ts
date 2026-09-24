@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Entity } from '../model/entities';
+import { CoreStore } from '../wasm/core';
+import { packEntities } from '../wasm/pack';
 import { classesPresent, classLabel, equalCount, equalInterval, numericValues, plainSymbols, rampColors, uniqueValues, valuesOf } from './classify';
 
 const poly = (attrs: Record<string, string>, id = 1): Entity => ({ id, kind: 'polygon', layerId: 'a', attrs, pts: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] });
@@ -21,6 +23,25 @@ describe('classify', () => {
       { value: '100', count: 1 },
     ]);
     expect(valuesOf(list, 'Nitelik +', scope).error).toBeTruthy();
+  });
+
+  it('takes geometry values from the geometry store, all objects at once, only when asked', () => {
+    const list: Entity[] = [poly({}, 1), { id: 2, kind: 'polyline', layerId: 'a', attrs: {}, pts: [] }, { id: 3, kind: 'circle', layerId: 'a', attrs: {}, c: { x: 0, y: 0 }, r: 1 }];
+    const store = new CoreStore();
+    const p = packEntities(list);
+    store.putPacked(p.nums, p.strings);
+    let asked = 0;
+    const measures = (l: readonly Entity[]) => {
+      asked++;
+      return store.measures(Float64Array.from(l.map((e) => e.id)));
+    };
+    expect(valuesOf(list, 'yuvarla($alan, 3)', { ...scope, measures }).values).toEqual(['0.5', null, '3.142']);
+    // A path without vertices has no place: its $y is empty rather than an error that empties the whole value.
+    expect(valuesOf(list, "varsayılan($y, 'yok')", { ...scope, measures }).values).toEqual(['0.666666666667', 'yok', '0']);
+    expect(asked).toBe(2);
+    valuesOf(list, 'Nitelik', { ...scope, measures });
+    expect(asked).toBe(2);
+    store.dispose();
   });
 
   it('makes equal-interval and equal-count classes', () => {

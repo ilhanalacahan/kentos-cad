@@ -26,6 +26,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
 - **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a'da `model/ops` ve üst düzey `model/geom` (bindirme, alan cebiri, paralel, ölçmecilik, şekiller, teğet daire, öteleme, tarama, ölçü) çekirdeğin ince cephelerine döndü, TS algoritmaları silindi. Kalan TS geometrisi ilkel modüllerdir (S3b). Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **S4 yapıldı:** işlem araçlarının geometrisi (köşe numaralama, köşe yazısının yeri, kenar ölçüleri, “görünen” kapsamının kutu testi, ifadelerin geometri değerleri) çekirdekten geliyor. Her çalıştırma okuduğu nesnelerden kendi deposunu kurar, sayfada da worker'da da aynı kodla (`processing/job.ts` `runJob`, `processing/geometry.ts`; ADR 0008 “İşlem araçları ve worker (S4)”).
 - **S5 yapıldı:** araçların ve nesne izlemenin satır içi hesapları (nokta girişi, orto/kutupsal imleç, nesne izleme, nokta hesabının kendi aritmetiği, araçların yapı hesapları; 39 işlem) `geometry-core::tools`'tan geliyor (`src/tools/constructions.ts`, ADR 0008 “Araç ve görünüm hesapları (S5)”).
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
@@ -36,7 +37,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 845 KB, gzip ile 283 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; 17 KB kaldı (§6 madde 8).
+- **WASM paketi:** 882 KB, gzip ile 297 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16, S4'te +14 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; 3 KB kaldı (§6 madde 8).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -59,7 +60,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 
 - `render/styledLayer.ts` ve `render/sceneBuilder.ts` çizilecek geometriyi katman başına tek çağrıda alır (`PickIndex.drawn` → `store/draw.rs`; `style/geometry.ts` `DrawnReader` okur). Nesnenin kendi noktaları kopyalanmaz, kayıt onlara başvurur. Tek nesnelik `styledGeometry` (sembol önizlemeleri) aynı kaydı `drawnGeometry` işlemiyle alır.
 - `render/styledSink.ts` ve vurgu katmanı dolguları `render/fillQueue.ts` ile katman bitince tek `triangulateMany` çağrısında üçgenler.
-- Çizimdeki ifadelerin `$alan`, `$uzunluk`, `$y`, `$x` değerleri ilk istenince katman için bir kez `measures` ile gelir (`ExprScope.measured`). İşlem araçları, lejant ve sınıflama bunları hâlâ TS'te nesneden hesaplıyor (S4).
+- Çizimdeki ifadelerin `$alan`, `$uzunluk`, `$y`, `$x` değerleri ilk istenince katman için bir kez `measures` ile gelir (`ExprScope.measured`). İşlem araçları ve sınıflama S4'te bunları da depodan alır (lejant ifade değerlendirmez).
 - Eski hesap `src/wasm/parity/reference/draw.ts`'te referanstır; derin koşu temiz, donmuş dosyada çizim ve değer durumları var. E2e'de WebGL2'nin piksel sayısı değişmedi. Katman kurma süresi S1c ile başa baş (ADR 0008 “Çizim hattı”).
 
 ### S3: cephe ve TypeScript'in silinmesi
@@ -76,11 +77,13 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - **S3c:** tek kaynak bekçisi (bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği, `Math.`, olmadığını denetler), `src/wasm/parity/reference/*` ve `parity.test.ts`'in silinmesi (derin koşudan sonra), belgeler.
 - Kare başına binlerce çağrı yapan yerler toplu API alır; bölme noktaları ve tarama önizlemesi S3a'da yapıldı.
 
-### S4: worker
+### S4: worker (yapıldı)
 
-- Worker kendi depo örneğini işin nesne kopyalarından kurar.
-- `processing/features.ts` sınırları, `numbering`, `edgeLengths` ve ifade ölçüleri çekirdekten gelir.
-- `processing/worker/worker.test.ts` ve e2e worker denetimi geçmeli.
+- Sayfadaki `clientExecutor` ve worker'ın `handleJob`'ı aynı `runJob`'ı çağırır: çalıştırma okuduğu nesneleri (features girdileri) kendi deposuna paketler (`ObjectStore`, `processing/geometry.ts`), araç `ctx.geometry` ile kimlikten sorar; depo çalıştırma bitince bırakılır.
+- Çekirdeğe geçenler (`crates/geometry-core/src/processing/`, `store/processing.rs`): köşe numaralama (halka sırası, ortak köşe ızgarası, dışa bakan yön; adlar ve sayaç TS'te `nameCorners`), köşe yazısının yeri (`cornerTexts`), kenar ölçüsü yazıları ve ortak kenar anahtarları (`edgeLengths`), “görünen” kapsamının kutu testi (`inBox`, pencerede görünümün deposu). İfadelerin geometri değerleri Öznitelik hesapla, İfadeyle seç, pencere önizlemesi, sınıflama ve kural süzgeçlerinde bütün nesneler için bir kez depodan gelir.
+- Taşırken TS'te üç kırılganlık bulundu ve iki tarafta düzeltildi (ADR 0008 “S4'te bulunanlar”): boş halkada `TypeError`, adsız noktanın numara yutması, 2^53'ün ötesinde bitmeyen ızgara döngüsü.
+- Eski hesap `src/wasm/parity/reference/processing.ts`'te referanstır (S3'te silinir). Çağrı kümesi S4 ve araç parity'si derin koşuda temiz; donmuş dosyalar `calls-s4-processing.json` ve `store-processing.json`.
+- **Ölçüm (bulut, 50 000 parsel):** numaralama 871 → 289 ms, kenar uzunlukları 280 → 158 ms (ortanca); `$alan` yazan Öznitelik hesapla sayfada 53 → 136 ms (depo kurulumu; Otomatik 2 000 nesneden sonra worker'ı seçer).
 
 ### S5: araç ve görünümdeki satır içi hesaplar (yapıldı)
 
@@ -197,7 +200,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 5. ADR 0005 (performans hedefleri) hâlâ taslak; onay bekliyor.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
-8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına yaklaşıyor (S3a'da 267 KB, S5 ile 283 KB). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
+8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına dayandı (S3a'da 267 KB, S5 ile 283 KB, S4 ile 297 KB; 3 KB kaldı, bir sonraki dilim aşar). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
 9. Dosya biçimleri (ADR 0009) main'e alındı; ADR'nin onayı bekliyor.
 10. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
 11. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.

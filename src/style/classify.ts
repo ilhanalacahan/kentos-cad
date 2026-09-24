@@ -1,6 +1,6 @@
 import type { Entity } from '../model/entities';
 import { compileExpression } from '../model/expression/expression';
-import { toNumber, toText } from '../model/expression/expressionLib';
+import { measuredOf, toNumber, toText } from '../model/expression/expressionLib';
 import type { Color, Symbol, SymbolSet } from '../model/style';
 import { geometryClassOf, type GeometryClass } from './geometry';
 
@@ -16,15 +16,21 @@ export interface ValueCount {
   count: number;
 }
 
-type Scope = { layerName(id: string): string };
+type Scope = {
+  layerName(id: string): string;
+  /** The geometry store's values of objects (`measuredAt` records), asked once for all of them when the expression first needs `$alan`, `$uzunluk`, `$y` or `$x` (docs/adr/0008). */
+  measures?(entities: readonly Entity[]): Float64Array;
+};
 
 /** The expression's value per object (null when it gives nothing), or an error. */
 export function valuesOf(entities: readonly Entity[], expr: string, scope: Scope): { values: (string | null)[]; error?: string } {
   const c = compileExpression(expr);
   if (!c.ok) return { values: [], error: c.error };
+  const measures = scope.measures;
+  const measured = measures && measuredOf(() => measures(entities));
   return {
     values: entities.map((entity, i) => {
-      const v = c.expr.evaluate({ entity, index: i + 1, layerName: scope.layerName });
+      const v = c.expr.evaluate({ entity, index: i + 1, layerName: scope.layerName, measured: measured && (() => measured(i)) });
       return v === null ? null : toText(v);
     }),
   };

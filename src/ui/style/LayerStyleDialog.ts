@@ -139,6 +139,8 @@ class LayerStyleDialog {
   }
 
   private layerName = (id: string) => this.ctx.doc.layers.get(id)?.name ?? id;
+  /** Expressions read their geometry values from the drawing's geometry store, for the layer's objects at once. */
+  private exprScope = { layerName: this.layerName, measures: (list: readonly Entity[]) => this.ctx.view.measures(list.map((e) => e.id)) };
 
   // ── Rendering ────────────────────────────────────────────────────────
 
@@ -190,7 +192,7 @@ class LayerStyleDialog {
       this.categorized = { ...c, ...next };
       this.render();
     };
-    const { values, error } = c.expr ? valuesOf(this.entities, c.expr, { layerName: this.layerName }) : { values: [] as (string | null)[], error: undefined };
+    const { values, error } = c.expr ? valuesOf(this.entities, c.expr, this.exprScope) : { values: [] as (string | null)[], error: undefined };
     const counts = new Map(uniqueValues(values).map((v) => [v.value, v.count]));
     const matched = c.categories.reduce((s, k) => s + (counts.get(k.value) ?? 0), 0);
     const expr = this.exprField(c.expr, (v) => set({ expr: v }), 'Alan adı ya da ifade: Nitelik');
@@ -249,7 +251,7 @@ class LayerStyleDialog {
       this.graduated = { ...g, ...next };
       this.render();
     };
-    const { values, error } = g.expr ? valuesOf(this.entities, g.expr, { layerName: this.layerName }) : { values: [] as (string | null)[], error: undefined };
+    const { values, error } = g.expr ? valuesOf(this.entities, g.expr, this.exprScope) : { values: [] as (string | null)[], error: undefined };
     const nums = numericValues(values);
     const countIn = (min: number, max: number, last: boolean) => nums.filter((v) => v >= min && (v < max || (last && v <= max))).length;
     const expr = this.exprField(g.expr, (v) => set({ expr: v }), 'Sayı veren ifade: $alan, "Kat"');

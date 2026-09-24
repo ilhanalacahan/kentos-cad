@@ -1,5 +1,4 @@
 import type { Entity } from '../model/entities';
-import type { Measured } from '../model/expression/expressionLib';
 import { centroid, type Bounds, type Vec2 } from '../model/geometry';
 import type { MarkerPlacement } from '../model/style';
 import { op } from '../wasm/core';
@@ -116,19 +115,8 @@ export class DrawnReader {
   }
 }
 
-/** Numbers per object in a `CoreStore.measures` answer: flags, length, area, anchor x and y, spare. */
-const MEASURE_STRIDE = 6;
-
-/** The expressions' geometry values of object `i` in a `CoreStore.measures` answer (crates/geometry-core/src/store/draw.rs). */
-export function measuredAt(values: Float64Array, i: number): Measured {
-  const k = i * MEASURE_STRIDE;
-  const flags = values[k];
-  return {
-    length: flags & 1 ? values[k + 1] : null,
-    area: flags & 2 ? values[k + 2] : null,
-    anchor: flags & 4 ? { x: values[k + 3], y: values[k + 4] } : null,
-  };
-}
+/** The expressions' geometry values of object `i` in a `CoreStore.measures` answer; the expression library reads them for processing too. */
+export { measuredAt } from '../model/expression/expressionLib';
 
 const drawnGeometry = op<(e: Entity, oriented: boolean, clip: Bounds | null) => number[]>('drawnGeometry');
 

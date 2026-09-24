@@ -3,6 +3,7 @@ import type { Entity, EntityKind, NewEntity } from '../model/entities';
 import type { CompiledExpression } from '../model/expression/expression';
 import type { Vec2 } from '../model/geometry';
 import type { LayerStyle } from '../model/layers';
+import type { RunGeometry } from './geometry';
 
 /**
  * İşlem araçları (QGIS Processing gibi): batch operations over many
@@ -232,6 +233,11 @@ export interface RunContext {
   layerName(id: string): string;
   /** Ids selected when the run started (selection tools combine with it). */
   readonly selection: readonly number[];
+  /**
+   * Geometry of the run's features inputs, by id, from the Rust geometry
+   * store (docs/adr/0008, S4): the same code wherever the run is.
+   */
+  readonly geometry: RunGeometry;
 }
 
 /** Progress, messages and cancellation, shared with the dialog. */

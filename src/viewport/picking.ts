@@ -290,6 +290,12 @@ export class PickIndex {
     return this.store.measures(Float64Array.from(ids));
   }
 
+  /** Ids of objects on every layer whose box overlaps `r`, in the document's order (the processing tools' "visible" scope). */
+  inBox(r: Bounds): number[] {
+    this.sync();
+    return Array.from(this.store.inBox(r.minX, r.minY, r.maxX, r.maxY));
+  }
+
   /** Window (fully inside) or crossing (touching) selection. */
   inRect(r: Bounds, crossing: boolean): number[] {
     this.sync();

@@ -1,13 +1,12 @@
 import type { NewEntity } from '../../model/entities';
-import type { Vec2 } from '../../model/geometry';
-import { edgeLabels } from '../../model/ops/edgeLabels';
 import { defineTool, type DefaultsContext } from '../types';
 
 /**
  * Kenar uzunluklarını yaz: every edge of the chosen areas, paths and lines
  * gets its length as text, centred on the edge and turned to read along
  * it, outside (or inside) the shape. An edge shared by two parcels is
- * written once.
+ * written once. Where each label goes and which edges are shared come from
+ * the geometry core (docs/adr/0008, S4).
  */
 export const edgeLengths = defineTool({
   id: 'annotation.edgeLengths',
@@ -49,33 +48,23 @@ export const edgeLengths = defineTool({
   preview: (v) => `${v.prefix}${(12.3456).toFixed(v.decimals)}${v.suffix}`,
   run: (v, ctx) => {
     const height = (v.textHeight / 1000) * ctx.units.plotScale;
-    const seen = new Set<string>();
-    // One key per edge, whichever way it runs (1 mm grid: parcels share exact corners).
-    const q = (p: Vec2) => `${Math.round(p.x * 1000)},${Math.round(p.y * 1000)}`;
-    const edgeKey = (a: Vec2, b: Vec2, length: number) => {
-      const [k1, k2] = [q(a), q(b)].sort();
-      return `${k1}|${k2}|${Math.round(length * 1000)}`;
-    };
-    const add: NewEntity[] = [];
-    let skipped = 0;
-    for (const e of v.input.entities) {
-      const path = e.kind === 'line' ? { pts: [e.a, e.b], closed: false, bulges: undefined } : e.kind === 'polygon' || e.kind === 'polyline' ? { pts: e.pts, closed: e.kind === 'polygon', bulges: e.bulges } : null;
-      if (!path) continue;
-      const labels = edgeLabels(path.pts, path.closed, height, v.minLength, path.bulges, v.side);
-      const n = path.pts.length;
-      for (const l of labels) {
-        if (v.shared) {
-          const k = edgeKey(path.pts[l.index], path.pts[(l.index + 1) % n], l.length);
-          if (seen.has(k)) {
-            skipped++;
-            continue;
-          }
-          seen.add(k);
-        }
-        const text = `${v.prefix}${l.length.toFixed(v.decimals)}${v.suffix}`;
-        add.push({ kind: 'text', layerId: v.layer.id, p: l.p, text, height, rotation: l.rotation, attrs: { Tür: 'Kenar ölçüsü', 'Uzunluk (m)': l.length.toFixed(3) } });
-      }
-    }
+    // Lines, polylines and polygons have edges; one key per edge whichever way it runs (1 mm grid: parcels share exact corners).
+    const { labels, skipped } = ctx.geometry.edgeLengths(
+      v.input.entities.map((e) => e.id),
+      height,
+      v.minLength,
+      v.side,
+      v.shared,
+    );
+    const add: NewEntity[] = labels.map((l) => ({
+      kind: 'text',
+      layerId: v.layer.id,
+      p: l.p,
+      text: `${v.prefix}${l.length.toFixed(v.decimals)}${v.suffix}`,
+      height,
+      rotation: l.rotation,
+      attrs: { Tür: 'Kenar ölçüsü', 'Uzunluk (m)': l.length.toFixed(3) },
+    }));
     return {
       changes: { add },
       outputs: { count: add.length },

@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { Entity } from '../model/entities';
+import { ObjectStore, type CornerWalk } from '../processing/geometry';
 import { DrawnReader, measuredAt } from '../style/geometry';
 import { CoreStore } from './core';
 import { sameResult, toJson, type Tolerance } from './parity/harness';
 
 /**
- * The frozen store fixture (fixtures/geometry/v1/store-v1.json: the
+ * The frozen store fixtures (fixtures/geometry/v1/store-*.json: the
  * TypeScript PickIndex's answers on a fixed scene, the tool previews and
- * totals, and the layer builders' geometry it computed) through the app's
- * path into the WASM geometry
- * store; Rust runs the same file natively
- * (crates/geometry-core/tests/store.rs). It stays after the TypeScript
- * reference is deleted (docs/adr/0008, S1).
+ * totals, and the layer builders' geometry it computed; the processing
+ * tools' box test, corner numbering and edge labels) through the app's
+ * path into the WASM geometry store (processing's through its own
+ * `ObjectStore`, as a run asks); Rust runs the same files natively
+ * (crates/geometry-core/tests/store.rs). They stay after the TypeScript
+ * reference is deleted (docs/adr/0008, S1, S4).
  */
 
 interface StoreFile {
@@ -43,7 +45,7 @@ function edges(f: Float64Array): unknown[] {
   return out;
 }
 
-function answer(s: CoreStore, byId: Map<number, unknown>, op: string, a: unknown[]): unknown {
+function answer(s: CoreStore, objects: ObjectStore, byId: Map<number, unknown>, op: string, a: unknown[]): unknown {
   const n = (i: number) => a[i] as number;
   const r = a[0] as Rect;
   const except = (a[1] as number | null) ?? undefined;
@@ -105,6 +107,12 @@ function answer(s: CoreStore, byId: Map<number, unknown>, op: string, a: unknown
       const values = s.measures(ids(0));
       return (a[0] as number[]).map((_, i) => measuredAt(values, i));
     }
+    case 'inBox':
+      return objects.inBox(r);
+    case 'numberCorners':
+      return objects.numberCorners(a[0] as number[], a[1] as CornerWalk, a[2] as { x: number; y: number }[]);
+    case 'edgeLengths':
+      return objects.edgeLengths(a[0] as number[], n(1), n(2), a[3] as 'outside' | 'inside', a[4] as boolean);
   }
   throw new Error(`bilinmeyen sorgu: ${op}`);
 }
@@ -123,8 +131,10 @@ for (const [path, text] of Object.entries(files)) {
       s.setLayers(JSON.stringify(file.layers));
       s.setLabelDefaults(JSON.stringify(file.labelDefaults));
       const byId = new Map(file.entities.map((e) => [e.id, e]));
-      const failures = file.cases.map((c) => sameResult(toJson(answer(s, byId, c.op, c.args)), c.expect, file.tolerance, `${c.op} ${c.name}`)).filter(Boolean);
+      const objects = new ObjectStore(file.entities as unknown as Entity[]);
+      const failures = file.cases.map((c) => sameResult(toJson(answer(s, objects, byId, c.op, c.args)), c.expect, file.tolerance, `${c.op} ${c.name}`)).filter(Boolean);
       s.dispose();
+      objects.dispose();
       expect(failures.slice(0, 5).join('\n')).toBe('');
     });
   });

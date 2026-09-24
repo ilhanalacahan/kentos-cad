@@ -8,6 +8,7 @@ use kentos_geometry_core::api::json::{self, FromJson, Json};
 use kentos_geometry_core::entity::Entity;
 use kentos_geometry_core::geom::intersect::Edge;
 use kentos_geometry_core::geometry::Bounds;
+use kentos_geometry_core::processing::numbering::{CornerWalk, StartCorner};
 use kentos_geometry_core::store::Store;
 use wasm_bindgen::prelude::*;
 
@@ -364,6 +365,61 @@ impl GeometryStore {
     /// area, anchor x, anchor y, 0` each (`store::draw::measure_record`).
     pub fn measures(&self, ids: &[f64]) -> Vec<f64> {
         self.inner.measures(ids)
+    }
+
+    /// Ids of objects on every layer whose box overlaps the rectangle, in the
+    /// document's order (the processing tools' "visible" scope, `Store::in_box`).
+    #[wasm_bindgen(js_name = inBox)]
+    pub fn in_box(&self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Vec<f64> {
+        self.inner.in_box(&rect(min_x, min_y, max_x, max_y))
+    }
+
+    /// Corner numbering of these objects (`Store::number_corners`): walked
+    /// counter-clockwise or clockwise from the start (0 north-west, 1 north,
+    /// 2 first vertex, 3 nearest the point, which counts only when
+    /// `has_point`); `existing` points (x, y pairs) keep their numbers when
+    /// `shared`. Five numbers per corner.
+    #[wasm_bindgen(js_name = numberCorners)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn number_corners(
+        &self,
+        ids: &[f64],
+        ccw: bool,
+        start: u32,
+        has_point: bool,
+        px: f64,
+        py: f64,
+        tolerance: f64,
+        shared: bool,
+        existing: &[f64],
+    ) -> Vec<f64> {
+        let walk = CornerWalk {
+            ccw,
+            start: StartCorner::from_code(start),
+            point: has_point.then(|| Vec2::new(px, py)),
+            tolerance,
+            shared,
+        };
+        let existing: Vec<Vec2> = existing
+            .chunks_exact(2)
+            .map(|c| Vec2::new(c[0], c[1]))
+            .collect();
+        self.inner.number_corners(ids, &walk, &existing)
+    }
+
+    /// Edge-length labels of these objects (`Store::edge_lengths`): the
+    /// number of shared edges skipped, then five numbers per label.
+    #[wasm_bindgen(js_name = edgeLengths)]
+    pub fn edge_lengths(
+        &self,
+        ids: &[f64],
+        height: f64,
+        min_length: f64,
+        inside: bool,
+        shared: bool,
+    ) -> Vec<f64> {
+        self.inner
+            .edge_lengths(ids, height, min_length, inside, shared)
     }
 
     /// Edges of visible objects overlapping the rectangle (see `pack_edges`).

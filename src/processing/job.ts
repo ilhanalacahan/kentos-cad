@@ -1,5 +1,6 @@
 import type { Entity } from '../model/entities';
 import { compileExpression } from '../model/expression/expression';
+import { ObjectStore, type RunGeometry } from './geometry';
 import type { DefaultsContext, DocumentSnapshot, ExecutionTarget, Feedback, FeatureSet, ProcessingTool, RunContext, RunResult } from './types';
 
 /**
@@ -54,9 +55,35 @@ export function materialize(tool: ProcessingTool, values: RunJob['values'], doc:
   return out;
 }
 
-export function jobContext(job: RunJob, doc: DocumentSnapshot): RunContext {
+export function jobContext(job: RunJob, doc: DocumentSnapshot, geometry: RunGeometry): RunContext {
   const names = new Map(job.layers);
-  return { doc, units: job.units, selection: job.selection, layerName: (id) => names.get(id) ?? id };
+  return { doc, units: job.units, selection: job.selection, layerName: (id) => names.get(id) ?? id, geometry };
+}
+
+/** The objects of a tool's features inputs, each once. */
+function inputObjects(tool: ProcessingTool, values: Record<string, unknown>): Entity[] {
+  const byId = new Map<number, Entity>();
+  for (const p of tool.parameters) {
+    const set = p.type === 'features' ? (values[p.name] as FeatureSet | null | undefined) : null;
+    for (const e of set?.entities ?? []) if (!byId.has(e.id)) byId.set(e.id, e);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Runs a job against the document an executor has: the page's live one or
+ * the worker's copies. Either way the objects the job reads go into a
+ * geometry store of their own (docs/adr/0008, S4), so the page and the
+ * worker run the same code; the store is freed when the run ends.
+ */
+export async function runJob(tool: ProcessingTool, job: RunJob, doc: DocumentSnapshot, feedback: Feedback): Promise<RunResult> {
+  const values = materialize(tool, job.values, doc);
+  const geometry = new ObjectStore(inputObjects(tool, values));
+  try {
+    return await tool.run(values as never, jobContext(job, doc, geometry), feedback);
+  } finally {
+    geometry.dispose();
+  }
 }
 
 /** Read-only document made of copied objects (in a worker, or for a server request). */
@@ -90,5 +117,5 @@ export class EntitySnapshot implements DocumentSnapshot {
 export const clientExecutor: Executor = {
   target: 'client',
   available: () => true,
-  execute: async (tool, job, doc, feedback) => tool.run(materialize(tool, job.values, doc) as never, jobContext(job, doc), feedback),
+  execute: runJob,
 };

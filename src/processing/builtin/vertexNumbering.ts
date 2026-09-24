@@ -1,6 +1,6 @@
 import type { NewEntity } from '../../model/entities';
 import { defineTool, type Shown } from '../types';
-import { formatNumber, numberCorners, type NumberingInput } from './numbering';
+import { formatNumber, nameCorners, numberedPoints } from './numbering';
 
 /**
  * Köşe noktalarını numarala: every corner of the chosen areas (and paths)
@@ -88,40 +88,31 @@ export const vertexNumbering = defineTool({
   },
   run: (v, ctx) => {
     const format = { prefix: v.prefix, length: v.length, pad: v.pad };
-    const inputs: NumberingInput[] = [];
-    for (const e of v.input.entities) {
-      if (e.kind === 'polygon') inputs.push({ rings: [{ pts: e.pts, closed: true }, ...(e.holes ?? []).map((h) => ({ pts: h.pts, closed: true }))] });
-      else if (e.kind === 'polyline') inputs.push({ rings: [{ pts: e.pts, closed: false }] });
-    }
-    if (!inputs.length) return { summary: 'Numaralanacak alan yok.' };
+    // Areas and paths have corners; the core walks their rings (a polygon's holes after its outer ring).
+    const shapes = v.input.entities.filter((e) => e.kind === 'polygon' || e.kind === 'polyline');
+    if (!shapes.length) return { summary: 'Numaralanacak alan yok.' };
     const layer = v.layer;
     const existing = v.shared || !layer.isNew
       ? ctx.doc.byLayer(layer.id).flatMap((e) => (e.kind === 'point' ? [{ p: e.p, name: e.label ?? e.attrs.Nokta ?? '' }] : []))
       : [];
-    const corners = numberCorners(inputs, {
-      dir: v.direction,
-      start: v.start,
-      point: v.startPoint ?? null,
-      format,
-      first: v.first,
-      step: v.step,
-      tolerance: v.tolerance ?? 0.001,
-      shared: v.shared,
-      existing,
-    });
+    const named = numberedPoints(existing);
+    const walk = { dir: v.direction, start: v.start, point: v.startPoint ?? null, tolerance: v.tolerance ?? 0.001, shared: v.shared };
+    const found = ctx.geometry.numberCorners(
+      shapes.map((e) => e.id),
+      walk,
+      v.shared ? named.map((e) => e.p) : [],
+    );
+    const corners = nameCorners(found, named, { format, first: v.first, step: v.step });
     const created = corners.filter((c) => c.created);
     const height = ((v.textHeight ?? 2) / 1000) * ctx.units.plotScale;
+    // Outside the corner, centred on its bisector (placed by the core from the name's length).
+    const texts = v.output !== 'points' ? ctx.geometry.cornerTexts(created, created.map((c) => c.name.length), height) : [];
     const add: NewEntity[] = [];
-    for (const c of created) {
+    created.forEach((c, i) => {
       const attrs = { Nokta: c.name, Tür: 'Köşe noktası' };
       if (v.output !== 'text') add.push({ kind: 'point', layerId: layer.id, p: { ...c.p }, label: c.name, attrs });
-      if (v.output !== 'points') {
-        // Outside the corner, centred on its bisector.
-        const w = c.name.length * height * 0.55;
-        const at = { x: c.p.x + c.out.x * height * 1.2 - (c.out.x < 0 ? w : 0), y: c.p.y + c.out.y * height * 1.2 - (c.out.y < 0 ? height : 0) };
-        add.push({ kind: 'text', layerId: layer.id, p: at, text: c.name, height, rotation: 0, attrs });
-      }
-    }
+      if (v.output !== 'points') add.push({ kind: 'text', layerId: layer.id, p: texts[i], text: c.name, height, rotation: 0, attrs });
+    });
     const first = created[0]?.name;
     const last = created[created.length - 1]?.name;
     // Reused numbers: from points already on the layer, or from a neighbour numbered in this run.
@@ -133,7 +124,7 @@ export const vertexNumbering = defineTool({
       changes: { add },
       outputs: { count: created.length },
       summary: created.length
-        ? `${inputs.length} nesnede ${created.length} köşe numaralandı: ${first} – ${last}${notes.length ? `; ${notes.join('; ')}` : ''}.`
+        ? `${shapes.length} nesnede ${created.length} köşe numaralandı: ${first} – ${last}${notes.length ? `; ${notes.join('; ')}` : ''}.`
         : 'Yeni numara gerekmedi: bütün köşelerin numarası zaten var.',
     };
   },

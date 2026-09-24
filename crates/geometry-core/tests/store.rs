@@ -5,7 +5,9 @@
 //! overlapping objects, boundary edges, labels and grips on a fixed scene,
 //! the tool previews and totals (trim, extend, ghosts, stretch ghosts,
 //! selection totals), and what the layer builders draw with the
-//! expressions' geometry values. The WASM build runs the same file
+//! expressions' geometry values; and what the processing tools ask
+//! (`store-processing.json`, S4): the box test, corner numbering and
+//! edge-length labels by id. The WASM build runs the same files
 //! (`src/wasm/store.wasm.test.ts`).
 
 // Test harness code, not the core: the std float methods are fine here.
@@ -19,14 +21,12 @@ use kentos_geometry_core::entity::Entity;
 use kentos_geometry_core::geom::affine::Affine;
 use kentos_geometry_core::geom::intersect::Edge;
 use kentos_geometry_core::geometry::Bounds;
+use kentos_geometry_core::processing::numbering::{CornerWalk, StartCorner};
 use kentos_geometry_core::store::Store;
 use kentos_geometry_core::store::snap::SnapKind;
 use serde_json::{Value, json};
 
-const FILE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../fixtures/geometry/v1/store-v1.json"
-);
+const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/geometry/v1");
 
 const KINDS: [&str; 9] = [
     "endpoint",
@@ -220,9 +220,57 @@ fn core_json<T: ToJson + ?Sized>(v: &T) -> Value {
     serde_json::from_str(&out).expect("core JSON")
 }
 
+/// Corner numbering records as `ObjectStore.numberCorners` reads them.
+fn read_corners(buf: &[f64]) -> Value {
+    Value::Array(
+        buf.chunks(5)
+            .map(|r| {
+                json!({
+                    "p": { "x": num_json(r[0]), "y": num_json(r[1]) },
+                    "out": { "x": num_json(r[2]), "y": num_json(r[3]) },
+                    "ref": r[4],
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Edge-length labels as `ObjectStore.edgeLengths` reads them.
+fn read_edge_labels(buf: &[f64]) -> Value {
+    let labels: Vec<Value> = buf[1..]
+        .chunks(5)
+        .map(|r| {
+            json!({
+                "id": r[0],
+                "p": { "x": num_json(r[1]), "y": num_json(r[2]) },
+                "rotation": num_json(r[3]),
+                "length": num_json(r[4]),
+            })
+        })
+        .collect();
+    json!({ "labels": labels, "skipped": buf[0] })
+}
+
 #[test]
-fn the_store_gives_the_typescript_pick_index_answers() {
-    let file: Value = serde_json::from_str(&std::fs::read_to_string(FILE).expect("store fixture"))
+fn the_store_gives_the_typescript_answers() {
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(DIR)
+        .expect("fixture directory")
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("store-") && n.ends_with(".json"))
+        })
+        .collect();
+    files.sort();
+    assert!(files.len() >= 2, "store fixtures: {files:?}");
+    for path in &files {
+        check(path);
+    }
+}
+
+fn check(path: &std::path::Path) {
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(path).expect("store fixture"))
         .expect("fixture JSON");
     assert_eq!(file["format"], "kentos.geometry-store");
     assert_eq!(file["version"], 1);
@@ -336,6 +384,32 @@ fn the_store_gives_the_typescript_pick_index_answers() {
                 let ids = ids(&a[0]);
                 read_measures(&store.measures(&ids), ids.len())
             }
+            "inBox" => json!(store.in_box(&rect(&a[0]))),
+            "numberCorners" => {
+                let w = &a[1];
+                let walk = CornerWalk {
+                    ccw: w["dir"] == "ccw",
+                    start: StartCorner::parse(w["start"].as_str().unwrap()).unwrap(),
+                    point: (!w["point"].is_null())
+                        .then(|| Vec2::new(num(&w["point"]["x"]), num(&w["point"]["y"]))),
+                    tolerance: num(&w["tolerance"]),
+                    shared: w["shared"].as_bool().unwrap(),
+                };
+                let existing: Vec<Vec2> = a[2]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|p| Vec2::new(num(&p["x"]), num(&p["y"])))
+                    .collect();
+                read_corners(&store.number_corners(&ids(&a[0]), &walk, &existing))
+            }
+            "edgeLengths" => read_edge_labels(&store.edge_lengths(
+                &ids(&a[0]),
+                num(&a[1]),
+                num(&a[2]),
+                a[3] == "inside",
+                a[4].as_bool().unwrap(),
+            )),
             op => panic!("unknown op {op}"),
         };
         if let Err(e) = same(&got, &c["expect"], abs, rel, &label) {
@@ -344,7 +418,8 @@ fn the_store_gives_the_typescript_pick_index_answers() {
     }
     assert!(
         failures.is_empty(),
-        "{} of {} case(s) differ:\n{}",
+        "{}: {} of {} case(s) differ:\n{}",
+        path.display(),
         failures.len(),
         cases.len(),
         failures

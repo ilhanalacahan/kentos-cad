@@ -1,4 +1,4 @@
-import { truthy } from '../../model/expression/expressionLib';
+import { measuredOf, truthy } from '../../model/expression/expressionLib';
 import { defineTool } from '../types';
 
 /**
@@ -43,9 +43,11 @@ export const selectByExpression = defineTool({
   ],
   run: async (v, ctx, feedback) => {
     const list = v.input.entities;
+    // $alan, $uzunluk, $y, $x from the geometry store, for every object at once when the condition first asks.
+    const measured = measuredOf(() => ctx.geometry.measures(list.map((e) => e.id)));
     const hits: number[] = [];
     for (let i = 0; i < list.length; i++) {
-      if (truthy(v.condition.evaluate({ entity: list[i], index: i + 1, layerName: ctx.layerName }))) hits.push(list[i].id);
+      if (truthy(v.condition.evaluate({ entity: list[i], index: i + 1, layerName: ctx.layerName, measured: () => measured(i) }))) hits.push(list[i].id);
       if (i % 2000 === 1999) {
         feedback.progress(i / list.length, 'Koşul deneniyor');
         await feedback.yield();

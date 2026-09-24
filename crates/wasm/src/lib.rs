@@ -10,6 +10,7 @@ use kentos_geometry_core::geom::hatch::hatch_lines;
 use kentos_geometry_core::geom::offset::offset_path;
 use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
+use kentos_geometry_core::processing::numbering::corner_text_at;
 use kentos_geometry_core::triangulate::triangulate_many;
 use wasm_bindgen::prelude::*;
 
@@ -180,6 +181,21 @@ pub fn triangulate_many_js(xy: &[f64], ring_sizes: &[u32], poly_rings: &[u32]) -
     let sizes: Vec<usize> = ring_sizes.iter().map(|&n| n as usize).collect();
     let polys: Vec<usize> = poly_rings.iter().map(|&n| n as usize).collect();
     triangulate_many(&points(xy), &sizes, &polys)
+}
+
+/// Where the texts beside numbered corners go (`corner_text_at`): four
+/// numbers per corner in `corners` (x, y, outward x and y), its text's
+/// character count in `chars`; x, y per corner come back.
+#[wasm_bindgen(js_name = cornerTexts)]
+pub fn corner_texts_js(corners: &[f64], chars: &[f64], height: f64) -> Vec<f64> {
+    corners
+        .chunks_exact(4)
+        .zip(chars)
+        .flat_map(|(c, &n)| {
+            let at = corner_text_at(Vec2::new(c[0], c[1]), Vec2::new(c[2], c[3]), n, height);
+            [at.x, at.y]
+        })
+        .collect()
 }
 
 #[cfg(test)]

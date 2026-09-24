@@ -41,7 +41,8 @@ src/processing/
   categories.ts      Araç kutusu kategorileri (üst kategori destekli)
   registry.ts        ProcessingRegistry: kayıt, kategori ağacı, Türkçe katlamalı arama, version sinyali
   runner.ts          ProcessingRunner: doğrula → sayfaya bağlıyı çöz (RunJob) → çalışma yerini seç → çalıştır → tek geri alma adımıyla uygula → geçmiş
-  job.ts             RunJob, FeatureRef, Executor arayüzü, materialize, EntitySnapshot, clientExecutor
+  job.ts             RunJob, FeatureRef, Executor arayüzü, materialize, runJob (sayfa ve worker aynı), EntitySnapshot, clientExecutor
+  geometry.ts        Çalıştırmanın geometri deposu (ObjectStore) ve araçların sorduğu geometri (RunGeometry), görünümün deposu (DocumentGeometry)
   model.ts           Modeller (akış diyagramı) veri yapısı, tür uyumu, sıralama ve denetim
   modelRunner.ts     Modeli çalıştırma (tek geri alma adımı, hata ve Durdur'da geri alma), modelAsTool
   modelEdit.ts       Model taslağını düzenleme (tasarımcının işlemleri, saf)
@@ -55,7 +56,7 @@ src/processing/
     worker.test.ts   Sayfa ile worker aynı sonucu verir, Otomatik seçim, hata ve Durdur
   builtin/
     index.ts         BUILTIN_TOOLS listesi
-    numbering.ts     Saf numaralandırma çekirdeği (biçim, halka yönü, başlangıç köşesi, ortak köşe)
+    numbering.ts     Numara biçimi ve adlar (nameCorners); halka yönü, başlangıç köşesi ve ortak köşe çekirdekte
     vertexNumbering.ts   points.numberVertices: Köşe noktalarını numarala
     edgeLengths.ts       annotation.edgeLengths: Kenar uzunluklarını yaz
     calculateField.ts    attributes.calculate: Öznitelik hesapla
@@ -74,9 +75,11 @@ src/styles/model.css          Model tasarımcısı stilleri
 ```
 
 Yeni bir araç ailesi büyüdükçe `builtin/` altında alt klasör açılır
-(`builtin/cadastre/…`). Saf geometri yardımcıları araç dosyasında değil,
-`model/geom` ya da `model/ops` altında durur ve orada test edilir; yalnızca
-işlem aracına özgü hesaplar (ör. `numbering.ts`) `builtin/` içindedir.
+(`builtin/cadastre/…`). Geometri araç dosyasında hesaplanmaz: Rust
+çekirdeğindedir (`crates/geometry-core`; işlem araçlarına özgü olanlar
+`src/processing/` altında: köşe numaralama, kenar ölçüleri) ve araç onu
+`ctx.geometry` ile nesne kimliğinden sorar (ADR 0008 S4). Araç dosyasında
+metin, sayaç, süzgeç ve akış kalır.
 
 ## 4. Sözleşme
 
@@ -126,7 +129,7 @@ sağlanınca gösterilir ve denetlenir), `default` (sabit ya da
 
 - **Zorunluluk:** parametreler varsayılan olarak zorunludur. `optional: true` olan boş (`null`) bırakılabilir ve pencerede "isteğe bağlı" yazar. Metinde boş değer ayrıca `allowEmpty` ister (boş önek gibi).
 - **Nesne türü süzgeci:** `features` değeri isteğe bağlı `kinds` taşır. Kapsamda aracın alabildiği iki ya da daha çok tür varsa pencere her tür için sayılı bir düğme gösterir ("Kapalı alan 118"); kullanıcı bu çalıştırmada yalnızca bazı türleri alabilir (örneğin yalnızca kapalı alanların kenarlarını yazmak). Hiç tür kalmazsa araç çalışmaz.
-- **Kapsamlar:** "Seçili" seçimdeki nesneler; "Görünen" ekrandaki görünür alanla kesişen, görünür katmanlardaki nesneler (yardımcı çizgiler hariç); "Tümü" görünür katmanlardaki bütün nesneler; "Katman" bir katman ya da grubun altındaki bütün katmanlar (gizli olsa bile); "ids" modellerde önceki adımın çıktısıdır ve pencerede sunulmaz. `kinds` dışındaki nesneler sessizce elenir; pencere ne kadar nesne okunacağını canlı gösterir.
+- **Kapsamlar:** "Seçili" seçimdeki nesneler; "Görünen" kutusu ekrandaki görünür alanla kesişen, görünür katmanlardaki nesneler (yardımcı çizgiler hariç; kutu testini görünümün geometri deposu yapar); "Tümü" görünür katmanlardaki bütün nesneler; "Katman" bir katman ya da grubun altındaki bütün katmanlar (gizli olsa bile); "ids" modellerde önceki adımın çıktısıdır ve pencerede sunulmaz. `kinds` dışındaki nesneler sessizce elenir; pencere ne kadar nesne okunacağını canlı gösterir.
 - **Boş girdi:** zorunlu bir `features` parametresi hiç nesneye çözülmezse çalıştırıcı aracı çalıştırmaz ve alanın altına yönlendiren bir mesaj yazar ("Önce nesneleri seçin ya da kapsamı değiştirin"). Model içinde (`ids`) boş çıktı hata değildir.
 - **Hedef katman:** `{ newName }` aynı adlı bir katman varsa onu kullanır (araç ikinci kez çalışınca aynı "Köşe noktaları" katmanına yazar); yoksa katman yalnızca araç gerçekten ona yazarsa oluşturulur. Kilitli katman seçilemez; kilitli katmana düşen değişiklikler atlanır ve sayısı bildirilir.
 
@@ -136,7 +139,8 @@ sağlanınca gösterilir ve denetlenir), `default` (sabit ya da
 run(values: ResolvedValues<Ds>, ctx: RunContext, feedback: Feedback): RunResult | Promise<RunResult>
 
 RunContext { doc: DocumentSnapshot /* get, all, byLayer; salt okunur */, units: DefaultsContext,
-             layerName(id): string, selection: readonly number[] /* çalıştırma başındaki seçim */ }
+             layerName(id): string, selection: readonly number[] /* çalıştırma başındaki seçim */,
+             geometry: RunGeometry /* girdilerin geometrisi, kimlikten: measures, numberCorners, cornerTexts, edgeLengths */ }
 Feedback   { progress(fraction, label?), info(m), warn(m), canceled, yield() }
 ChangeSet  { add?: NewEntity[], update?: { id, patch }[], remove?: number[] }
 RunResult  { changes?, select?: readonly number[] /* çalıştırmadan sonraki seçim */, outputs?, summary? }
@@ -146,6 +150,7 @@ RunResult  { changes?, select?: readonly number[] /* çalıştırmadan sonraki s
 - `ctx.units.plotScale` kâğıt ölçüsünü dünyaya çevirir: 2 mm yazı, 1:1000'de 2 m'dir.
 - Araç `NewEntity` üretirken `layerId` olarak hedef katmanın `id`'sini kullanır; yeni katman o anda henüz yoktur, çalıştırıcı uygularken kurar.
 - **Seçim üreten araçlar** (İfadeyle seç) belgeyi değiştirmez, `select` döndürür; çalıştırıcı seçimi uygular (`FeatureHost.select`). Geri alınacak bir şey yoktur. Mevcut seçimle birleştirme (ekle, çıkar, içinde ara) aracın işidir, `ctx.selection` ile yapılır.
+- **Geometri çekirdekten gelir** (`ctx.geometry`, `processing/geometry.ts`): çalıştırma, features girdilerinin nesnelerini kendi geometri deposuna paketler (ilk soruda; bitince bırakılır). Araç kimlikle sorar: ifadelerin geometri değerleri (`measures`, `measuredOf` ile bütün nesneler için bir kez), köşe numaralama (`numberCorners`: her köşenin yeri, dışa bakan yönü ve kimin numarasını aldığı; adları `nameCorners` verir), köşe yazısının yeri (`cornerTexts`), kenar ölçüsü yazıları ve ortak kenar testi (`edgeLengths`).
 - **Öznitelik değiştiren araçlar** `update` içinde `attrs` alanının tamamını verir (`{ ...e.attrs, [alan]: değer }`); yalnızca öznitelik değişirse belge `attrs` olayı yayar ve GPU tamponu kurulmaz.
 - **`features` çıktıları:** `outputs[ad]` bir kimlik dizisiyse o kullanılır (seçilenler, değişenler); yoksa çalıştırmanın eklediği nesneler çıktıdır. Modeller bu kimlikleri sonraki adıma `{ scope: 'ids' }` olarak verir.
 
@@ -208,7 +213,7 @@ interface Executor {
 | Yer | Durum | Nasıl |
 |---|---|---|
 | `client` | Var (`clientExecutor`) | Araç sayfada, canlı belge üzerinde çalışır. |
-| `worker` | Var (`worker/workerExecutor.ts`) | Web Worker ilk kullanımda başlar ve açık kalır (`worker/processingWorker.ts`, yerleşik araçları taşır). Belge, nesnelerinin kopyasıyla gider (`EntitySnapshot`); ifadeler worker'da derlenir. İlerleme ve günlük satırları mesajla gelir. **Durdur** worker'ı sonlandırır (sıkı döngüdeki bir araca rica edilemez); sonraki iş yeni bir worker açar. Worker çökerse iş hata olarak biter. Mesaj alışverişi `worker/protocol.ts`'te, iş yürütme `worker/handleJob.ts`'te durur (testler sahte bir worker'la sürer). |
+| `worker` | Var (`worker/workerExecutor.ts`) | Web Worker ilk kullanımda başlar ve açık kalır (`worker/processingWorker.ts`, yerleşik araçları taşır). Belge, nesnelerinin kopyasıyla gider (`EntitySnapshot`); iş sayfadaki gibi `runJob` ile çalışır: ifadeler worker'da derlenir, okunan nesneler worker'ın kendi geometri deposuna konur. İlerleme ve günlük satırları mesajla gelir. **Durdur** worker'ı sonlandırır (sıkı döngüdeki bir araca rica edilemez); sonraki iş yeni bir worker açar. Worker çökerse iş hata olarak biter. Mesaj alışverişi `worker/protocol.ts`'te, iş yürütme `worker/handleJob.ts`'te durur (testler sahte bir worker'la sürer). |
 | `server` | Planlı | Aynı `RunJob` KentOS servisine gider (belge sürümüyle); ilerleme bir akıştan (SSE/WebSocket) gelir. Sonuç yine `ChangeSet`'tir. Aynı TypeScript araçları Node'da çalışabilir (`handleJob` sunucuda da kullanılabilir). |
 | `postgis` | Planlı | Araç, `run`'a ek olarak bir `sql` üreticisi verir; sunucu bunu PostGIS'te parametreli sorgu olarak çalıştırır. Sonuç `ChangeSet`'e çevrilir ya da veritabanında kalır. |
 
@@ -266,7 +271,7 @@ değişmiş, katman silinmiş) değerler varsayılana döner.
 
 ## 9. Yeni işlem aracı tarifi
 
-1. Hesabın saf kısmını yazın ve test edin: genel geometri `model/geom` ya da `model/ops` altında, araca özgü hesap `processing/builtin/` altında.
+1. Geometriyi Rust çekirdeğine yazın ve test edin (`crates/geometry-core`; araca özgüyse `src/processing/` altına, bir depo sorgusu ve `ObjectStore`'da bir yöntemle); TS'te metin ve akış kalır. Taşıma yöntemi ADR 0008'dedir.
 2. `processing/builtin/<ad>.ts` içinde `defineTool({...})` ile tanımı yazın: kimlik, etiket, kategori, simge, açıklama, yardım, anahtar kelimeler, takma adlar, `targets`, `parameters` (`as const`), `outputs`, gerekirse `validate` ve `preview`, `run`.
 3. `processing/builtin/index.ts` içindeki `BUILTIN_TOOLS` listesine ekleyin. Kategori yoksa `categories.ts`'e ekleyin.
 4. Simge yoksa `ui/icons.ts`'e çizin (DESIGN.md §6).

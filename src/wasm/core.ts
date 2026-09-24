@@ -1,4 +1,4 @@
-import { callOp, FaceIndex, GeometryStore, hatchLinesXY as wasmHatchLinesXY, initSync, offsetPathXY as wasmOffsetPathXY, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
+import { callOp, cornerTexts as wasmCornerTexts, FaceIndex, GeometryStore, hatchLinesXY as wasmHatchLinesXY, initSync, offsetPathXY as wasmOffsetPathXY, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
 import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
 
 /**
@@ -208,6 +208,15 @@ export class CoreFaceIndex {
 }
 
 /**
+ * Where the texts beside numbered corners go (processing, docs/adr/0008 S4):
+ * four numbers per corner in `corners` (x, y, outward x and y), its text's
+ * character count in `chars`; x, y per corner come back.
+ */
+export function cornerTexts(corners: Float64Array, chars: Float64Array, height: number): Float64Array {
+  return typed(() => wasmCornerTexts(corners, chars, height));
+}
+
+/**
  * The Rust geometry store (docs/adr/0008, S1): a copy of the drawing's
  * objects that picking, snapping and selection query on every pointer move.
  * `src/viewport/picking.ts` keeps one in step with the document. Objects go
@@ -296,6 +305,26 @@ export class CoreStore {
   /** Geometry values of these objects for expressions: `flags, length, area, anchor x, anchor y, 0` each. */
   measures(ids: Float64Array): Float64Array {
     return typed(() => this.raw.measures(ids));
+  }
+
+  /** Ids of objects on every layer whose box overlaps the rectangle, in the document's order (the "visible" scope). */
+  inBox(minX: number, minY: number, maxX: number, maxY: number): Float64Array {
+    return typed(() => this.raw.inBox(minX, minY, maxX, maxY));
+  }
+
+  /**
+   * Corner numbering of these objects (polygons: outer ring then holes;
+   * polylines): five numbers per corner, `x, y, out x, out y, ref`.
+   * `start`: 0 north-west, 1 north, 2 first vertex, 3 nearest `point`;
+   * `existing`: x, y pairs of numbered points a corner may take.
+   */
+  numberCorners(ids: Float64Array, ccw: boolean, start: number, point: { x: number; y: number } | null, tolerance: number, shared: boolean, existing: Float64Array): Float64Array {
+    return typed(() => this.raw.numberCorners(ids, ccw, start, !!point, point?.x ?? 0, point?.y ?? 0, tolerance, shared, existing));
+  }
+
+  /** Edge-length labels of these objects: skipped shared edges, then `id, x, y, rotation, length` per label. */
+  edgeLengths(ids: Float64Array, height: number, minLength: number, inside: boolean, shared: boolean): Float64Array {
+    return typed(() => this.raw.edgeLengths(ids, height, minLength, inside, shared));
   }
 
   /** Ids in the document's order. */

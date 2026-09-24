@@ -1,4 +1,4 @@
-import { EntitySnapshot, jobContext, materialize } from '../job';
+import { EntitySnapshot, runJob } from '../job';
 import type { Feedback, ProcessingTool } from '../types';
 import type { WorkerReply, WorkerRequest } from './protocol';
 
@@ -7,9 +7,10 @@ const PROGRESS_MS = 50;
 
 /**
  * Runs one job inside the worker: rebuild the document from the copied
- * objects, compile the expressions, run the tool and post progress, log
- * lines and the result. Kept apart from the worker entry so tests can
- * drive it without a Worker.
+ * objects and run it as the page does (`runJob`: expressions compiled, the
+ * objects it reads in a geometry store of the worker's own), posting
+ * progress, log lines and the result. Kept apart from the worker entry so
+ * tests can drive it without a Worker.
  */
 export async function handleJob(msg: WorkerRequest, post: (reply: WorkerReply) => void, lookup: (id: string) => ProcessingTool | undefined): Promise<void> {
   const { id, job } = msg;
@@ -34,7 +35,7 @@ export async function handleJob(msg: WorkerRequest, post: (reply: WorkerReply) =
     yield: () => Promise.resolve(),
   };
   try {
-    const result = await tool.run(materialize(tool, job.values, doc) as never, jobContext(job, doc), feedback);
+    const result = await runJob(tool, job, doc, feedback);
     post({ type: 'done', id, result });
   } catch (err) {
     post({ type: 'error', id, message: (err as Error).message ?? String(err) });

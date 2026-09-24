@@ -3,6 +3,7 @@ import { foldTurkish } from '../core/text';
 import type { Entity, NewEntity } from '../model/entities';
 import { compileExpression, previewExpression } from '../model/expression/expression';
 import { resolveFeatures, summarizeFeatures, type FeatureHost, type InputSummary } from './features';
+import { withObjects } from './geometry';
 import { clientExecutor, type Executor, type FeatureRef, type RunJob } from './job';
 import { isVisible, validateValues, type ValidationIssue } from './parameters';
 import type { DefaultsContext, ExecutionTarget, Feedback, FeaturesValue, LayerParam, LayerValue, ProcessingTool, RunResult, TargetLayer } from './types';
@@ -129,7 +130,14 @@ export class ProcessingRunner {
     if (input?.type !== 'features' || !values[input.name]) return null;
     const set = resolveFeatures(values[input.name] as FeaturesValue, input, this.host);
     const layers = this.host.doc.layers;
-    return previewExpression(r.expr, set.entities, def.returns, (id) => layers.get(id)?.name ?? id);
+    return previewExpression(r.expr, set.entities, def.returns, (id) => layers.get(id)?.name ?? id, (list) => this.measures(list));
+  }
+
+  /** The expressions' geometry values of these objects: from the drawing's store the host keeps, else from a store of their own. */
+  private measures(list: readonly Entity[]): Float64Array {
+    const ids = list.map((e) => e.id);
+    const geometry = this.host.geometry;
+    return geometry ? geometry.measures(ids) : withObjects(list, (s) => s.measures(ids));
   }
 
   /** Executors here that can run the tool, in the tool's order of preference. */
