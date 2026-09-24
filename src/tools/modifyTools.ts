@@ -3,7 +3,7 @@ import { Signal } from '../core/signal';
 import type { Entity, NewEntity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../model/geom/affine';
-import { transformEntity } from '../model/ops/transform';
+import { transformEntities } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { drawSelectionBox, drawTag, strokePath, strokePaths } from './preview';
@@ -168,15 +168,15 @@ export abstract class SelectionFirstTool implements Tool {
     const editable = copy ? ents : ents.filter((e) => !doc.layers.isLocked(e.layerId));
     if (editable.length < ents.length) log.warn(`${ents.length - editable.length} nesne kilitli katmanda olduğu için atlandı.`);
     const created: number[] = [];
+    // Every object by every affine in one call to the core, affine after affine.
+    const moved = transformEntities(editable, ms);
     doc.transact(label, () => {
-      for (const m of ms)
-        for (const e of editable) {
-          const t = transformEntity(e, m);
-          if (copy) {
-            const { id: _id, ...rest } = t;
-            created.push(doc.add(rest as NewEntity).id);
-          } else doc.update(e.id, t);
-        }
+      for (const t of moved) {
+        if (copy) {
+          const { id: _id, ...rest } = t;
+          created.push(doc.add(rest as NewEntity).id);
+        } else doc.update(t.id, t);
+      }
     });
     return copy ? created.length : editable.length;
   }

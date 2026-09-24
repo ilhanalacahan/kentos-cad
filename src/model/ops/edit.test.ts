@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { entityArea, entityLength, entityOutline, type ArcEntity, type CircleEntity, type Entity, type LineEntity, type PolylineEntity } from '../entities';
+import { entityArea, entityLength, entityOutline, type ArcEntity, type CircleEntity, type EllipseEntity, type Entity, type LineEntity, type PolylineEntity } from '../entities';
+import { closestParam, ellipsePoint } from '../geom/ellipse';
 import type { Bounds } from '../geometry';
 import { sweep } from '../geom/arc';
 import { breakEntity } from './break';
@@ -10,7 +11,7 @@ import { chamferLines, cornerOfPath } from './fillet';
 import { entityGrips, moveGrip } from './grips';
 import { joinEntities } from './join';
 import { offsetEntity } from './offset';
-import { divisionParams, pathOf, pointAtS } from './path';
+import { divisionParams, divisionPoints, pathOf, pointAtS } from './path';
 import { stretchEntity } from './stretch';
 import { transformEntity } from './transform';
 import { extendEntity, trimEntity } from './trim';
@@ -274,6 +275,24 @@ describe('divisionParams', () => {
   });
   it('measures off a step without a point on the far end', () => {
     expect(divisionParams(pathOf(line(0, 0, 10, 0))!, { step: 2.5 })).toEqual([2.5, 5, 7.5]);
+  });
+  it('gives the points in one call: from either end, on the true curve of an ellipse', () => {
+    const pl: PolylineEntity = { ...base(), kind: 'polyline', pts: [v(0, 0), v(10, 0), v(10, 7)], bulges: [0.4, 0, 0] };
+    const path = pathOf(pl)!;
+    const one = (fromEnd: boolean) => divisionParams(path, { step: 3 }).map((s) => pointAtS(path, fromEnd ? path.length - s : s));
+    expect(divisionPoints(pl, { step: 3 }, false)).toEqual(one(false));
+    expect(divisionPoints(pl, { step: 3 }, true)).toEqual(one(true));
+    const el: Entity = { ...base(), kind: 'ellipse', c: v(486512.34, 4420187.52), major: v(20, 5), ratio: 0.4, t0: 0.3, t1: 2.5 };
+    const epath = pathOf(el)!;
+    const want = divisionParams(epath, { parts: 7 }).map((s) => pointAtS(epath, s));
+    const got = divisionPoints(el, { parts: 7 }, false);
+    expect(got).toHaveLength(6);
+    for (const [i, p] of got.entries()) {
+      // On the curve (not on the chords it was measured along), next to the chord point.
+      expect(Math.hypot(p.x - want[i].x, p.y - want[i].y)).toBeLessThan(1e-3);
+      expect(p).toEqual(ellipsePoint(el as EllipseEntity, closestParam(el as EllipseEntity, want[i])));
+    }
+    expect(divisionPoints({ ...base(), kind: 'point', p: v(0, 0) }, { parts: 3 }, false)).toEqual([]);
   });
 });
 

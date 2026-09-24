@@ -1,10 +1,9 @@
 import { entityGeometry, type Entity, type PolylineEntity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
 import { bulgePathEdges } from '../model/geom/bulge';
-import { closestParam, ellipsePoint } from '../model/geom/ellipse';
 import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { breakEntity } from '../model/ops/break';
-import { divisionParams, nearestS, pathOf, pointAtS, type Path } from '../model/ops/path';
+import { divisionPoints, nearestS, pathOf, type Path } from '../model/ops/path';
 import { insertVertex, nearestSegment, removeVertex } from '../model/ops/vertex';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
@@ -157,12 +156,9 @@ export class DivideTool extends EdgePickTool {
 
   private points(): Vec2[] {
     if (!this.target) return [];
-    const { path, fromEnd } = this.target;
-    const ss = divisionParams(path, DivideTool.byStep ? { step: DivideTool.step } : { parts: DivideTool.parts });
-    const pts = ss.map((s) => pointAtS(path, fromEnd ? path.length - s : s));
-    // An ellipse is measured along fine chords; its points are then placed on the true curve.
-    const e = this.target.entity;
-    return e.kind === 'ellipse' ? pts.map((p) => ellipsePoint(e, closestParam(e, p))) : pts;
+    const { entity, fromEnd } = this.target;
+    // One call for all of them (up to 10 000 in the preview); an ellipse's points land on the true curve.
+    return divisionPoints(entity, DivideTool.byStep ? { step: DivideTool.step } : { parts: DivideTool.parts }, fromEnd);
   }
 
   private commit(): void {

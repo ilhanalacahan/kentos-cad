@@ -250,6 +250,16 @@ pub fn translate_entity(e: &Entity, dx: f64, dy: f64) -> Entity {
     transform_entity(e, &translation(dx, dy))
 }
 
+/// Every entity by every affine, affine after affine (S3): move, copy and
+/// array a whole selection in one call instead of one call per object.
+pub fn transform_entities(list: &[Entity], ms: &[Affine]) -> Vec<Entity> {
+    let mut out = Vec::with_capacity(list.len() * ms.len());
+    for m in ms {
+        out.extend(list.iter().map(|e| transform_entity(e, m)));
+    }
+    out
+}
+
 pub(crate) static OPS: &[Op] = &[
     op!("transformEntity", |e: Entity, m: Affine| transform_entity(
         &e, &m
@@ -257,4 +267,39 @@ pub(crate) static OPS: &[Op] = &[
     op!("translateEntity", |e: Entity, dx: f64, dy: f64| {
         translate_entity(&e, dx, dy)
     }),
+    op!("transformEntities", |list: Vec<Entity>, ms: Vec<Affine>| {
+        transform_entities(&list, &ms)
+    }),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::json::{FromJson, Json};
+    use crate::geom::affine::rotation;
+
+    fn entity(text: &str) -> Entity {
+        Entity::from_json(&Json::parse(text).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn many_entities_by_many_affines_come_affine_after_affine() {
+        let list = [
+            entity(
+                r#"{"id":1,"layerId":"a","attrs":{"Ada":"1"},"kind":"line","a":{"x":0,"y":0},"b":{"x":10,"y":0}}"#,
+            ),
+            entity(
+                r#"{"id":2,"layerId":"b","attrs":{},"kind":"arc","c":{"x":5,"y":5},"r":2,"a0":0,"a1":1}"#,
+            ),
+        ];
+        let ms = [translation(3.0, 4.0), rotation(0.5, Vec2::new(1.0, 2.0))];
+        let out = transform_entities(&list, &ms);
+        assert_eq!(out.len(), 4);
+        for (k, m) in ms.iter().enumerate() {
+            for (i, e) in list.iter().enumerate() {
+                assert_eq!(out[k * list.len() + i], transform_entity(e, m));
+            }
+        }
+        assert!(transform_entities(&list, &[]).is_empty());
+    }
+}

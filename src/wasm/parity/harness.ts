@@ -42,7 +42,11 @@ export interface CallSet {
    * of an arc's area (sin) decides the tie (docs/adr/0008).
    */
   ties?: Record<string, (item: never) => number>;
-  /** The TypeScript functions, by operation name (the reference while they exist). */
+  /**
+   * The TypeScript functions still in the app, by operation name: the
+   * reference until a module's TypeScript is deleted (S3). Operations
+   * without one are held to their frozen fixture only.
+   */
   fns: Record<string, (...args: never[]) => unknown>;
   named: Call[];
   /** `n` random calls per operation. */

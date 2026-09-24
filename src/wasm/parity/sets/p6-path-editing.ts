@@ -1,12 +1,9 @@
 import type { Entity } from '../../../model/entities';
 import type { Vec2 } from '../../../model/geometry';
 import type { Edge } from '../../../model/geom/intersect';
-import { breakEntity } from '../../../model/ops/break';
-import { breakConstruction, breakEllipse, ellipseCrossings, extendEllipse, offsetConstruction, offsetEllipse, trimConstruction, trimEllipse } from '../../../model/ops/curveCuts';
 import { entityEdges } from '../../../model/ops/edges';
-import { lengthenEntity, lengthOf, lengthToward, nearEnd } from '../../../model/ops/lengthen';
-import { cutsOn, divisionParams, nearestS, normS, pathOf, pointAtS, subPath, tangentAtS, type Path } from '../../../model/ops/path';
-import { extendEntity, trimEntity } from '../../../model/ops/trim';
+import { lengthOf } from '../../../model/ops/lengthen';
+import { pathOf, type Path } from '../../../model/ops/path';
 import { repeat, type CallSet, type Gen } from '../harness';
 import { entity } from './p5-entities';
 
@@ -36,11 +33,7 @@ const anchorOf = (e: Entity): Vec2 => ('pts' in e && e.pts.length ? e.pts[0] : '
 
 export const P6: CallSet = {
   file: 'calls-p6-path-editing.json',
-  fns: {
-    pathOf, normS, pointAtS, tangentAtS, nearestS, cutsOn, subPath, divisionParams,
-    ellipseCrossings, trimEllipse, breakEllipse, extendEllipse, offsetEllipse, trimConstruction, breakConstruction, offsetConstruction,
-    trimEntity, extendEntity, breakEntity, lengthOf, nearEnd, lengthenEntity, lengthToward,
-  },
+  fns: {},
   named: [
     { name: 'eğri budanamaz', fn: 'trimEntity', args: [{ ...base, kind: 'spline', pts: [v(0, 0), v(5, 5), v(10, 0)], closed: false }, v(5, 5), []] },
     { name: 'kesişimsiz budama', fn: 'trimEntity', args: [{ ...base, kind: 'line', a: v(0, 0), b: v(10, 0) }, v(5, 0), []] },

@@ -38,7 +38,10 @@ describe('entities as areas', () => {
     expect(entityArea({ ...base, ...g } as Entity)).toBeCloseTo(100 - Math.PI, 10);
     const lines = polylinesOfPolygon(g as Extract<EntityGeometry, { kind: 'polygon' }>);
     expect(lines).toHaveLength(2);
-    expect(lines.every((l) => l.kind === 'polyline' && l.pts[0] === l.pts[l.pts.length - 1])).toBe(true);
+    for (const l of lines) {
+      expect(l.kind).toBe('polyline');
+      if (l.kind === 'polyline') expect(l.pts[0]).toEqual(l.pts[l.pts.length - 1]);
+    }
     // Round trip: the closed polylines are areas again.
     expect(netArea(areaOfEntity(lines[0])!)).toBeCloseTo(100, 12);
     expect(Math.abs(netArea(areaOfEntity(lines[1])!))).toBeCloseTo(Math.PI, 10);

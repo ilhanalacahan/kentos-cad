@@ -17,10 +17,7 @@ import {
 import type { Vec2 } from '../../../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../../../model/geom/affine';
 import { TAU } from '../../../model/geom/arc';
-import { edgeLength, entityEdges } from '../../../model/ops/edges';
-import { entityGrips, holeGrip, midGripSegment, moveGrip } from '../../../model/ops/grips';
-import { stretchEntity } from '../../../model/ops/stretch';
-import { transformEntity, translateEntity } from '../../../model/ops/transform';
+import { entityGrips } from '../../../model/ops/grips';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P5: the entity model's geometry helpers, edges, transforms, stretch and grips (docs/adr/0008). */
@@ -92,7 +89,6 @@ export const P5: CallSet = {
   file: 'calls-p5-entities.json',
   fns: {
     tessellateCircle, entityVertices, entityOutline, polygonRing, polygonHoles, insidePolygon, textBox, isClosedOutline, entityBounds, entityAnchor, entityLength, entityArea, entityGeometry,
-    entityEdges, edgeLength, transformEntity, translateEntity, stretchEntity, entityGrips, moveGrip, midGripSegment, holeGrip,
   },
   named: [
     { name: 'boş çoklu çizginin çapası', fn: 'entityAnchor', args: [{ id: 1, layerId: 'a', attrs: {}, kind: 'polyline', pts: [] }] },

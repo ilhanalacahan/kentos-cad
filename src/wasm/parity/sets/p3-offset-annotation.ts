@@ -1,9 +1,6 @@
 import type { Vec2 } from '../../../model/geometry';
 import { TAU } from '../../../model/geom/arc';
-import { dimensionOffsetAt, layoutDimension, linearAngleFor, sectorArms, signedOffset, type DimensionGeom, type DimensionStyle } from '../../../model/geom/dimension';
-import { hatchLines } from '../../../model/geom/hatch';
-import { offsetBulgePath, offsetPath, sideOf } from '../../../model/geom/offset';
-import { edgeLabels } from '../../../model/ops/edgeLabels';
+import type { DimensionGeom, DimensionStyle } from '../../../model/geom/dimension';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P3: path offsets, dimensions, hatch lines, edge-length labels (docs/adr/0008). */
@@ -41,7 +38,7 @@ export const P3: CallSet = {
     // A few ulps of a TM coordinate (4.4·10⁶ m: 1 ulp ≈ 9.3·10⁻¹⁰ m) — nanometres on a drawn hatch line.
     hatchLines: { abs: 2e-8, rel: 1e-14, why: 'Tarama çizgileri dünya koordinatında sin/cos ile döndürülür; V8 ile libm son bitte ayrışır, TM büyüklüğünde bu birkaç ulp eder.' },
   },
-  fns: { offsetPath, sideOf, offsetBulgePath, layoutDimension, signedOffset, dimensionOffsetAt, linearAngleFor, sectorArms, hatchLines, edgeLabels },
+  fns: {},
   named: [
     { name: 'kapalı kare dışa', fn: 'offsetPath', args: [SQ, 1, true] },
     { name: 'kapalı kare içe', fn: 'offsetPath', args: [SQ, -1, true] },

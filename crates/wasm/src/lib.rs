@@ -6,11 +6,14 @@
 
 use kentos_geometry_core::Vec2;
 use kentos_geometry_core::geom::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
+use kentos_geometry_core::geom::hatch::hatch_lines;
+use kentos_geometry_core::geom::offset::offset_path;
 use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
 use kentos_geometry_core::triangulate::triangulate_many;
 use wasm_bindgen::prelude::*;
 
+pub mod faces;
 pub mod store;
 
 fn points(xy: &[f64]) -> Vec<Vec2> {
@@ -79,20 +82,30 @@ fn rings(
         pts: points(xy),
         bulges: bulges.map(|b| b.into_vec()),
     };
-    let mut inner = Vec::with_capacity(hole_sizes.len());
-    let mut at = 0usize;
-    for &n in hole_sizes {
-        let start = at.min(holes.len() / 2);
-        let end = (start + n as usize).min(holes.len() / 2);
-        inner.push(Ring {
+    let inner = ranges(holes.len() / 2, hole_sizes)
+        .into_iter()
+        .map(|(start, end)| Ring {
             pts: points(&holes[2 * start..2 * end]),
             bulges: hole_bulges
                 .as_deref()
                 .map(|b| b[start.min(b.len())..end.min(b.len())].to_vec()),
-        });
+        })
+        .collect();
+    (outer, inner)
+}
+
+/// Point ranges of rings laid one after another (`sizes`: vertex counts),
+/// clamped to the `points` there are.
+fn ranges(points: usize, sizes: &[u32]) -> Vec<(usize, usize)> {
+    let mut out = Vec::with_capacity(sizes.len());
+    let mut at = 0usize;
+    for &n in sizes {
+        let start = at.min(points);
+        let end = (start + n as usize).min(points);
+        out.push((start, end));
         at = end;
     }
-    (outer, inner)
+    out
 }
 
 /// Net area of a polygon with holes (rings as in [`rings`]).
@@ -119,6 +132,42 @@ pub fn polygon_perimeter_js(
 ) -> f64 {
     let (outer, inner) = rings(xy, bulges, holes, hole_bulges, hole_sizes);
     polygon_perimeter(&outer, &inner)
+}
+
+/// `offsetPath` on flat coordinates: the style engine offsets a path per
+/// object and symbol layer while a layer is built (docs/adr/0008, S3).
+#[wasm_bindgen(js_name = offsetPathXY)]
+pub fn offset_path_xy(xy: &[f64], d: f64, closed: bool) -> Vec<f64> {
+    flat(&offset_path(&points(xy), d, closed))
+}
+
+/// `hatchLines` on flat coordinates (the hatch tool's hover preview, every
+/// frame): the ring, then every hole's points one after another with
+/// `hole_sizes` giving each hole's vertex count. The first number is 1 when
+/// the lines were capped, then `ax, ay, bx, by` per segment.
+#[wasm_bindgen(js_name = hatchLinesXY)]
+pub fn hatch_lines_xy(
+    ring: &[f64],
+    holes: &[f64],
+    hole_sizes: &[u32],
+    angle_deg: f64,
+    spacing: f64,
+) -> Vec<f64> {
+    let inner: Vec<Vec<Vec2>> = ranges(holes.len() / 2, hole_sizes)
+        .into_iter()
+        .map(|(start, end)| points(&holes[2 * start..2 * end]))
+        .collect();
+    let h = hatch_lines(&points(ring), angle_deg, spacing, &inner);
+    let mut out = Vec::with_capacity(1 + 4 * h.segments.len());
+    out.push(if h.capped { 1.0 } else { 0.0 });
+    for [a, b] in &h.segments {
+        out.extend_from_slice(&[a.x, a.y, b.x, b.y]);
+    }
+    out
+}
+
+fn flat(pts: &[Vec2]) -> Vec<f64> {
+    pts.iter().flat_map(|p| [p.x, p.y]).collect()
 }
 
 /// Fill triangles of many polygons in one call (a layer's fills,

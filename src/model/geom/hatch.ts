@@ -1,7 +1,17 @@
+import { fromXY, hatchLinesXY, toXY } from '../../wasm/core';
 import type { Vec2 } from '../geometry';
 
 /** Upper bound on generated hatch lines; beyond this the spacing is unusable anyway. */
 export const MAX_HATCH_LINES = 20_000;
+
+/**
+ * Hatch lines as flat coordinates: `[capped (1/0), ax, ay, bx, by, …]`,
+ * computed by the geometry core (docs/adr/0008). The hatch tool's preview
+ * draws from these every frame without making points.
+ */
+export function hatchSegments(ring: readonly Vec2[], angleDeg: number, spacing: number, holes: readonly (readonly Vec2[])[] = []): Float64Array {
+  return hatchLinesXY(toXY(ring), toXY(holes.flat()), Uint32Array.from(holes, (h) => h.length), angleDeg, spacing);
+}
 
 /**
  * Parallel hatch lines clipped to a ring and its holes (even–odd rule).
@@ -11,46 +21,10 @@ export const MAX_HATCH_LINES = 20_000;
  * @param angleDeg direction of the lines, CCW from east
  * @returns segment endpoints as [a, b] pairs and whether output was capped
  */
-export function hatchLines(
-  ring: readonly Vec2[],
-  angleDeg: number,
-  spacing: number,
-  holes: readonly (readonly Vec2[])[] = [],
-): { segments: [Vec2, Vec2][]; capped: boolean } {
-  const segments: [Vec2, Vec2][] = [];
-  if (ring.length < 3 || !(spacing > 0)) return { segments, capped: false };
-  const rad = (angleDeg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  // Local frame: u along the lines, v across them.
-  const toLocal = (p: Vec2) => ({ u: p.x * cos + p.y * sin, v: -p.x * sin + p.y * cos });
-  const toWorld = (u: number, v: number): Vec2 => ({ x: u * cos - v * sin, y: u * sin + v * cos });
-  const loc = ring.map(toLocal);
-  const rings = [loc, ...holes.filter((h) => h.length >= 3).map((h) => h.map(toLocal))];
-  let minV = Infinity;
-  let maxV = -Infinity;
-  for (const p of loc) {
-    minV = Math.min(minV, p.v);
-    maxV = Math.max(maxV, p.v);
-  }
-  const first = Math.ceil(minV / spacing);
-  const last = Math.floor(maxV / spacing);
-  if (last - first + 1 > MAX_HATCH_LINES) return { segments, capped: true };
-  const xs: number[] = [];
-  for (let k = first; k <= last; k++) {
-    const v = k * spacing;
-    xs.length = 0;
-    for (const r of rings)
-      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-        const a = r[j];
-        const b = r[i];
-        // Half-open rule so a line through a vertex is counted once.
-        if (a.v <= v !== b.v <= v) xs.push(a.u + ((v - a.v) / (b.v - a.v)) * (b.u - a.u));
-      }
-    xs.sort((p, q) => p - q);
-    for (let i = 0; i + 1 < xs.length; i += 2) {
-      if (xs[i + 1] - xs[i] > 1e-9) segments.push([toWorld(xs[i], v), toWorld(xs[i + 1], v)]);
-    }
-  }
-  return { segments, capped: false };
+export function hatchLines(ring: readonly Vec2[], angleDeg: number, spacing: number, holes: readonly (readonly Vec2[])[] = []): { segments: [Vec2, Vec2][]; capped: boolean } {
+  const xy = hatchSegments(ring, angleDeg, spacing, holes);
+  const pts = fromXY(xy, 1);
+  const segments: [Vec2, Vec2][] = new Array(pts.length >> 1);
+  for (let i = 0; i < segments.length; i++) segments[i] = [pts[2 * i], pts[2 * i + 1]];
+  return { segments, capped: xy[0] === 1 };
 }

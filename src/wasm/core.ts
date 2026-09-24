@@ -1,4 +1,4 @@
-import { callOp, GeometryStore, initSync, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
+import { callOp, FaceIndex, GeometryStore, hatchLinesXY as wasmHatchLinesXY, initSync, offsetPathXY as wasmOffsetPathXY, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
 import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
 
 /**
@@ -118,6 +118,79 @@ export function callNamed(name: string, args: unknown[]): unknown {
  */
 export function triangulateMany(xy: Float64Array, ringSizes: Uint32Array, polyRings: Uint32Array): Uint32Array {
   return typed(() => wasmTriangulateMany(xy, ringSizes, polyRings));
+}
+
+/** Points as flat coordinates (x0, y0, x1, y1, …), for the typed entry points. */
+export function toXY(pts: readonly { x: number; y: number }[]): Float64Array {
+  const xy = new Float64Array(2 * pts.length);
+  for (let i = 0; i < pts.length; i++) {
+    xy[2 * i] = pts[i].x;
+    xy[2 * i + 1] = pts[i].y;
+  }
+  return xy;
+}
+
+/** Flat coordinates back as points. */
+export function fromXY(xy: Float64Array, from = 0, to = xy.length): { x: number; y: number }[] {
+  const pts = new Array<{ x: number; y: number }>((to - from) >> 1);
+  for (let i = 0, k = from; k + 1 < to; i++, k += 2) pts[i] = { x: xy[k], y: xy[k + 1] };
+  return pts;
+}
+
+/** `offsetPath` on flat coordinates: the style engine offsets a path per object while a layer is built. */
+export function offsetPathXY(xy: Float64Array, d: number, closed: boolean): Float64Array {
+  return typed(() => wasmOffsetPathXY(xy, d, closed));
+}
+
+/**
+ * `hatchLines` on flat coordinates (the hatch tool's preview, every frame):
+ * holes one after another with `holeSizes` vertex counts. The first number
+ * is 1 when the lines were capped, then `ax, ay, bx, by` per segment.
+ */
+export function hatchLinesXY(ring: Float64Array, holes: Float64Array, holeSizes: Uint32Array, angleDeg: number, spacing: number): Float64Array {
+  return typed(() => wasmHatchLinesXY(ring, holes, holeSizes, angleDeg, spacing));
+}
+
+/**
+ * Faces of line work kept in the core between calls (docs/adr/0008, S3):
+ * built once per view, asked for the face under the cursor on every
+ * pointer move. Results come back parsed.
+ */
+export class CoreFaceIndex {
+  private raw: FaceIndex | null;
+
+  private constructor(raw: FaceIndex) {
+    this.raw = raw;
+  }
+
+  /** From overlay sources (a JSON array). */
+  static of(sourcesJson: string): CoreFaceIndex {
+    return new CoreFaceIndex(typed(() => new FaceIndex(sourcesJson)));
+  }
+
+  /** From the line work of entities (a JSON array). */
+  static ofEntities(entitiesJson: string): CoreFaceIndex {
+    return new CoreFaceIndex(typed(() => FaceIndex.ofEntities(entitiesJson)));
+  }
+
+  at(x: number, y: number, islands: boolean): unknown {
+    return readResult(typed(() => this.get().at(x, y, islands)));
+  }
+
+  all(): unknown {
+    return readResult(typed(() => this.get().all()));
+  }
+
+  /** Releases the core's copy now instead of when the object is collected. */
+  free(): void {
+    this.raw?.free();
+    this.raw = null;
+  }
+
+  private get(): FaceIndex {
+    if (!this.raw) throw new Error('Yüz dizini bırakıldı.');
+    return this.raw;
+  }
 }
 
 /**

@@ -1,81 +1,47 @@
+import { CoreFaceIndex, op } from '../../wasm/core';
+import type { Entity } from '../entities';
 import type { Vec2 } from '../geometry';
-import { bulgePathEdges, bulgeRingArea, hasBulges, reverseBulgePath } from './bulge';
 import type { Edge } from './intersect';
-import { faceRings, overlay, winding, type Area, type FaceRing, type Ring, type Source } from './overlay';
+import type { Area, Ring, Source } from './overlay';
 
 /**
  * Area algebra on top of the overlay engine: union, intersection,
  * difference, splitting by lines, and the faces that line work encloses.
- * Areas are exact (arcs stay arcs) and may have holes.
+ * Areas are exact (arcs stay arcs) and may have holes. Computed by the
+ * geometry core (docs/adr/0008).
  */
 
 export type { Area, Ring, Source };
 
-export const ringArea = (r: Ring) => bulgeRingArea(r.pts, r.bulges);
-export const ringEdges = (r: Ring): Edge[] => bulgePathEdges(r.pts, r.bulges, true);
+export const ringArea = op<(r: Ring) => number>('ringArea');
+export const ringEdges = op<(r: Ring) => Edge[]>('ringEdges');
 
 /** The ring running counter-clockwise (`ccw`) or clockwise. */
-export function orientRing(r: Ring, ccw: boolean): Ring {
-  if (ringArea(r) > 0 === ccw) return r;
-  const rev = reverseBulgePath(r.pts, r.bulges, true);
-  return hasBulges(rev.bulges) ? rev : { pts: rev.pts };
-}
+export const orientRing = op<(r: Ring, ccw: boolean) => Ring>('orientRing');
 
 /** Net area: outer ring minus holes (m²). */
-export function netArea(a: Area): number {
-  return Math.abs(ringArea(a.outer)) - a.holes.reduce((s, h) => s + Math.abs(ringArea(h)), 0);
-}
+export const netArea = op<(a: Area) => number>('netArea');
 
 /** Whether p lies inside the area (inside the outer ring, outside every hole). */
-export function insideArea(a: Area, p: Vec2): boolean {
-  if (winding(ringEdges(a.outer), p) === 0) return false;
-  return !a.holes.some((h) => winding(ringEdges(h), p) !== 0);
-}
+export const insideArea = op<(a: Area, p: Vec2) => boolean>('insideArea');
 
 /** Overlay source of areas: outer rings counter-clockwise, holes clockwise. */
-export function areaSource(list: readonly Area[]): Source {
-  const edges: Edge[] = [];
-  const points: Vec2[] = [];
-  for (const a of list) {
-    for (const r of [orientRing(a.outer, true), ...a.holes.map((h) => orientRing(h, false))]) {
-      edges.push(...ringEdges(r));
-      points.push(...r.pts);
-    }
-  }
-  return { edges, points };
-}
+export const areaSource = op<(list: readonly Area[]) => Source>('areaSource');
 
 /** Everything covered by any of the areas. */
-export function unionAreas(list: readonly Area[]): Area[] {
-  if (!list.length) return [];
-  return overlay(
-    list.map((a) => areaSource([a])),
-    (inside) => inside.some(Boolean),
-  );
-}
+export const unionAreas = op<(list: readonly Area[]) => Area[]>('unionAreas');
 
 /** What all the areas have in common. */
-export function intersectAreas(list: readonly Area[]): Area[] {
-  if (list.length < 2) return [...list];
-  return overlay(
-    list.map((a) => areaSource([a])),
-    (inside) => inside.every(Boolean),
-  );
-}
+export const intersectAreas = op<(list: readonly Area[]) => Area[]>('intersectAreas');
 
 /** `from` with everything covered by `cutters` removed. */
-export function subtractAreas(from: readonly Area[], cutters: readonly Area[]): Area[] {
-  if (!cutters.length) return [...from];
-  return overlay([areaSource(from), areaSource(cutters)], ([a, b]) => a && !b);
-}
+export const subtractAreas = op<(from: readonly Area[], cutters: readonly Area[]) => Area[]>('subtractAreas');
 
 /**
  * The area cut along lines. A line has to cross the area (or meet another
  * line) to cut; a line ending inside leaves the area whole there.
  */
-export function splitArea(a: Area, cut: Source): Area[] {
-  return overlay([areaSource([a]), { ...cut, cut: true }], ([inside]) => inside);
-}
+export const splitArea = op<(a: Area, cut: Source) => Area[]>('splitArea');
 
 /** Faces of line work, computed once and queried many times (hover previews). */
 export interface FaceIndex {
@@ -87,31 +53,29 @@ export interface FaceIndex {
   at(p: Vec2, islands?: boolean): Area | null;
   /** Every bounded face, each with the groups inside it as holes. */
   all(): Area[];
+  /** Releases the core's copy of the faces now (else when the index is collected). */
+  free(): void;
+}
+
+function wrap(core: CoreFaceIndex): FaceIndex {
+  return {
+    at: (p, islands = true) => core.at(p.x, p.y, islands) as Area | null,
+    all: () => core.all() as Area[],
+    free: () => core.free(),
+  };
 }
 
 export function faceIndex(lines: readonly Source[]): FaceIndex {
-  const rs = faceRings(lines);
-  const inBox = (r: FaceRing, p: Vec2) => p.x >= r.box.minX && p.x <= r.box.maxX && p.y >= r.box.minY && p.y <= r.box.maxY;
-  const outers = rs.filter((r) => r.area > 0).sort((a, b) => a.area - b.area);
-  // The face a group outline belongs to: the smallest face around a point just outside it.
-  const container = new Map<FaceRing, FaceRing | undefined>();
-  const host = (r: FaceRing) => {
-    if (!container.has(r)) container.set(r, outers.find((o) => inBox(o, r.probe) && o.contains(r.probe)));
-    return container.get(r);
-  };
-  const groups = rs.filter((r) => r.area < 0);
-  const holesOf = (outer: FaceRing) => groups.filter((r) => inBox(outer, r.probe) && host(r) === outer).map((r) => r.ring);
-  return {
-    at(p, islands = true) {
-      const outer = outers.find((r) => inBox(r, p) && r.contains(p));
-      return outer ? { outer: outer.ring, holes: islands ? holesOf(outer) : [] } : null;
-    },
-    all: () => outers.map((o) => ({ outer: o.ring, holes: holesOf(o) })),
-  };
+  return wrap(CoreFaceIndex.of(JSON.stringify(lines)));
+}
+
+/** Faces of the line work of entities (their `lineSource`), built in one step in the core. */
+export function entityFaceIndex(entities: readonly Entity[]): FaceIndex {
+  return wrap(CoreFaceIndex.ofEntities(JSON.stringify(entities)));
 }
 
 /** The face of the line work around `p` (see FaceIndex.at). */
-export const faceAt = (lines: readonly Source[], p: Vec2, islands = true): Area | null => faceIndex(lines).at(p, islands);
+export const faceAt = op<(lines: readonly Source[], p: Vec2, islands?: boolean) => Area | null>('faceAt');
 
 /** Every bounded face of the line work, each with the groups inside it as holes. */
-export const allFaces = (lines: readonly Source[]): Area[] => faceIndex(lines).all();
+export const allFaces = op<(lines: readonly Source[]) => Area[]>('allFaces');

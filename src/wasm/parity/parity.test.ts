@@ -11,7 +11,8 @@ import { SETS } from './sets';
 const env = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const N = Number(env.PARITY_CASES ?? 200);
 
-for (const set of SETS)
+// Sets whose TypeScript is gone have nothing to compare; their fixtures stay (calls.wasm.test.ts).
+for (const set of SETS.filter((s) => Object.keys(s.fns).length))
   describe(`TS ↔ Rust: ${set.file}`, () => {
     let calls: ReturnType<typeof callsOf> | null = null;
     for (const [fn, ts] of Object.entries(set.fns))

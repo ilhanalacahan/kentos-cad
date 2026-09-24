@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../geometry';
-import { WindingIndex, winding } from './arrangement';
 import type { Edge } from './intersect';
 import { allFaces, faceAt, insideArea, intersectAreas, netArea, ringArea, splitArea, subtractAreas, unionAreas, type Area, type Ring, type Source } from './region';
 
@@ -216,37 +215,8 @@ describe('splitting and faces', () => {
   });
 });
 
-describe('winding index (the fast classify step)', () => {
-  const arc = (c: Vec2, r: number, a0: number, sweep: number): Edge => ({ kind: 'arc', c, r, a0, sweep });
-  const seg = (a: Vec2, b: Vec2): Edge => ({ kind: 'seg', a, b });
-  // A ring with straight and arc edges, clockwise and counter-clockwise parts, at TM coordinates.
-  const E = 486512.34;
-  const N = 4420187.52;
-  const ring: Edge[] = [
-    seg(v(E, N), v(E + 20, N)),
-    arc(v(E + 20, N + 10), 10, -Math.PI / 2, Math.PI),
-    seg(v(E + 20, N + 20), v(E + 10, N + 20)),
-    arc(v(E + 5, N + 20), 5, 0, -Math.PI),
-    seg(v(E, N + 20), v(E, N)),
-  ];
-  it('gives the same winding numbers as the exact angle sum', () => {
-    const index = new WindingIndex(ring);
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 400; i++) {
-      const p = v(E - 5 + rnd() * 40, N - 5 + rnd() * 30);
-      // `+ 0` folds the -0 the angle sum can round to.
-      expect(index.winding(p) + 0).toBe(winding(ring, p) + 0);
-    }
-  });
-  it('falls back to the exact sum when the ray passes an arc end', () => {
-    const index = new WindingIndex(ring);
-    // A point placed so the fixed ray runs straight through the start of the first arc.
-    const end = v(E + 20, N);
-    const dir = { x: Math.cos(0.4712389 + 0.0123), y: Math.sin(0.4712389 + 0.0123) };
-    const p = v(end.x - dir.x * 3, end.y - dir.y * 3);
-    expect(index.winding(p) + 0).toBe(winding(ring, p) + 0);
-  });
+describe('overlay speed', () => {
+  // The winding index of the classify step is tested in the core (geom/arrangement.rs).
   it('keeps booleans of many pieces fast (classify is no longer quadratic)', () => {
     // 30 × 30 overlapping squares: thousands of pieces; the old all-pairs step took tens of seconds.
     const squares: Area[] = [];

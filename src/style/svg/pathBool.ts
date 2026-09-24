@@ -2,7 +2,7 @@ import type { Vec2 } from '../../model/geometry';
 import { bulgeArc } from '../../model/geom/bulge';
 import type { Edge } from '../../model/geom/intersect';
 import { faceRings, overlay, type Area, type Ring, type Source } from '../../model/geom/overlay';
-import { areaSource } from '../../model/geom/region';
+import { areaSource, insideArea } from '../../model/geom/region';
 import { bez, flattenCubic, segmentCount, segmentCubic, segmentIsLine, subCubic, windingOf, ringSignedArea, type Cubic } from './bezier';
 import { distToSegment, fitPolyline } from './fitCurve';
 import type { PathNode, Pt, SubPath } from './pathData';
@@ -234,7 +234,7 @@ export function regionSource(input: RegionInput, tr: Tracer): Source {
   const inBox = (r: (typeof rs)[number], p: Vec2) => p.x >= r.box.minX && p.x <= r.box.maxX && p.y >= r.box.minY && p.y <= r.box.maxY;
   const faces = rs.filter((r) => r.area > 0).sort((a, b) => a.area - b.area);
   const groups = rs.filter((r) => r.area < 0);
-  const host = new Map(groups.map((g) => [g, faces.find((f) => inBox(f, g.probe) && f.contains(g.probe))]));
+  const host = new Map(groups.map((g) => [g, faces.find((f) => inBox(f, g.probe) && insideArea({ outer: f.ring, holes: [] }, g.probe))]));
   const kept: Area[] = [];
   for (const f of faces) {
     const p: Pt = [f.probe.x, f.probe.y];
@@ -432,18 +432,11 @@ export function booleanOp(op: BoolOp, inputs: readonly RegionInput[]): SubPath[]
         for (let i = 1; i < line.length; i++) cuts.push(segEdge(line[i - 1], line[i]));
         points.push(...line.map(v));
       }
-    const pieces = overlay([src, { edges: cuts, points, cut: true }], ([a]) => a);
+    const pieces = overlay([src, { edges: cuts, points, cut: true }], 'first');
     return pieces.map((a) => areasToSubPaths([a], tr, 0));
   }
   const sources = inputs.map((i) => regionSource(i, tr));
-  const rule =
-    op === 'union'
-      ? (ins: boolean[]) => ins.some(Boolean)
-      : op === 'intersection'
-        ? (ins: boolean[]) => ins.every(Boolean)
-        : op === 'exclusion'
-          ? (ins: boolean[]) => ins.filter(Boolean).length % 2 === 1
-          : (ins: boolean[]) => ins[0] && !ins.slice(1).some(Boolean);
+  const rule = op === 'union' ? 'any' : op === 'intersection' ? 'all' : op === 'exclusion' ? 'odd' : 'firstNotOthers';
   if (op === 'intersection' && sources.length < 2) return [];
   return [areasToSubPaths(overlay(sources, rule), tr, 0)];
 }

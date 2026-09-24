@@ -7,7 +7,7 @@ import { dimensionLabel } from '../model/geom/dimension';
 import { explodeEntity } from '../model/ops/explode';
 import { joinEntities } from '../model/ops/join';
 import { stretchEntity } from '../model/ops/stretch';
-import { transformEntity } from '../model/ops/transform';
+import { transformEntities } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
 import { CoreStore } from '../wasm/core';
 import { packEntities } from '../wasm/pack';
@@ -354,13 +354,13 @@ export function pasteEntities(ctx: AppContext, items: readonly NewEntity[], dx: 
     log.warn(`“${doc.layers.get(active)?.name}” katmanı kilitli; yapıştırılamadı.`);
     return [];
   }
-  const m = translation(dx, dy);
+  // One call to the core for all of them; the copies come back new, sharing nothing with the clipboard.
+  const moved = transformEntities(items.map((item) => ({ ...item, id: 0 }) as Entity), [translation(dx, dy)]);
   const ids: number[] = [];
   doc.transact('Yapıştır', () => {
-    for (const item of items) {
-      const layerId = doc.layers.get(item.layerId) && !doc.layers.isLocked(item.layerId) ? item.layerId : active;
-      const { id: _id, ...moved } = transformEntity({ ...structuredClone(item), id: 0 } as Entity, m);
-      ids.push(doc.add({ ...moved, layerId } as NewEntity).id);
+    for (const { id: _id, ...e } of moved) {
+      const layerId = doc.layers.get(e.layerId) && !doc.layers.isLocked(e.layerId) ? e.layerId : active;
+      ids.push(doc.add({ ...e, layerId } as NewEntity).id);
     }
   });
   log.success(`${ids.length} nesne yapıştırıldı.`);

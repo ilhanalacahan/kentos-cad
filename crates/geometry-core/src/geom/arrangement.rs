@@ -781,3 +781,60 @@ pub fn classify(sources: &[Source], built: &Built, rule: Rule) -> Vec<DirPiece> 
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f64::consts::PI;
+
+    const E: f64 = 486512.34;
+    const N: f64 = 4420187.52;
+
+    /// A ring with straight and arc edges, clockwise and counter-clockwise parts, at TM coordinates.
+    fn ring() -> Vec<Edge> {
+        let v = Vec2::new;
+        let arc = |c, r, a0, sweep| Edge::Arc { c, r, a0, sweep };
+        vec![
+            Edge::Seg {
+                a: v(E, N),
+                b: v(E + 20.0, N),
+            },
+            arc(v(E + 20.0, N + 10.0), 10.0, -PI / 2.0, PI),
+            Edge::Seg {
+                a: v(E + 20.0, N + 20.0),
+                b: v(E + 10.0, N + 20.0),
+            },
+            arc(v(E + 5.0, N + 20.0), 5.0, 0.0, -PI),
+            Edge::Seg {
+                a: v(E, N + 20.0),
+                b: v(E, N),
+            },
+        ]
+    }
+
+    #[test]
+    fn the_index_gives_the_winding_numbers_of_the_angle_sum() {
+        let edges = ring();
+        let index = WindingIndex::new(&edges);
+        let mut seed: u64 = 7;
+        let mut rnd = || {
+            seed = seed * 16807 % 2147483647;
+            seed as f64 / 2147483647.0
+        };
+        for _ in 0..400 {
+            let p = Vec2::new(E - 5.0 + rnd() * 40.0, N - 5.0 + rnd() * 30.0);
+            // `+ 0.0` folds the -0 the angle sum can round to.
+            assert_eq!(index.winding(p) + 0.0, winding(&edges, p) + 0.0, "{p:?}");
+        }
+    }
+
+    #[test]
+    fn a_ray_through_an_arc_end_falls_back_to_the_angle_sum() {
+        let edges = ring();
+        let index = WindingIndex::new(&edges);
+        // A point placed so the fixed ray runs straight through the start of the first arc.
+        let end = Vec2::new(E + 20.0, N);
+        let p = Vec2::new(end.x - RAY_X * 3.0, end.y - RAY_Y * 3.0);
+        assert_eq!(index.winding(p) + 0.0, winding(&edges, p) + 0.0);
+    }
+}

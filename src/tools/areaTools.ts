@@ -2,7 +2,7 @@ import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type NewEntity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { faceIndex, intersectAreas, netArea, splitArea, subtractAreas, unionAreas, type Area, type Source } from '../model/geom/region';
+import { entityFaceIndex, intersectAreas, netArea, splitArea, subtractAreas, unionAreas, type Area, type Source } from '../model/geom/region';
 import { areaOfEntity, lineSource, polygonOfArea, polylinesOfPolygon } from '../model/ops/areas';
 import type { ViewTransform } from '../viewport/Camera';
 import { SelectionActionTool } from './editTools';
@@ -37,6 +37,16 @@ const areasOf = (list: readonly Entity[]): Picked[] =>
   });
 
 const totalArea = (list: readonly Area[]) => list.reduce((s, a) => s + netArea(a), 0);
+
+/** Every bounded face of the line work of entities (the core's index, released at once). */
+function facesOf(lines: readonly Entity[]): Area[] {
+  const index = entityFaceIndex(lines);
+  try {
+    return index.all();
+  } finally {
+    index.free();
+  }
+}
 
 /** Adds polygons for `areas` on the layer of `from`, with its colour and (when `keepData`) its data and label. */
 function addAreas(ctx: AppContext, areas: readonly Area[], from: Entity, keepData = true): number[] {
@@ -355,7 +365,7 @@ export class ToAreaTool extends SelectionActionTool {
     const { doc, log, selection, format } = this.ctx;
     const closed = areasOf(targets.filter((e) => e.kind !== 'polygon'));
     const lines = targets.filter((e) => !areaOfEntity(e) && (e.kind === 'line' || e.kind === 'arc' || e.kind === 'polyline' || e.kind === 'spline' || e.kind === 'ellipse'));
-    const faces = lines.length ? faceIndex([lineSource(lines)]).all() : [];
+    const faces = lines.length ? facesOf(lines) : [];
     if (!closed.length && !faces.length) {
       const already = targets.some((e) => e.kind === 'polygon');
       return log.warn(already ? 'Seçili nesneler zaten alan.' : 'Alana çevrilecek kapalı nesne ya da kapalı bölge oluşturan çizgi bulunamadı. Çizgilerin uçları birleşmeli ya da kesişmeli.');

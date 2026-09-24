@@ -25,7 +25,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (araçların ve işlemlerin hesapları) hâlâ TypeScript; geçiş S3–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a'da `model/ops` ve üst düzey `model/geom` (bindirme, alan cebiri, paralel, ölçmecilik, şekiller, teğet daire, öteleme, tarama, ölçü) çekirdeğin ince cephelerine döndü, TS algoritmaları silindi. Kalan TS geometrisi ilkel modüllerdir (S3b) ve araçların satır içi hesaplarıdır (S5). Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
@@ -35,7 +35,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 770 KB, gzip ile 263 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
+- **WASM paketi:** 784 KB, gzip ile 267 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -66,13 +66,17 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 
 ### S3: cephe ve TypeScript'in silinmesi
 
-- **Modül modül:**
-  - `src/model/geom/X.ts` ve `src/model/ops/X.ts`, `src/wasm/api/X` cephesinin yeniden dışa aktarımına döner.
-  - TypeScript algoritması silinir.
-  - Silmeden önce derin koşu yapılır, fixture'lar dondurulur.
-- Mevcut birim testleri aynı adlarla artık WASM'ı sınar.
-- **Tek kaynak bekçisi:** bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği (`Math.`) olmadığını denetler.
-- Kare başına binlerce çağrı yapan yerler toplu API alır: bölme noktaları, tarama çizgileri (tek çağrı, `Float64Array`).
+- **S3a yapıldı:** `model/ops`'un 16 dosyası ve üst düzey `model/geom` modülleri ince cephe (`op('ad')`); `geom/arrangement.ts` silindi. Ayrıntılar ADR 0008 “Cephe ve TypeScript'in silinmesi (S3a)”.
+  - Silmeden önce 192 işlemin derin koşusu (20 000'er durum) P8 worktree'sinde temiz geçti.
+  - Nesne döndüren işlemler `model/ops/entityOp.ts` ile sarılır: çekirdek `None` alanı yazmaz, `doc.update` birleştirdiği için eksik `bulges`/`holes` `undefined` olarak eklenir.
+  - Parity kümelerinin `fns` alanı yalnız TS'i duran işlemleri tutar; çevrilenler donmuş fixture'larla sınanır. Kaydedici TS'i olmayan işlemde çekirdeğin sonucunu yazar.
+  - Yeni sınır girişleri: WASM `FaceIndex` sınıfı (tarama ve içine tıklayarak alanın yüz dizini), `offsetPathXY`, `hatchLinesXY`, `transformEntities` (taşı/kopyala/dizi/yapıştır tek çağrı), `divisionPoints` (Böl önizlemesi tek çağrı).
+  - Bilinen maliyet: 10 000 nesneyi taşımak JSON yüzünden ~0,15 s (TS ~0,01 s). İyileştirme: dönüşümü depoda yapıp sonucu paketli döndürmek.
+- **S3b (sıradaki):** ilkel modüller `model/geometry.ts`, `geom/affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `model/entities.ts`, `render/triangulate.ts`.
+  - Bunlar arayüzde sıcak döngülerde çağrılıyor (araç önizlemeleri, üst katman çizimi, stil motoru, SVG düzenleyicisi, `doc.bounds`). Önce çağrı yerlerini ölçün; JSON tablosu çağrı başına birkaç mikrosaniyedir (`dist` 4 µs, TS 0,08 µs). Tipli girişler (`Float64Array`) ve toplu API'ler gerekir.
+  - `entities.ts`'in nesne işlevleri (sınır kutusu, anahat, uzunluk, alan) çoğu yerde depodan gelebilir (nesneler zaten orada).
+- **S3c:** tek kaynak bekçisi (bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği, `Math.`, olmadığını denetler), `src/wasm/parity/reference/*` ve `parity.test.ts`'in silinmesi (derin koşudan sonra), belgeler.
+- Kare başına binlerce çağrı yapan yerler toplu API alır; bölme noktaları ve tarama önizlemesi S3a'da yapıldı.
 
 ### S4: worker
 

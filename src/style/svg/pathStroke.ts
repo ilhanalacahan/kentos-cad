@@ -337,7 +337,7 @@ export function strokeOutline(subs: readonly SubPath[], st: StrokeStyle): SubPat
   const extent = extentOf([subs]) + st.width;
   // Relative to the width (the outline's detail), never coarser than a thousandth of the drawing.
   const tol = Math.min(extent * 1e-3, Math.max(st.width * 0.004, tolFor(extent)));
-  const areas = overlay([strokeSource(subs, st, tol)], ([a]) => a);
+  const areas = overlay([strokeSource(subs, st, tol)], 'first');
   return areasToSubPaths(areas, null, fitTolFor(tol, st.width));
 }
 
@@ -351,7 +351,7 @@ export function offsetRegion(input: RegionInput, d: number, join: Join = 'round'
   const extent = extentOf([input.subs]) + 2 * Math.abs(d);
   const tol = Math.min(tolFor(extent), Math.max(Math.abs(d) * 0.01, 1e-7));
   const tr = new Tracer(tol, extent);
-  const clean = overlay([regionSource(input, tr)], ([a]) => a);
+  const clean = overlay([regionSource(input, tr)], 'first');
   if (!clean.length) return [];
   // The clean outline, with samples inside curves told apart from real corners.
   const band = new Pieces();
@@ -361,6 +361,6 @@ export function offsetRegion(input: RegionInput, d: number, join: Join = 'round'
     // Input nodes on a curve turn by the sampling angle: only clear turns get the join there.
     strokePoly(band, withCorners(pts, pts.map((q) => !tr.isSample(q)), true, (8 * Math.PI) / 180), Math.abs(d), st);
   }
-  const grown = overlay([areaSource(clean), band.source], d > 0 ? ([a, b]) => a || b : ([a, b]) => a && !b);
+  const grown = overlay([areaSource(clean), band.source], d > 0 ? 'any' : 'firstNotOthers');
   return areasToSubPaths(grown, tr, fitTolFor(tol, 2 * Math.abs(d)));
 }

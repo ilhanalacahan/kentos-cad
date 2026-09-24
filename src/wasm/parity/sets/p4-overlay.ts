@@ -1,9 +1,7 @@
 import type { Vec2 } from '../../../model/geometry';
-import { winding } from '../../../model/geom/arrangement';
 import type { Edge } from '../../../model/geom/intersect';
-import { faceRings, overlay, type Area, type Source } from '../../../model/geom/overlay';
-import { cleanAxis, corridorArea, parallelSides } from '../../../model/geom/parallel';
-import { allFaces, areaSource, faceAt, insideArea, intersectAreas, netArea, orientRing, ringArea, ringEdges, splitArea, subtractAreas, unionAreas } from '../../../model/geom/region';
+import type { Area, OverlayRule, Source } from '../../../model/geom/overlay';
+import { areaSource, netArea, ringEdges } from '../../../model/geom/region';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P4: the planar overlay engine, area algebra, faces of line work, parallel lines (docs/adr/0008). */
@@ -15,16 +13,8 @@ const lines = (...segs: [Vec2, Vec2][]): Source => ({ edges: segs.map(([a, b]): 
 const E = 486512.34;
 const N = 4420187.52;
 
-/** The overlay's rules by name, as the core takes them (the TypeScript took functions). */
-const RULES: Record<string, (inside: boolean[]) => boolean> = {
-  any: (ins) => ins.some(Boolean),
-  all: (ins) => ins.every(Boolean),
-  odd: (ins) => ins.filter(Boolean).length % 2 === 1,
-  firstNotOthers: (ins) => ins[0] && !ins.slice(1).some(Boolean),
-  first: ([a]) => a,
-  always: () => true,
-};
-const overlayNamed = (sources: Source[], rule: string) => overlay(sources, RULES[rule]);
+/** The overlay's rules, by the names the core takes. */
+const RULES: OverlayRule[] = ['any', 'all', 'odd', 'firstNotOthers', 'first', 'always'];
 
 /** A rectangle, a disk or a star polygon, often on a grid so edges coincide. */
 function area(g: Gen): Area {
@@ -58,10 +48,7 @@ const byArea = (a: Area) => netArea(a);
 export const P4: CallSet = {
   file: 'calls-p4-overlay.json',
   ties: { unionAreas: byArea, intersectAreas: byArea, subtractAreas: byArea, splitArea: byArea, allFaces: byArea, overlay: byArea },
-  fns: {
-    ringArea, ringEdges, orientRing, netArea, insideArea, areaSource, unionAreas, intersectAreas, subtractAreas, splitArea, faceAt, allFaces,
-    overlay: overlayNamed, faceRings, winding, cleanAxis, parallelSides, corridorArea,
-  },
+  fns: {},
   named: [
     { name: 'örtüşen kareler', fn: 'unionAreas', args: [[rect(0, 0, 10, 10), rect(5, 5, 15, 15)]] },
     { name: 'ortak kenarlı komşular', fn: 'unionAreas', args: [[rect(0, 0, 10, 10), rect(10, 0, 20, 10)]] },
@@ -114,7 +101,7 @@ export const P4: CallSet = {
     ...repeat(g, 'splitArea', n, () => [area(g), cutLines(g)]),
     ...repeat(g, 'faceAt', n, () => [[cutLines(g), cutLines(g), { ...areaSource([area(g)]), cut: true }], g.gridPt(2.5, 8), g.chance(0.5) ? undefined : g.chance(0.5)]),
     ...repeat(g, 'allFaces', n, () => [[cutLines(g), cutLines(g), { ...areaSource([area(g)]), cut: true }]]),
-    ...repeat(g, 'overlay', n, () => [Array.from({ length: g.int(1, 3) }, () => (g.chance(0.8) ? areaSource([area(g)]) : { ...cutLines(g), cut: true })), g.pick(Object.keys(RULES))]),
+    ...repeat(g, 'overlay', n, () => [Array.from({ length: g.int(1, 3) }, () => (g.chance(0.8) ? areaSource([area(g)]) : { ...cutLines(g), cut: true })), g.pick(RULES)]),
     ...repeat(g, 'faceRings', n, () => [[cutLines(g), { ...areaSource([area(g)]), cut: true }]]),
     ...repeat(g, 'winding', n, () => [ringEdges(area(g).outer), g.chance(0.5) ? g.gridPt(2.5, 8) : g.pt(25)]),
     ...repeat(g, 'cleanAxis', n, () => [Array.from({ length: g.int(0, 6) }, () => g.gridPt(5, 2)), g.chance(0.5)]),

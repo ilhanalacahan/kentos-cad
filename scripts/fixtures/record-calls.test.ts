@@ -1,7 +1,9 @@
 // Records the TypeScript reference results of every call set into
-// fixtures/geometry/v1/calls-*.json (docs/adr/0008). Runs only on purpose,
-// while the TypeScript implementation of a set still exists:
+// fixtures/geometry/v1/calls-*.json (docs/adr/0008). Runs only on purpose:
 //   GOLDEN_WRITE=1 npx vitest run scripts/fixtures/record-calls.test.ts
+// An operation whose TypeScript is gone (S3) records the core's own result:
+// rewriting its cases is a deliberate change of the golden answers, to be
+// read in the diff (a changed rule, robust predicates).
 // Outside src/ so the app's type check does not need Node's types.
 import { writeFileSync } from 'node:fs';
 import { it } from 'vitest';
@@ -15,7 +17,7 @@ const KEEP = 25;
 const BUDGET = 48_000;
 const MIN_KEPT = 3;
 
-it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript reference into the call fixtures', () => {
+it.runIf(!!process.env.GOLDEN_WRITE)('records the reference answers into the call fixtures', () => {
   for (const set of SETS) {
     const named = new Set(set.named);
     const used = new Map<string, { kept: number; bytes: number }>();
@@ -33,9 +35,8 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript reference into the 
       crs: { kind: 'projected', unit: 'metre', note: 'Koordinatlar metre cinsinden bir projeksiyon düzlemindedir; tolerans bu birim içindir (fixtures/geometry/v1/cases.json ile aynı).' },
       cases: callsOf(set, KEEP).flatMap((c) => {
         const ts = set.fns[c.fn] as ((...a: unknown[]) => unknown) | undefined;
-        if (!ts) throw new Error(`${set.file}: “${c.fn}” için TypeScript işlevi yok`);
         const tol = set.tolerance?.[c.fn];
-        const expect = toJson(ts(...c.args));
+        const expect = toJson(ts ? ts(...c.args) : callNamed(c.fn, c.args));
         // A case the core matches only up to a reordering of ties is not frozen (the parity test accepts it).
         if (sameResult(toJson(callNamed(c.fn, c.args)), expect, tol ?? TOLERANCE) !== null) return [];
         const entry = { ...c, args: toJson(c.args) as unknown[], expect, ...(tol ? { tol } : {}) };

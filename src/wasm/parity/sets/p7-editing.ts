@@ -3,13 +3,10 @@ import type { Vec2 } from '../../../model/geometry';
 import { normAngle } from '../../../model/geom/arc';
 import { bulgeArc } from '../../../model/geom/bulge';
 import type { Area } from '../../../model/geom/region';
-import { areaOfEntity, lineSource, polygonOfArea, polylinesOfPolygon } from '../../../model/ops/areas';
+import { areaOfEntity } from '../../../model/ops/areas';
 import { entityEdges } from '../../../model/ops/edges';
-import { explodeEntity } from '../../../model/ops/explode';
-import { chamferLines, cornerOfPath, filletLines, type Seg } from '../../../model/ops/fillet';
-import { joinEntities } from '../../../model/ops/join';
-import { offsetEntity } from '../../../model/ops/offset';
-import { insertVertex, nearestSegment, removeVertex } from '../../../model/ops/vertex';
+import type { Seg } from '../../../model/ops/fillet';
+import { nearestSegment } from '../../../model/ops/vertex';
 import { repeat, type CallSet, type Gen } from '../harness';
 import { entity } from './p5-entities';
 
@@ -85,12 +82,7 @@ function chain(g: Gen): Entity[] {
 
 export const P7: CallSet = {
   file: 'calls-p7-editing.json',
-  fns: {
-    offsetEntity, filletLines, chamferLines, cornerOfPath, joinEntities, nearestSegment, insertVertex, removeVertex,
-    // The value text is the caller's (project units); the core takes it formatted.
-    explodeEntity: (e: Entity, text: string) => explodeEntity(e, () => text),
-    areaOfEntity, polygonOfArea, polylinesOfPolygon, lineSource,
-  },
+  fns: {},
   named: [
     { name: 'sıfır mesafe', fn: 'offsetEntity', args: [{ ...base, kind: 'line', a: v(0, 0), b: v(10, 0) }, 0, v(5, 5)] },
     { name: 'sıfır uzunluklu çizgi', fn: 'offsetEntity', args: [{ ...base, kind: 'line', a: v(3, 4), b: v(3, 4) }, 2, v(5, 5)] },

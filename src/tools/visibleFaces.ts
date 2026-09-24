@@ -2,8 +2,7 @@ import type { AppContext } from '../app/context';
 import type { Disposable } from '../core/disposable';
 import type { Entity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { faceIndex, type Area, type FaceIndex } from '../model/geom/region';
-import { lineSource } from '../model/ops/areas';
+import { entityFaceIndex, type Area, type FaceIndex } from '../model/geom/region';
 
 /** Kinds that bound regions (fills, labels and dimensions do not). */
 export const isBoundaryKind = (e: Entity) => e.kind !== 'point' && e.kind !== 'text' && e.kind !== 'dimension' && e.kind !== 'hatch';
@@ -27,18 +26,24 @@ export class VisibleFaces {
   }
 
   attach(): void {
-    const drop = () => (this.index = null);
+    const drop = () => this.drop();
     this.subs = [this.ctx.doc.events.on('changed', drop), this.ctx.doc.layers.events.on('state', drop), this.ctx.doc.layers.events.on('structure', drop)];
   }
 
   detach(): void {
     this.subs.forEach((d) => d());
     this.subs = [];
-    this.index = null;
+    this.drop();
   }
 
   setLayer(layer: string | null): void {
     this.layer = layer;
+    this.drop();
+  }
+
+  /** The core keeps the faces between calls: release them as soon as they are stale. */
+  private drop(): void {
+    this.index?.free();
     this.index = null;
   }
 
@@ -51,7 +56,8 @@ export class VisibleFaces {
     const key = `${b.minX}|${b.minY}|${b.maxX}|${b.maxY}|${this.layer}`;
     if (!this.index || key !== this.key) {
       const lines = this.ctx.view.entitiesIn(b).filter((e) => (!this.layer || e.layerId === this.layer) && isBoundaryKind(e));
-      this.index = faceIndex([lineSource(lines)]);
+      this.drop();
+      this.index = entityFaceIndex(lines);
       this.key = key;
     }
     return this.index;

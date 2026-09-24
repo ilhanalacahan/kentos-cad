@@ -3,7 +3,7 @@ import type { Disposable } from '../core/disposable';
 import { Signal } from '../core/signal';
 import { entityArea, entityBounds, HATCH_PATTERN_LABEL, polygonRing, type Entity, type HatchPattern } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { hatchLines } from '../model/geom/hatch';
+import { hatchSegments } from '../model/geom/hatch';
 import { insideArea, netArea, subtractAreas, type Area } from '../model/geom/region';
 import { areaOfEntity } from '../model/ops/areas';
 import type { ViewTransform } from '../viewport/Camera';
@@ -141,7 +141,7 @@ export class HatchTool implements Tool {
     const ring = polygonRing(area.outer);
     const holes = area.holes.map(polygonRing);
     const pattern = this.pattern();
-    if (pattern.type !== 'solid' && hatchLines(ring, pattern.angle, pattern.spacing, holes).capped) {
+    if (pattern.type !== 'solid' && hatchSegments(ring, pattern.angle, pattern.spacing, holes)[0] === 1) {
       return ctx.log.warn('Desen bu alan için çok sık; çizim ölçeğini büyütün ya da başka bir desen seçin.');
     }
     const layerId = writableLayer(ctx);
@@ -201,11 +201,13 @@ export class HatchTool implements Tool {
     const pat = this.pattern();
     drawArea(g, view, this.hover, { color: pal.accent, dash: [4, 3], width: 1.5, fill: pat.type === 'solid' ? tint(pal.accent, 0.25) : undefined });
     if (pat.type === 'solid') return;
-    const { segments } = hatchLines(polygonRing(this.hover.outer), pat.angle, pat.spacing, this.hover.holes.map(polygonRing));
-    if (segments.length > 3000) return; // preview only; the real hatch is drawn on the GPU
+    // [capped, ax, ay, bx, by, …]: no points are made for a preview that is skipped.
+    const xy = hatchSegments(polygonRing(this.hover.outer), pat.angle, pat.spacing, this.hover.holes.map(polygonRing));
+    if (xy.length > 1 + 4 * 3000) return; // preview only; the real hatch is drawn on the GPU
     g.save();
     g.globalAlpha = 0.6;
-    for (const [a, b] of segments) strokePath(g, view, [a, b], { color: pal.accent });
+    for (let k = 1; k + 3 < xy.length; k += 4)
+      strokePath(g, view, [{ x: xy[k], y: xy[k + 1] }, { x: xy[k + 2], y: xy[k + 3] }], { color: pal.accent });
     g.restore();
   }
 }

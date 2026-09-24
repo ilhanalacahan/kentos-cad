@@ -23,25 +23,7 @@ import {
   type EllipseGeom,
 } from '../../../model/geom/ellipse';
 import type { Edge } from '../../../model/geom/intersect';
-import {
-  arcStartCenterAngle,
-  arcStartCenterChord,
-  arcStartCenterEnd,
-  arcStartEndAngle,
-  arcStartEndCenter,
-  arcStartEndDirection,
-  arcStartEndRadius,
-  cloudOf,
-  rectFromCorners,
-  rectFromEdge,
-  rectFromSize,
-  regularPolygon,
-  regularPolygonOnEdge,
-  sideDistance,
-} from '../../../model/geom/shapes';
 import { catmullRom } from '../../../model/geom/spline';
-import { alongLine, clockwiseAngle, distanceIntersection, lineIntersection, polarPoint, sideOffsets, sidePoint } from '../../../model/geom/survey';
-import { tangentTangentRadius, tangentTangentTangent } from '../../../model/geom/tangentCircle';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P2: ellipses, splines, shape constructions, surveying, tangent circles (docs/adr/0008). */
@@ -71,13 +53,7 @@ function edge(g: Gen): Edge {
 export const P2: CallSet = {
   file: 'calls-p2-curves.json',
   fns: {
-    minorAxis, majorLength, ellipseSweep, isFullEllipse, ellipsePoint, ellipseDerivative, paramOfPoint, paramAtPolar, onEllipse, tessellateEllipse,
-    ellipseLength, ellipseArea, closestParam, lineEllipse, ellipseTangentPoints, quadrantParams, insideEllipse, ellipseFromAxis, ellipseFromCenter,
-    catmullRom,
-    rectFromEdge, sideDistance, rectFromCorners, rectFromSize, regularPolygon, regularPolygonOnEdge,
-    arcStartCenterEnd, arcStartCenterAngle, arcStartCenterChord, arcStartEndAngle, arcStartEndDirection, arcStartEndRadius, arcStartEndCenter, cloudOf,
-    sidePoint, sideOffsets, distanceIntersection, lineIntersection, alongLine, polarPoint, clockwiseAngle,
-    tangentTangentRadius, tangentTangentTangent,
+    minorAxis, majorLength, ellipseSweep, isFullEllipse, ellipsePoint, ellipseDerivative, paramOfPoint, paramAtPolar, onEllipse, tessellateEllipse, ellipseLength, ellipseArea, closestParam, lineEllipse, ellipseTangentPoints, quadrantParams, insideEllipse, ellipseFromAxis, ellipseFromCenter, catmullRom,
   },
   named: [
     { name: 'tam elips uzunluğu', fn: 'ellipseLength', args: [{ c: v(0, 0), major: v(10, 0), ratio: 0.5, t0: 0, t1: 0 }] },

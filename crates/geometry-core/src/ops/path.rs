@@ -4,9 +4,10 @@
 
 use crate::api::Op;
 use crate::api::json::{FromJson, Json, read_field};
-use crate::entity::{Entity, Shape};
+use crate::entity::{Entity, Shape, ellipse_geom};
 use crate::geom::arc::norm_angle;
 use crate::geom::bulge::{bulge_of_sweep, clean_bulge_path};
+use crate::geom::ellipse::{closest_param, ellipse_point};
 use crate::geom::intersect::{Edge, closest_on_edge, intersect_edges, point_at};
 use crate::jsmath::{js_cmp, js_floor, js_hypot, js_max, js_min, js_sign, or, stable_sort};
 use crate::op;
@@ -238,6 +239,33 @@ pub fn division_params(path: &Path, opts: &Division) -> Vec<f64> {
     out
 }
 
+/// The Böl tool's points in one call (S3): `division_params` along the
+/// path, counted from the end when `from_end`; an ellipse is measured along
+/// fine chords, so its points are then placed on the true curve.
+pub fn division_points(e: &Shape, opts: &Division, from_end: bool) -> Vec<Vec2> {
+    let Some(path) = path_of(e) else {
+        return Vec::new();
+    };
+    let at = |s: f64| point_at_s(&path, if from_end { path.length - s } else { s });
+    let params = division_params(&path, opts);
+    match *e {
+        Shape::Ellipse {
+            c,
+            major,
+            ratio,
+            t0,
+            t1,
+        } => {
+            let g = ellipse_geom(c, major, ratio, t0, t1);
+            params
+                .into_iter()
+                .map(|s| ellipse_point(&g, closest_param(&g, at(s))))
+                .collect()
+        }
+        _ => params.into_iter().map(at).collect(),
+    }
+}
+
 pub(crate) static OPS: &[Op] = &[
     op!("pathOf", |e: Entity| path_of(&e.shape)),
     op!("normS", |path: Path, s: f64| norm_s(&path, s)),
@@ -254,4 +282,8 @@ pub(crate) static OPS: &[Op] = &[
     op!("divisionParams", |path: Path, opts: Division| {
         division_params(&path, &opts)
     }),
+    op!(
+        "divisionPoints",
+        |e: Entity, opts: Division, from_end: bool| { division_points(&e.shape, &opts, from_end) }
+    ),
 ];

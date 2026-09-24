@@ -1,97 +1,20 @@
-import { apply, applyLinear, isReflection, lengthScale, translation, type Affine } from '../geom/affine';
-import { arcEnd, arcStart, normAngle } from '../geom/arc';
-import { isFullEllipse } from '../geom/ellipse';
-import type { Entity, RingGeometry } from '../entities';
-
-const angleOf = (c: { x: number; y: number }, p: { x: number; y: number }) => normAngle(Math.atan2(p.y - c.y, p.x - c.x));
+import type { Entity } from '../entities';
+import type { Affine } from '../geom/affine';
+import { entityOp } from './entityOp';
 
 /**
  * Applies a similarity transform (move, rotate, uniform scale, mirror) to
  * any entity. Returns a copy with the same id; callers decide whether to
- * update the original or add the copy.
+ * update the original or add the copy. Computed by the geometry core
+ * (docs/adr/0008).
  */
-export function transformEntity<E extends Entity>(e: E, m: Affine): E {
-  const s = lengthScale(m);
-  switch (e.kind) {
-    case 'point':
-      return { ...e, p: apply(m, e.p) };
-    case 'line':
-      return { ...e, a: apply(m, e.a), b: apply(m, e.b) };
-    case 'polyline':
-    case 'polygon':
-      return {
-        ...e,
-        ...transformRing(e, m),
-        ...(e.kind === 'polygon' && e.holes && { holes: e.holes.map((h) => transformRing(h, m)) }),
-      };
-    case 'circle':
-      return { ...e, c: apply(m, e.c), r: e.r * s };
-    case 'arc': {
-      const c = apply(m, e.c);
-      const start = apply(m, arcStart(e));
-      const end = apply(m, arcEnd(e));
-      // A reflection reverses orientation; swap so the arc stays CCW.
-      return isReflection(m)
-        ? { ...e, c, r: e.r * s, a0: angleOf(c, end), a1: angleOf(c, start) }
-        : { ...e, c, r: e.r * s, a0: angleOf(c, start), a1: angleOf(c, end) };
-    }
-    case 'ellipse': {
-      const major = applyLinear(m, e.major);
-      // A reflection runs the parameter the other way: t → −t keeps the arc counter-clockwise.
-      if (!isReflection(m) || isFullEllipse(e)) return { ...e, c: apply(m, e.c), major };
-      return { ...e, c: apply(m, e.c), major, t0: normAngle(-e.t1), t1: normAngle(-e.t0) };
-    }
-    case 'xline':
-    case 'ray': {
-      const d = applyLinear(m, e.dir);
-      const l = Math.hypot(d.x, d.y) || 1;
-      return { ...e, p: apply(m, e.p), dir: { x: d.x / l, y: d.y / l } };
-    }
-    case 'spline':
-      return { ...e, pts: e.pts.map((p) => apply(m, p)) };
-    case 'dimension': {
-      const style = e.style ?? 'aligned';
-      const flip = isReflection(m);
-      const a = apply(m, e.a);
-      const b = apply(m, e.b);
-      const base = { ...e, height: e.height * s, ...(e.c && { c: apply(m, e.c) }) };
-      // An angle stays counter-clockwise from a to b: a reflection swaps the arms.
-      if (style === 'angular') return flip ? { ...base, a: b, b: a, offset: e.offset * s } : { ...base, a, b, offset: e.offset * s };
-      if (style === 'radius' || style === 'diameter') return { ...base, a, b, offset: e.offset * s };
-      // Aligned and linear: a reflection swaps left and right, so the offset changes sign.
-      const offset = e.offset * s * (flip ? -1 : 1);
-      if (style !== 'linear') return { ...base, a, b, offset };
-      const rad = ((e.angle ?? 0) * Math.PI) / 180;
-      const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
-      return { ...base, a, b, offset, angle: (Math.atan2(dir.y, dir.x) * 180) / Math.PI };
-    }
-    case 'hatch': {
-      const rad = (e.pattern.angle * Math.PI) / 180;
-      const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
-      const angle = ((((Math.atan2(dir.y, dir.x) * 180) / Math.PI) % 180) + 180) % 180;
-      return {
-        ...e,
-        ring: e.ring.map((p) => apply(m, p)),
-        ...(e.holes && { holes: e.holes.map((h) => h.map((p) => apply(m, p))) }),
-        pattern: { ...e.pattern, angle, spacing: e.pattern.spacing * s },
-      };
-    }
-    case 'text': {
-      const rad = (e.rotation * Math.PI) / 180;
-      const dir = applyLinear(m, { x: Math.cos(rad), y: Math.sin(rad) });
-      let rot = (Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-      // Mirrored text stays readable (like AutoCAD MIRRTEXT = 0).
-      if (isReflection(m)) rot += 180;
-      rot = ((rot % 360) + 360) % 360;
-      return { ...e, p: apply(m, e.p), rotation: rot, height: e.height * s };
-    }
-  }
-}
+export const transformEntity = entityOp<<E extends Entity>(e: E, m: Affine) => E>('transformEntity');
 
-/** A ring's vertices transformed; a reflection turns every arc segment the other way. */
-function transformRing(r: RingGeometry, m: Affine): RingGeometry {
-  const pts = r.pts.map((p) => apply(m, p));
-  return r.bulges ? { pts, bulges: isReflection(m) ? r.bulges.map((b) => -b) : [...r.bulges] } : { pts };
-}
+export const translateEntity = entityOp<<E extends Entity>(e: E, dx: number, dy: number) => E>('translateEntity');
 
-export const translateEntity = <E extends Entity>(e: E, dx: number, dy: number): E => transformEntity(e, translation(dx, dy));
+/**
+ * `transformEntity` of every entity by every affine, affine after affine,
+ * in one call: moving, copying or arraying a selection of thousands of
+ * objects crosses the boundary once, not once per object.
+ */
+export const transformEntities = entityOp<<E extends Entity>(list: readonly E[], ms: readonly Affine[]) => E[]>('transformEntities');

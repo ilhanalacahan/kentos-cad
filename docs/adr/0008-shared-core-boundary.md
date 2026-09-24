@@ -25,7 +25,7 @@ Kullanıcının kararları (2026-09-24):
 
 ### Tek kaynak
 
-- Belgeye yazılan ya da bir CAD kararı veren her hesap `geometry-core`'dadır. TypeScript'te kalan cephe (`src/wasm/`) yalnız paketler ve açar; koordinat aritmetiği yapmaz.
+- Belgeye yazılan ya da bir CAD kararı veren her hesap `geometry-core`'dadır. TypeScript'te kalan cephe (`src/wasm/core.ts` ve çevrilen `model/geom`, `model/ops` modülleri) yalnız çağırır, paketler ve açar; koordinat aritmetiği yapmaz.
 - Kamera, ekran pikseli ve üst katman çizim hesabı TS'te kalır. Stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi `style-core`'un işidir; o zamana kadar TS'te kalır ve geometriyi çekirdekten alır.
 - Bir modülün TS algoritması şu dört koşulla silinir:
   - parity testi derin koşuda (`PARITY_CASES=20000`) temiz geçer;
@@ -106,6 +106,21 @@ Kullanıcının kararları (2026-09-24):
 - **Doğrulama:** eski hesap `src/wasm/parity/reference/draw.ts`'tedir (`styledGeometry`, vurgu katmanının anahatları, ifadelerin değerleri). Depo parity testi her turda rastgele nesnelerin kayıtlarını okuyucuyla geri kurar ve eskisiyle karşılaştırır: döndürülmüş ve döndürülmemiş, kırpmalı ve kırpmasız, ayrıca tek nesnelik yol ve bilinmeyen nesne. Derin koşu (20 000 tur) temiz geçti. Donmuş dosyaya 71 çizim ve 80 değer durumu eklendi; native okuyucu kayıtları aynı biçimde çözer. E2e'de WebGL2'nin çizdiği piksel sayısı S1c ile birebir aynı kaldı.
 - **Ölçüm** (bulut, Node 22, makine başka işlerle meşgulken iki sürüm art arda, büyük katmanı `buildStyledLayer` ile 9 kez kurma, ısınmış medyan): `parsel-50k` S1c 142,8/142,9 ms, S2 141,6/146,9 ms; `hat-1m` S1c 180/193 ms, S2 179/175 ms. Fark gürültü içindedir. Aynı süreçte parçalar: eski geometri ve TS üçgenleme 82–85 ms, yeni kayıt, okuma ve toplu üçgenleme 71–74 ms. Katmanın geri kalanı (stil motorunun vuruş paketleme işi) değişmedi. İlk kurulum, depo o ana kadar eşitlenmediyse ilk eşitlemeyi de öder (+130 ms); bu iş S1c'de ilk seçme sorgusundaydı.
 
+### Cephe ve TypeScript'in silinmesi (S3a)
+
+- **Kapsam:** `model/ops`'un 16 dosyası ve üst düzey `model/geom` modülleri (bindirme ve alan cebiri, paralel çizgi, ölçmecilik yapıları, şekiller, teğet daire, öteleme, tarama, ölçü) artık çekirdeğin ince cepheleridir. Her işlev `op('ad')` ile çağrı tablosuna gider; adlar, tipler ve belge yorumları aynı kaldı, çağıranlar değişmedi. `geom/arrangement.ts` silindi, türleri `overlay.ts`'e geçti. TS'te kalan tek iş `dimensionLabel`'dır (değeri biçimlenmiş metinle birleştirir). İlkel modüller (`geometry.ts`, `affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `entities.ts`, `render/triangulate.ts`) S3b'dedir.
+- **Son derin koşu:** silmeden önce 192 işlemin hepsi 20 000'er rastgele durumda TS ile karşılaştırıldı. Koşu P8 commit'inin ayrı bir worktree'sinde yapıldı; P8'den bu yana iki tarafta yalnız bir tip imzası değişmişti. Temiz geçti (6 dk 49 sn).
+- **Sonrasında doğrulama:** çevrilen işlemin TS referansı yoktur; kümelerin `fns` alanı yalnız TS'i duran işlemleri tutar ve parity testi yalnız onları karşılaştırır. Çevrilen işlemler donmuş fixture'larla (`calls-*.json`, native ve WASM) ve cephe üzerinden çalışan birim testleriyle sınanır. Kaydedici TS'i olmayan işlemde çekirdeğin kendi sonucunu yazar; bu bilinçli bir golden değişikliğidir ve farkı okunur.
+- **Eksik alan ve birleştirme:** çekirdek `None` alanı yazmaz, TS ise temizlenen `bulges` ya da `holes`'u `undefined` olarak yazardı. `CadDocument.update` yamayı nesneye birleştirdiği için eksik alan eski yayları yerinde bırakırdı. Nesne döndüren işlemler bu yüzden `entityOp` ile sarılır (`model/ops/entityOp.ts`): sonuçtaki her çoklu çizgi, alan ve taramaya eksik `bulges` ya da `holes` `undefined` olarak eklenir. Parity bunu yakalayamazdı, çünkü iki tarafın sonucu da JSON'dan geçerek karşılaştırılıyordu.
+- **Nesne kimliği:** JSON'dan gelen sonuç hep yeni nesnedir; TS bazen girdinin nokta nesnesini paylaşırdı. Uygulamada buna dayanan karşılaştırma yoktu; bir test (`polylinesOfPolygon`'un kapanış noktası) değer karşılaştırmasına çevrildi.
+- **Bindirme kuralı adla:** `overlay(sources, rule)` kuralı adla alır (`any`, `all`, `odd`, `firstNotOthers`, `first`, `always`); SVG düzenleyicisinin altı çağrısı buna çevrildi. `faceRings` sonucunda `contains` kapanışı yoktur; düzenleyici `insideArea` işlemini kullanır.
+- **Yüz dizini:** tarama ve “içine tıklayarak alan” görünümün yüzlerini bir kez kurup her imleç hareketinde imlecin altındakini sorar. Dizin WASM'da durum tutan bir sınıftır (`crates/wasm/src/faces.rs` `FaceIndex`; TS'te `CoreFaceIndex`, `region.entityFaceIndex`). Nesnelerden tek adımda kurulur, `at(x, y)` yalnız bulunan yüzü JSON olarak döndürür; eskimiş dizin `free()` ile hemen bırakılır.
+- **Tipli girişler:** `offsetPathXY` (stil motoru her nesne ve sembol katmanında yol öteler) ve `hatchLinesXY` (tarama aracının önizlemesi her karede 20 000'e kadar parça üretir; parçalar sayı dizisinden çizilir, nokta nesnesi kurulmaz).
+- **Toplu dönüşüm:** taşı, kopyala, döndür, ölçekle, aynala, dizi ve yapıştır bütün seçimi tek çağrıda dönüştürür (`transformEntities(list, ms)`; afin afin ardından, her afinde bütün nesneler).
+- **Bölme noktaları:** Böl aracının önizlemesi en çok 10 000 noktayı her karede kuruyordu; nokta başına `pointAtS` çağrısı bütün yolu (elipste yüzlerce kiriş) yeniden JSON'la gönderirdi. `divisionPoints(e, opts, fromEnd)` noktaları tek çağrıda verir; elipste noktalar gerçek eğriye oturtulur (`edit.test.ts`, parçalardan kurulan sonuçla aynı).
+- **Ölçüm** (bulut, Node 22, makine başka işlerle meşgul; 10 000 beş köşeli parsel): nesne başına `transformEntity` eski TS'te 5–13 ms, cepheyle 160–180 ms, toplu çağrıyla 130–170 ms. Maliyet çağrı sayısında değil JSON'dadır: WASM'da ayrıştırma, nesneye çevirme ve yazma 70–160 ms (2,5 MB giriş, 3,4 MB çıkış), JS'te `stringify` 20 ms, `parse` 30 ms. Tek seferlik bir komut olduğu için kabul edildi. Nesneler zaten depoda olduğundan dönüşümü depoda yapıp sonucu paketli döndürmek sonraki iyileştirmedir. `offsetPath` tipli girişle eskisiyle başa baştır (10 000 halka 20–25 ms, TS 20–30 ms).
+- **Sarım dizini testleri** TS'teki `WindingIndex` ile birlikte Rust'a geçti (`geom/arrangement.rs`): aynı halka ve noktalarda açı toplamıyla aynı sarım sayıları; ışın bir yay ucundan geçince açı toplamına düşüş.
+
 ### Başlatma, worker ve hata
 
 - **Sayfa:** `src/main.ts`, `createApp`'tan önce `initCore()` çalıştırır (`WebAssembly.compileStreaming`; tür başlığı yanlışsa baytlardan derler). Yüklenemezse Türkçe hata ve “Yeniden dene” gösterilir.
@@ -138,16 +153,17 @@ Kullanıcının kararları (2026-09-24):
   | S1b (etiket, tutamaç) | 741 KB | 252 KB | Etiket kararı ve kuralları, tutamaç listesi, belge sırası listesi |
   | S1c (araç önizlemeleri) | 760 KB | 260 KB | Buda ve uzat önizlemesi (kenar kutusu ağacı, ışın ve çember süzgeci), hayalet yolları, esnet, toplamlar; hesapların kendisi zaten tablodaydı |
   | S2 (çizim hattı) | 770 KB | 263 KB | Çizilen geometrinin kayıtları, ifadelerin geometri değerleri, `drawnGeometry` işlemi |
+  | S3a (cepheler) | 784 KB | 267 KB | Durum tutan `FaceIndex` sınıfı, `offsetPathXY` ve `hatchLinesXY` tipli girişleri, `transformEntities`, `divisionPoints`; işlemlerin kendisi zaten tablodaydı |
 
 ### Doğrulama
 
 - **Çağrı kümeleri** (`src/wasm/parity/sets/*.ts`): her modül için adlı sınır durumları (birim testlerinden: paralel, çakışık, sıfır uzunluk, 0/2π, TM koordinatı) ve tohumlu rastgele çağrılar.
-- **Parity testi** (`src/wasm/parity/parity.test.ts`): aynı çağrıyı TS'e ve çekirdeğe verir. İşlem başına 200 rastgele durum kullanır; `PARITY_CASES` bunu artırır.
+- **Parity testi** (`src/wasm/parity/parity.test.ts`): aynı çağrıyı TS'e ve çekirdeğe verir. İşlem başına 200 rastgele durum kullanır; `PARITY_CASES` bunu artırır. Yalnız TS'i hâlâ duran işlemleri karşılaştırır (kümenin `fns` alanı, S3).
   - Sonucu sin/cos'un son bitine duyarlı bir işlem (dünya koordinatında döndürülen tarama çizgileri gibi) kümede gerekçesi yazılı daha geniş bir sınır alır (`tolerance`, ör. `hatchLines`: 2·10⁻⁸ m, TM büyüklüğünde birkaç ulp). Kaydedici bu sınırı durumlara yazar (`tol`); native ve WASM okuyucuları onu kullanır.
   - Bir rastgele çağrının bütün noktaları tek bir çerçevededir (başlangıç yakını ya da TM dilimi). Eksen ve yön vektörleri konum değil vektör olarak üretilir. 4 400 km'yi aşan bir “şekil” çizim değildir ve yalnız son bit farklarını büyütür.
   - Sayılar golden toleransıyla (1e-9 + 1e-14·büyüklük) karşılaştırılır.
   - Metin, mantıksal değer, dizi uzunluğu ve nesne anahtarları tam eşit olmalıdır.
-- **Kaydedici** (`scripts/fixtures/record-calls.test.ts`, `GOLDEN_WRITE=1`): TS varken her kümeyi `fixtures/geometry/v1/calls-*.json` dosyasına dondurur; satır başına bir durum. Adlı durumların hepsi, rastgelelerden ise üretim sırasıyla işlem başına en çok 25 durum ve 48 KB girer (en az 3; 512 noktalı bir elips ötelemesi tek başına 25 KB).
+- **Kaydedici** (`scripts/fixtures/record-calls.test.ts`, `GOLDEN_WRITE=1`): her kümeyi `fixtures/geometry/v1/calls-*.json` dosyasına dondurur; satır başına bir durum. Beklenen sonuç TS varken TS'ten, TS silindikten sonra çekirdeğin kendisinden gelir (bilinçli golden değişikliği). Adlı durumların hepsi, rastgelelerden ise üretim sırasıyla işlem başına en çok 25 durum ve 48 KB girer (en az 3; 512 noktalı bir elips ötelemesi tek başına 25 KB).
 - **Aynı dosyaları okuyanlar:**
   - native: `crates/geometry-core/tests/calls.rs`;
   - WASM, uygulamanın yolundan: `src/wasm/calls.wasm.test.ts`.
