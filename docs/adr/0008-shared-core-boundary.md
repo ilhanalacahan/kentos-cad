@@ -41,6 +41,7 @@ Kullanıcının kararları (2026-09-24):
   - `js_hypot`: V8'in `Math.hypot` yöntemidir (en büyüğe bölme ve Kahan toplamı). Node 24'te 2 milyon rastgele çiftte bit bit aynı çıktı.
   - `js_cmp`: `(a, b) => a − b` karşılaştırıcısıdır; NaN eşit sayılır.
 - **Aşkın işlevler:** sin, cos, tan, atan, atan2, asin, acos, exp, log ve pow `libm` 0.2.16'dan gelir. Native derlemede standart kütüphane platformun C kütüphanesini çağırır; bu yüzden native ve WASM son bitte ayrışabilirdi (§23.4).
+  - **TS ile son bit farkı:** Node 24'te `Math.atan2`, `tan` ve `asin` libm ile bit bit aynı çıktı (20 000'er deneme). `Math.sin` ve `cos` ise çağrıların yaklaşık %2'sinde bir ulp farklı; V8 bunlar için kendi içine aldığı glibc kodunu kullanır (LGPL olduğu için taşınamaz). İyi koşullu hesaplarda fark toleransın çok altındadır. Sonucun zaten keyfî olduğu kaotik girdilerde (çemberin tam merkezine en yakın parametre gibi) iki taraf ayrışabilir; bu girdiler parity üreteçlerine konmaz. Native ile WASM aynı libm'i kullandığı için her zaman bit bit aynıdır.
   - `crates/geometry-core/clippy.toml`, çekirdekte standart kütüphanenin `f64` aşkın yöntemlerini, `hypot`, `powi`, `mul_add`, `round`, `signum`, `min` ve `max`'ı yasaklar.
   - Toplama, çarpma, bölme, `sqrt`, `floor`, `abs` ve `%` IEEE'de iki dilde de aynıdır.
 - **TS kalıplarının karşılıkları:**
@@ -89,12 +90,14 @@ Kullanıcının kararları (2026-09-24):
   | Dilim | Ham | gzip | Not |
   |---|---|---|---|
   | 0 (altyapı) | 183 KB | 76 KB | JSON ayrıştırma ve sayı yazma kodu eklendi (önce 37 KB) |
-  | P1 (60 işlem) | 302 KB | 112 KB | İşlem başına ~0,6 KB gzip: her işlemin argüman ve sonuç tipleri için serde kodu. `opt-level = "s"` yalnız %10 kazandırır. Büyüme sürerse argümanlar tek bir `Value` yolundan okunacak (tip başına kod, işlem başına değil) |
+  | P1 (60 işlem) | 302 KB | 112 KB | `opt-level = "s"` yalnız %10 kazandırır |
+  | P2 (+43 işlem) | 388 KB | 135 KB | Argümanlar artık tek bir `Value` yolundan okunuyor (kazanç 1,5 KB); büyümenin asıl kaynağı satır içine açılan geometri ve libm kodu. Fonksiyon başına döküm P3'te çıkarılacak |
 
 ### Doğrulama
 
 - **Çağrı kümeleri** (`src/wasm/parity/sets/*.ts`): her modül için adlı sınır durumları (birim testlerinden: paralel, çakışık, sıfır uzunluk, 0/2π, TM koordinatı) ve tohumlu rastgele çağrılar.
 - **Parity testi** (`src/wasm/parity/parity.test.ts`): aynı çağrıyı TS'e ve çekirdeğe verir. İşlem başına 200 rastgele durum kullanır; `PARITY_CASES` bunu artırır.
+  - Bir rastgele çağrının bütün noktaları tek bir çerçevededir (başlangıç yakını ya da TM dilimi). Eksen ve yön vektörleri konum değil vektör olarak üretilir. 4 400 km'yi aşan bir “şekil” çizim değildir ve yalnız son bit farklarını büyütür.
   - Sayılar golden toleransıyla (1e-9 + 1e-14·büyüklük) karşılaştırılır.
   - Metin, mantıksal değer, dizi uzunluğu ve nesne anahtarları tam eşit olmalıdır.
 - **Kaydedici** (`scripts/fixtures/record-calls.test.ts`, `GOLDEN_WRITE=1`): TS varken her kümeyi `fixtures/geometry/v1/calls-*.json` dosyasına dondurur; işlem başına 25 rastgele durum, satır başına bir durum.

@@ -21,21 +21,43 @@ pub struct Op {
     pub run: fn(&str) -> Result<String, String>,
 }
 
-/// Reads the arguments, runs `f` and writes its result.
-pub fn call<A: DeserializeOwned, R: Serialize>(
-    args: &str,
-    f: impl FnOnce(A) -> R,
-) -> Result<String, String> {
-    let a: A = serde_json::from_str(args)
-        .map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı: {e}"))?;
-    json::to_string(&f(a))
+/// A call's positional arguments. They are read once into JSON values and
+/// each is converted to its type on its own, so the code for a type is
+/// shared by every operation that takes it (the WASM package stays small).
+pub struct Args(std::vec::IntoIter<serde_json::Value>);
+
+impl Args {
+    pub fn parse(text: &str) -> Result<Args, String> {
+        let list: Vec<serde_json::Value> = serde_json::from_str(text)
+            .map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı: {e}"))?;
+        Ok(Args(list.into_iter()))
+    }
+
+    /// The next argument; a missing one reads as `null` (an omitted optional argument).
+    pub fn next<T: DeserializeOwned>(&mut self, name: &str) -> Result<T, String> {
+        let v = self.0.next().unwrap_or(serde_json::Value::Null);
+        T::deserialize(v).map_err(|e| format!("Geometri çekirdeği girdiyi okuyamadı ({name}): {e}"))
+    }
 }
 
-/// Declares an operation: `op!("name", |(a, b): (A, B)| body)`.
+/// Writes a result.
+pub fn result<R: Serialize>(r: &R) -> Result<String, String> {
+    json::to_string(r)
+}
+
+/// Declares an operation: `op!("name", |a: A, b: B| body)`.
 #[macro_export]
 macro_rules! op {
-    ($name:literal, |($($a:ident),* $(,)?): $ty:ty| $body:expr) => {
-        $crate::api::Op { name: $name, run: |s| $crate::api::call(s, |($($a,)*): $ty| $body) }
+    ($name:literal, |$($a:ident : $t:ty),* $(,)?| $body:expr) => {
+        $crate::api::Op {
+            name: $name,
+            run: |s| {
+                #[allow(unused_mut)]
+                let mut args = $crate::api::Args::parse(s)?;
+                $(let $a: $t = args.next(stringify!($a))?;)*
+                $crate::api::result(&$body)
+            },
+        }
     };
 }
 

@@ -129,37 +129,29 @@ pub fn bulge_from_arc(a: &ArcGeom) -> f64 {
 }
 
 pub(crate) static OPS: &[Op] = &[
-    op!("normAngle", |(a,): (f64,)| norm_angle(a)),
-    op!("sweep", |(a0, a1): (f64, f64)| sweep(a0, a1)),
-    op!("onArc", |(theta, a0, sw, eps): (
-        f64,
-        f64,
-        f64,
-        Option<f64>
-    )| on_arc(
-        theta,
-        a0,
-        sw,
-        eps.unwrap_or(ON_ARC_EPS)
-    )),
-    op!("arcParam", |(theta, a0, sw): (f64, f64, f64)| arc_param(
+    op!("normAngle", |a: f64| norm_angle(a)),
+    op!("sweep", |a0: f64, a1: f64| sweep(a0, a1)),
+    op!("onArc", |theta: f64, a0: f64, sw: f64, eps: Option<f64>| {
+        on_arc(theta, a0, sw, eps.unwrap_or(ON_ARC_EPS))
+    }),
+    op!("arcParam", |theta: f64, a0: f64, sw: f64| arc_param(
         theta, a0, sw
     )),
-    op!("pointOnCircle", |(c, r, a): (Vec2, f64, f64)| {
+    op!("pointOnCircle", |c: Vec2, r: f64, a: f64| {
         point_on_circle(c, r, a)
     }),
-    op!("circleThrough", |(p1, p2, p3): (Vec2, Vec2, Vec2)| {
+    op!("circleThrough", |p1: Vec2, p2: Vec2, p3: Vec2| {
         circle_through(p1, p2, p3)
     }),
-    op!("arcThrough", |(s, m, e): (Vec2, Vec2, Vec2)| arc_through(
+    op!("arcThrough", |s: Vec2, m: Vec2, e: Vec2| arc_through(
         s, m, e
     )),
-    op!("tessellateArc", |(a, step): (ArcGeom, Option<f64>)| {
+    op!("tessellateArc", |a: ArcGeom, step: Option<f64>| {
         tessellate_arc(&a, step.unwrap_or(DEFAULT_STEP))
     }),
-    op!("arcStart", |(a,): (ArcGeom,)| arc_start(&a)),
-    op!("arcEnd", |(a,): (ArcGeom,)| arc_end(&a)),
-    op!("arcMid", |(a,): (ArcGeom,)| arc_mid(&a)),
-    op!("arcLength", |(a,): (ArcGeom,)| arc_length(&a)),
-    op!("bulgeFromArc", |(a,): (ArcGeom,)| bulge_from_arc(&a)),
+    op!("arcStart", |a: ArcGeom| arc_start(&a)),
+    op!("arcEnd", |a: ArcGeom| arc_end(&a)),
+    op!("arcMid", |a: ArcGeom| arc_mid(&a)),
+    op!("arcLength", |a: ArcGeom| arc_length(&a)),
+    op!("bulgeFromArc", |a: ArcGeom| bulge_from_arc(&a)),
 ];

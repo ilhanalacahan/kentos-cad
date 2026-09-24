@@ -48,8 +48,18 @@ export interface CallFile {
 /** Deterministic random numbers (mulberry32): the same seed gives the same calls everywhere. */
 export class Gen {
   private s: number;
+  /** Where this call's points lie: near the origin or in a TM zone (see `frame`). */
+  private origin: Vec2 = { x: 0, y: 0 };
   constructor(seed: number) {
     this.s = seed >>> 0;
+  }
+  /**
+   * Starts a call: its points share one place, near the origin or in a
+   * TUREF TM zone. A shape spanning 4 400 km from one to the other is not a
+   * drawing, and would only magnify last-bit differences (docs/adr/0008).
+   */
+  frame(): void {
+    this.origin = this.chance(0.3) ? { x: 486000, y: 4420000 } : { x: 0, y: 0 };
   }
   next(): number {
     this.s = (this.s + 0x6d2b79f5) >>> 0;
@@ -70,14 +80,17 @@ export class Gen {
   chance(p: number): boolean {
     return this.next() < p;
   }
-  /** A point near the origin, or in a TUREF TM zone (the coordinates KentOS really sees). */
+  /** A point of this call's frame. */
   pt(scale = 100): Vec2 {
-    if (this.chance(0.3)) return { x: 486000 + this.num(-scale, scale), y: 4420000 + this.num(-scale, scale) };
+    return { x: this.origin.x + this.num(-scale, scale), y: this.origin.y + this.num(-scale, scale) };
+  }
+  /** A vector (a direction or an axis), never a position. */
+  vec(scale = 100): Vec2 {
     return { x: this.num(-scale, scale), y: this.num(-scale, scale) };
   }
-  /** A point snapped to a coarse grid, so coincidences and parallels happen. */
+  /** A point of this call's frame snapped to a coarse grid, so coincidences and parallels happen. */
   gridPt(step = 1, cells = 6): Vec2 {
-    return { x: this.int(-cells, cells) * step, y: this.int(-cells, cells) * step };
+    return { x: this.origin.x + this.int(-cells, cells) * step, y: this.origin.y + this.int(-cells, cells) * step };
   }
   pts(n: number, scale = 100): Vec2[] {
     const base = this.pt(scale);
@@ -141,7 +154,10 @@ export function callsOf(set: CallSet, n: number, seed = 20260924): Call[] {
   return [...set.named, ...set.random(new Gen(seed), n)];
 }
 
-/** `n` random calls of one operation, named by their index. */
-export function repeat(fn: string, n: number, args: () => unknown[]): Call[] {
-  return Array.from({ length: n }, (_, i) => ({ name: `rastgele ${i + 1}`, fn, args: args() }));
+/** `n` random calls of one operation, named by their index; each call gets its own frame. */
+export function repeat(g: Gen, fn: string, n: number, args: () => unknown[]): Call[] {
+  return Array.from({ length: n }, (_, i) => {
+    g.frame();
+    return { name: `rastgele ${i + 1}`, fn, args: args() };
+  });
 }

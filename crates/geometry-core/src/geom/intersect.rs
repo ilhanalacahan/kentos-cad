@@ -341,55 +341,46 @@ fn arc_edge(e: Edge) -> Result<(f64, f64), String> {
 }
 
 pub(crate) static OPS: &[Op] = &[
-    op!("onEdgeArc", |(e, theta): (Edge, f64)| arc_edge(e)
+    op!("onEdgeArc", |e: Edge, theta: f64| arc_edge(e)
         .map(|(a0, s)| on_edge_arc(a0, s, theta))
         .ok()),
-    op!("lineLine", |(a, b, c, d): (Vec2, Vec2, Vec2, Vec2)| {
+    op!("lineLine", |a: Vec2, b: Vec2, c: Vec2, d: Vec2| {
         line_line(a, b, c, d)
     }),
-    op!("segSeg", |(a, b, c, d, eps): (
-        Vec2,
-        Vec2,
-        Vec2,
-        Vec2,
-        Option<f64>
-    )| seg_seg(a, b, c, d, eps.unwrap_or(1e-9))),
-    op!("lineCircleParams", |(a, b, c, r): (
-        Vec2,
-        Vec2,
-        Vec2,
-        f64
-    )| line_circle_params(a, b, c, r)),
-    op!("circleCircle", |(c1, r1, c2, r2): (
-        Vec2,
-        f64,
-        Vec2,
-        f64
-    )| circle_circle(c1, r1, c2, r2)),
-    op!("paramOn", |(e, p): (Edge, Vec2)| param_on(&e, p)),
-    op!("pointAt", |(e, t): (Edge, f64)| point_at(&e, t)),
-    op!("intersectEdges", |(e1, e2): (Edge, Edge)| intersect_edges(
+    op!("segSeg", |a: Vec2,
+                   b: Vec2,
+                   c: Vec2,
+                   d: Vec2,
+                   eps: Option<f64>| seg_seg(
+        a,
+        b,
+        c,
+        d,
+        eps.unwrap_or(1e-9)
+    )),
+    op!("lineCircleParams", |a: Vec2, b: Vec2, c: Vec2, r: f64| {
+        line_circle_params(a, b, c, r)
+    }),
+    op!("circleCircle", |c1: Vec2, r1: f64, c2: Vec2, r2: f64| {
+        circle_circle(c1, r1, c2, r2)
+    }),
+    op!("paramOn", |e: Edge, p: Vec2| param_on(&e, p)),
+    op!("pointAt", |e: Edge, t: f64| point_at(&e, t)),
+    op!("intersectEdges", |e1: Edge, e2: Edge| intersect_edges(
         &e1, &e2
     )),
-    op!("rayEdge", |(o, dir, e, min_t): (
-        Vec2,
-        Vec2,
-        Edge,
-        Option<f64>
-    )| ray_edge(
-        o,
-        dir,
-        &e,
-        min_t.unwrap_or(1e-9)
-    )),
-    op!("closestOnEdge", |(e, p): (Edge, Vec2)| closest_on_edge(
-        &e, p
-    )),
-    op!("perpendicularFoot", |(e, p): (Edge, Vec2)| {
+    op!("rayEdge", |o: Vec2,
+                    dir: Vec2,
+                    e: Edge,
+                    min_t: Option<f64>| {
+        ray_edge(o, dir, &e, min_t.unwrap_or(1e-9))
+    }),
+    op!("closestOnEdge", |e: Edge, p: Vec2| closest_on_edge(&e, p)),
+    op!("perpendicularFoot", |e: Edge, p: Vec2| {
         perpendicular_foot(&e, p)
     }),
-    op!("fullCircle", |(c, r): (Vec2, f64)| full_circle(c, r)),
-    op!("tangentPoints", |(p, c, r): (Vec2, Vec2, f64)| {
+    op!("fullCircle", |c: Vec2, r: f64| full_circle(c, r)),
+    op!("tangentPoints", |p: Vec2, c: Vec2, r: f64| {
         tangent_points(p, c, r)
     }),
 ];

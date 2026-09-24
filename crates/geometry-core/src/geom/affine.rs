@@ -92,20 +92,20 @@ pub fn is_reflection(m: &Affine) -> bool {
 }
 
 pub(crate) static OPS: &[Op] = &[
-    op!("translation", |(dx, dy): (f64, f64)| translation(dx, dy)),
-    op!("rotation", |(angle, o): (f64, Option<Vec2>)| rotation(
+    op!("translation", |dx: f64, dy: f64| translation(dx, dy)),
+    op!("rotation", |angle: f64, o: Option<Vec2>| rotation(
         angle,
         o.unwrap_or(ORIGIN)
     )),
-    op!("scaling", |(s, o): (f64, Option<Vec2>)| scaling(
+    op!("scaling", |s: f64, o: Option<Vec2>| scaling(
         s,
         o.unwrap_or(ORIGIN)
     )),
-    op!("mirror", |(p, q): (Vec2, Vec2)| mirror(p, q)),
-    op!("compose", |(m2, m1): (Affine, Affine)| compose(&m2, &m1)),
-    op!("apply", |(m, p): (Affine, Vec2)| apply(&m, p)),
-    op!("applyLinear", |(m, v): (Affine, Vec2)| apply_linear(&m, v)),
-    op!("determinant", |(m,): (Affine,)| determinant(&m)),
-    op!("lengthScale", |(m,): (Affine,)| length_scale(&m)),
-    op!("isReflection", |(m,): (Affine,)| is_reflection(&m)),
+    op!("mirror", |p: Vec2, q: Vec2| mirror(p, q)),
+    op!("compose", |m2: Affine, m1: Affine| compose(&m2, &m1)),
+    op!("apply", |m: Affine, p: Vec2| apply(&m, p)),
+    op!("applyLinear", |m: Affine, v: Vec2| apply_linear(&m, v)),
+    op!("determinant", |m: Affine| determinant(&m)),
+    op!("lengthScale", |m: Affine| length_scale(&m)),
+    op!("isReflection", |m: Affine| is_reflection(&m)),
 ];

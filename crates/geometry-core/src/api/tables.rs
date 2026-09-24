@@ -8,4 +8,9 @@ pub(super) static TABLES: &[&[Op]] = &[
     crate::geom::arc::OPS,
     crate::geom::intersect::OPS,
     crate::geom::bulge::OPS,
+    crate::geom::ellipse::OPS,
+    crate::geom::spline::OPS,
+    crate::geom::shapes::OPS,
+    crate::geom::survey::OPS,
+    crate::geom::tangent_circle::OPS,
 ];

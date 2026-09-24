@@ -139,18 +139,18 @@ pub fn bearing_grad(a: Vec2, b: Vec2) -> f64 {
 }
 
 pub(crate) static OPS: &[Op] = &[
-    op!("dist", |(a, b): (Vec2, Vec2)| dist(a, b)),
-    op!("signedArea", |(pts,): (Vec<Vec2>,)| signed_area(&pts)),
-    op!("pathLength", |(pts, closed): (Vec<Vec2>, Option<bool>)| {
+    op!("dist", |a: Vec2, b: Vec2| dist(a, b)),
+    op!("signedArea", |pts: Vec<Vec2>| signed_area(&pts)),
+    op!("pathLength", |pts: Vec<Vec2>, closed: Option<bool>| {
         path_length(&pts, closed.unwrap_or(false))
     }),
-    op!("centroid", |(pts,): (Vec<Vec2>,)| centroid(&pts)),
-    op!("pointInPolygon", |(p, pts): (Vec2, Vec<Vec2>)| {
+    op!("centroid", |pts: Vec<Vec2>| centroid(&pts)),
+    op!("pointInPolygon", |p: Vec2, pts: Vec<Vec2>| {
         point_in_polygon(p, &pts)
     }),
-    op!("distToSegment", |(p, a, b): (Vec2, Vec2, Vec2)| {
+    op!("distToSegment", |p: Vec2, a: Vec2, b: Vec2| {
         dist_to_segment(p, a, b)
     }),
-    op!("angleDeg", |(a, b): (Vec2, Vec2)| angle_deg(a, b)),
-    op!("bearingGrad", |(a, b): (Vec2, Vec2)| bearing_grad(a, b)),
+    op!("angleDeg", |a: Vec2, b: Vec2| angle_deg(a, b)),
+    op!("bearingGrad", |a: Vec2, b: Vec2| bearing_grad(a, b)),
 ];

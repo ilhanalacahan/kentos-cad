@@ -282,84 +282,60 @@ pub fn clean_bulge_path(pts: &[Vec2], bulges: Option<&[f64]>, closed: bool, tol:
 type Bulges = Option<Vec<f64>>;
 
 pub(crate) static OPS: &[Op] = &[
-    op!("bulgeAt", |(b, i): (Bulges, usize)| bulge_at(
-        b.as_deref(),
-        i
-    )),
-    op!("isArcBulge", |(b,): (f64,)| is_arc_bulge(b)),
-    op!("hasBulges", |(b,): (Bulges,)| has_bulges(b.as_deref())),
-    op!("bulgeArc", |(a, b, bulge): (Vec2, Vec2, f64)| bulge_arc(
+    op!("bulgeAt", |b: Bulges, i: usize| bulge_at(b.as_deref(), i)),
+    op!("isArcBulge", |b: f64| is_arc_bulge(b)),
+    op!("hasBulges", |b: Bulges| has_bulges(b.as_deref())),
+    op!("bulgeArc", |a: Vec2, b: Vec2, bulge: f64| bulge_arc(
         a, b, bulge
     )),
-    op!("bulgeOfSweep", |(s,): (f64,)| bulge_of_sweep(s)),
-    op!(
-        "segmentMid",
-        |(a, b, bulge): (Vec2, Vec2, f64)| segment_mid(a, b, bulge)
-    ),
-    op!("bulgeThrough", |(a, m, b): (Vec2, Vec2, Vec2)| {
+    op!("bulgeOfSweep", |s: f64| bulge_of_sweep(s)),
+    op!("segmentMid", |a: Vec2, b: Vec2, bulge: f64| segment_mid(
+        a, b, bulge
+    )),
+    op!("bulgeThrough", |a: Vec2, m: Vec2, b: Vec2| {
         bulge_through(a, m, b)
     }),
-    op!("tangentBulge", |(a, dir, b): (Vec2, Vec2, Vec2)| {
+    op!("tangentBulge", |a: Vec2, dir: Vec2, b: Vec2| {
         tangent_bulge(a, dir, b)
     }),
-    op!("segmentTangent", |(a, b, bulge, at_end): (
-        Vec2,
-        Vec2,
-        f64,
-        bool
-    )| segment_tangent(
-        a, b, bulge, at_end
-    )),
-    op!("bulgePathEdges", |(pts, b, closed): (
-        Vec<Vec2>,
-        Bulges,
-        bool
-    )| bulge_path_edges(
-        &pts,
-        b.as_deref(),
-        closed
-    )),
-    op!("bulgePathOutline", |(pts, b, closed, step): (
-        Vec<Vec2>,
-        Bulges,
-        bool,
-        Option<f64>
-    )| bulge_path_outline(
-        &pts,
-        b.as_deref(),
-        closed,
-        step.unwrap_or(DEFAULT_STEP)
-    )),
-    op!("bulgePathLength", |(pts, b, closed): (
-        Vec<Vec2>,
-        Bulges,
-        bool
-    )| bulge_path_length(
-        &pts,
-        b.as_deref(),
-        closed
-    )),
-    op!("bulgeRingArea", |(pts, b): (Vec<Vec2>, Bulges)| {
+    op!("segmentTangent", |a: Vec2,
+                           b: Vec2,
+                           bulge: f64,
+                           at_end: bool| {
+        segment_tangent(a, b, bulge, at_end)
+    }),
+    op!("bulgePathEdges", |pts: Vec<Vec2>,
+                           b: Bulges,
+                           closed: bool| {
+        bulge_path_edges(&pts, b.as_deref(), closed)
+    }),
+    op!(
+        "bulgePathOutline",
+        |pts: Vec<Vec2>, b: Bulges, closed: bool, step: Option<f64>| bulge_path_outline(
+            &pts,
+            b.as_deref(),
+            closed,
+            step.unwrap_or(DEFAULT_STEP)
+        )
+    ),
+    op!(
+        "bulgePathLength",
+        |pts: Vec<Vec2>, b: Bulges, closed: bool| bulge_path_length(&pts, b.as_deref(), closed)
+    ),
+    op!("bulgeRingArea", |pts: Vec<Vec2>, b: Bulges| {
         bulge_ring_area(&pts, b.as_deref())
     }),
-    op!("reverseBulgePath", |(pts, b, closed): (
-        Vec<Vec2>,
-        Bulges,
-        bool
-    )| reverse_bulge_path(
-        &pts,
-        b.as_deref(),
-        closed
-    )),
-    op!("cleanBulgePath", |(pts, b, closed, tol): (
-        Vec<Vec2>,
-        Bulges,
-        bool,
-        Option<f64>
-    )| clean_bulge_path(
-        &pts,
-        b.as_deref(),
-        closed,
-        tol.unwrap_or(1e-9)
-    )),
+    op!(
+        "reverseBulgePath",
+        |pts: Vec<Vec2>, b: Bulges, closed: bool| reverse_bulge_path(&pts, b.as_deref(), closed)
+    ),
+    op!(
+        "cleanBulgePath",
+        |pts: Vec<Vec2>, b: Bulges, closed: bool, tol: Option<f64>| clean_bulge_path(
+            &pts,
+            b.as_deref(),
+            closed,
+            tol.unwrap_or(1e-9)
+        )
+    ),
 ];

@@ -13,15 +13,17 @@ const N = Number(env.PARITY_CASES ?? 200);
 
 for (const set of SETS)
   describe(`TS ↔ Rust: ${set.file}`, () => {
+    let calls: ReturnType<typeof callsOf> | null = null;
     for (const [fn, ts] of Object.entries(set.fns))
       it(fn, () => {
         const failures: string[] = [];
-        for (const c of callsOf(set, N).filter((c) => c.fn === fn)) {
+        calls ??= callsOf(set, N);
+        for (const c of calls.filter((c) => c.fn === fn)) {
           const want = toJson((ts as (...a: unknown[]) => unknown)(...c.args));
           const got = toJson(callNamed(c.fn, c.args));
           const r = sameResult(got, want, TOLERANCE, c.name);
           if (r) failures.push(`${r}\n    girdi: ${JSON.stringify(c.args).slice(0, 400)}`);
         }
         expect(failures.slice(0, 5).join('\n')).toBe('');
-      });
+      }, N > 1000 ? 600_000 : undefined);
   });

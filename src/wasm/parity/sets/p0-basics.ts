@@ -16,8 +16,8 @@ export const P0: CallSet = {
     { name: 'boş halka', fn: 'pointInPolygon', args: [{ x: 0, y: 0 }, []] },
   ],
   random: (g, n) => [
-    ...repeat('dist', n, () => [g.pt(), g.pt()]),
-    ...repeat('signedArea', n, () => [g.ring(g.int(3, 12), 80, g.chance(0.5))]),
-    ...repeat('pointInPolygon', n, () => [g.chance(0.5) ? g.gridPt(10) : g.pt(), g.chance(0.5) ? g.ring(g.int(3, 9)) : Array.from({ length: g.int(3, 7) }, () => g.gridPt(10))]),
+    ...repeat(g, 'dist', n, () => [g.pt(), g.pt()]),
+    ...repeat(g, 'signedArea', n, () => [g.ring(g.int(3, 12), 80, g.chance(0.5))]),
+    ...repeat(g, 'pointInPolygon', n, () => [g.chance(0.5) ? g.gridPt(10) : g.pt(), g.chance(0.5) ? g.ring(g.int(3, 9)) : Array.from({ length: g.int(3, 7) }, () => g.gridPt(10))]),
   ],
 };

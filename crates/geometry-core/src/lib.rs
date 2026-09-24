@@ -12,8 +12,9 @@
     deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
 )]
 // A faithful port keeps the TypeScript's comparisons and index loops: `t < lo
-// || t > hi` lets NaN through where `!(lo..=hi).contains(&t)` would not.
-#![allow(clippy::manual_range_contains, clippy::needless_range_loop)]
+// || t > hi` lets NaN through where `!(lo..=hi).contains(&t)` would not, and
+// `!(r > 0)` is the TypeScript's way of refusing NaN as well as r ≤ 0.
+#![allow(clippy::manual_range_contains, clippy::needless_range_loop, clippy::neg_cmp_op_on_partial_ord)]
 
 pub mod api;
 pub mod ewkb;
