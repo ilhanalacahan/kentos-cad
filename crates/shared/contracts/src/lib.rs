@@ -1,9 +1,9 @@
 //! Versioned KentOS contracts (CLAUDE.md §14): the shapes that cross a
 //! boundary between the browser, WASM, the API and stored files. They are
 //! defined once, here; `cargo test -p kentos-contracts` writes the matching
-//! TypeScript types to `src/contracts/generated/` (ts-rs), and the app's
+//! TypeScript types to `apps/web/src/contracts/generated/` (ts-rs), and the app's
 //! internal types are checked against them at compile time
-//! (`src/contracts/contracts.test.ts`).
+//! (`apps/web/src/contracts/contracts.test.ts`).
 //!
 //! The TypeScript generation is the `ts` feature (on by default, so
 //! `cargo test` keeps the generated types current). Libraries and programs
