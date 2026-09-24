@@ -34,6 +34,26 @@ Notlar:
 - Nesne izleme ve bilgi kartı ölçümde kapalı (ikisi de beklemeye bağlı). Chrome en çok 959 MB (PSS) kullandı; betik 3,5 GB'ı aşarsa durur. Üç koşu 5 dakika sürdü.
 - Başka bir makinede ya da başka bir Chrome ya da GPU ile alınan ölçüm bu tabanla karşılaştırılmaz; önce aynı koşullarda yeni taban alınır.
 
+## S1 önce/sonra, bulut (2026-09-24, `d8a7beb` → `21ac4c5`)
+
+Kaynaklar: [interaction-s1-before.md](interaction-s1-before.md) ve [interaction-s1-after.md](interaction-s1-after.md) (karşılaştırması raporun sonunda; ham veri `.json`). Geometri deposundan (ADR 0008 S1) önce P8'de, sonra S1c'de; ikisi de bulut konteynerinde (Xeon, 4 iş parçacığı, Chromium 141, SwiftShader, `--allow-swiftshader`), tek koşu, makinede başka işler çalışırken alındı. Yalnız ana iş parçacığı süreleri anlamlıdır; tabanla (kullanıcının makinesi) karşılaştırılmaz.
+
+| Ölçüt (p95, ms) | `parsel-50k` önce → sonra | `hat-1m` önce → sonra |
+|---|---|---|
+| Seçme, imleç hareketi başına (1:1000 / genel) | 18,4 / 20,6 → 0,11 / 0,27 | 3,40 / 8,21 → 0,66 / 1,60 |
+| Kenet, imleç hareketi başına (1:1000 / genel) | 19,0 / 22,6 → 0,12 / 3,15 | 7,64 / 46,8 → 1,40 / 31,9 |
+| Buda: kenar seçme (1:1000) | 19,3 → 0,18 | 4,10 → 1,07 |
+| Buda önizlemesi: kare, ana iş parçacığı (1:1000) | 31,6 → 2,59 | 972 → 17,9 |
+| Etiketler, kare başına (kaydırma, 1:1000 / genel) | 19,2 / 21,2 → 0,71 / 10,0 | 0,58 / 0,73 → 0,47 / 0,31 |
+| Büyük katmanı yeniden kurma (stil değişikliği) | 219 → 307 | 11 289 → 13 129 |
+
+Notlar:
+
+- **Seçme, kenet, buda ve etiketler** 10–1000 kat hızlandı. `hat-1m` genel görünümde kenet hâlâ 19 ms (p50) ve 32 ms (p95): imlecin yakınındaki eşyükseltilerin kesişim adayları. Sıradaki iyileştirme hedefi budur.
+- **Yeniden kurma** P8 ile S1c arasında değişmeyen koddur (`src/render`, `src/style` aynı). Fark iki koşunun makine yükünden gelir; `hat-1m`'de süreyi SwiftShader'ın yazılımla yüklemesi belirler.
+- Betik 29 ölçütü gerileme sayıyor. Çoğu p50'si değişmeyen karelerin p95 sıçramaları (`hat-1m` seç karesi p50 1,09 → 1,00, p95 1,36 → 12,3), SwiftShader'ın kare aralığı ve 1 ms altındaki GPU gönderimleridir. Tek koşu ve yüklü makinede p95 güvenilir değildir.
+- Kabul ölçümü kullanıcının makinesindedir: `pnpm perf:interaction --label s1`, tabanla karşılaştırmalı.
+
 ## Faz A başlangıç kaydı (2026-09-23, `85be871`)
 
 Kaynaklar:

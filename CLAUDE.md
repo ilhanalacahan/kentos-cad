@@ -543,7 +543,7 @@ kurallar büyük veriye geçerken kodun yeniden yazılmasını önlemek içindir
 
 - `CadDocument.byLayer()` her katman için bütün varlıkları geziyor → katman başına dizin gerekiyor.
 - Izgara her kamera değişiminde yeni `Float32Array` ayırıyor → önceden ayrılmış tampona `bufferSubData` ile yazılmalı.
-- Üst katman etiketleri her karede bütün varlıkları geziyor → görünür karo ve etiket önbelleği gerekiyor.
+- Üst katmanın etiket kararı geometri deposunun R-ağacından gelir (S1b); genel görünümde 81 bin nesnede kare başına ~10 ms (bulut) sürüyor → etiket önbelleği ya da ölçeğe göre seyreltme gerekiyor.
 - `LayersPanel` her değişiklikte ağacın tamamını yeniden çiziyor → satır bazlı güncelleme ve sanallaştırma gerekiyor.
 - `geometryChanged()` `JSON.stringify` ile karşılaştırıyor → alan bazlı karşılaştırma gerekiyor.
 
@@ -800,7 +800,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
   - Canlı olay sinyali tek sunucu sürecinde (çok süreçte 5 sn'lik denetim yakalar; PostgreSQL LISTEN/NOTIFY yok). Olay günlüğü `KENTOS_EVENT_RETENTION_DAYS` gün (varsayılan 7) saklanır ve `kentosd serve` saatte bir budar; komut günlüğü (idempotency) ve denetim kaydı budanmıyor.
   - Yükleme kesilirse proje sunucuda yarım kalır (sürdürülemez).
   - Kurumun OpenID sunucusuyla gerçek deneme yapılmadı (yalnız sahte sağlayıcı).
-- ADR 0005 hedefleri taslak; ağır modül açılışı henüz ölçülmüyor. §6.1 etkileşim bütçeleri `pnpm perf:interaction` ile ölçülüyor (taban `docs/perf/interaction-baseline.md`, geometri henüz TypeScript'teyken): 81 bin nesnede imleç başına seçme ve kenet p95 9–13 ms (öneri < 2 ms; `PickIndex` her olayda bütün nesneleri geziyor), üst katman etiketleri her karede bütün nesneleri gezdiği için büyük veride karenin çoğunu alıyor, eşyükseltilerde (1 milyon segment) buda önizlemesi kare başına ~0,75 s sürüyor ve genel görünümde kaydırma GPU'da ~21 fps'ye iniyor (`docs/perf/README.md`).
+- ADR 0005 hedefleri taslak; ağır modül açılışı henüz ölçülmüyor. §6.1 etkileşim bütçeleri `pnpm perf:interaction` ile ölçülüyor (taban `docs/perf/interaction-baseline.md`, geometri henüz TypeScript'teyken): 81 bin nesnede imleç başına seçme ve kenet p95 9–13 ms, eşyükseltilerde (1 milyon segment) buda önizlemesi kare başına ~0,75 s, genel görünümde kaydırma GPU'da ~21 fps. Geometri deposundan (S1) sonra aynı bulut makinesinde seçme ve kenet 0,1–3 ms'ye, budama önizlemesi 18 ms'ye indi; eşyükseltilerde genel görünümde kenet hâlâ ~32 ms (p95, kesişim adayları). Kabul ölçümü kullanıcının makinesinde yapılacak (`docs/perf/README.md`).
 
 ---
 

@@ -50,12 +50,9 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Eski TS `PickIndex` `src/wasm/parity/reference/picking.ts`'te parity referansıdır; S3'te silinir. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
 - **S1b yapıldı:** etiket kararları (`labels`) ve tutamaçlar (`grips`) depodan; `drawLabels`, `drawGrips`, `gripAt` kayıtları kullanır (`viewport/storeRecords.ts`). Eski karar mantığı `src/wasm/parity/reference/overlay.ts`'te referanstır.
 - **S1c yapıldı:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; depo `trim_entity`/`extend_entity`'e yalnız hedefe ya da ucun ışınına/çemberine değebilecek kenarları verir), `transformOutlines` (hayalet yolları), `stretchOutlines`, `measure` (`PropertiesPanel` toplamları); `PasteTool` kendi deposunu kurar. Eski hesap `src/wasm/parity/reference/tools.ts`'te referanstır; donmuş dosyaya 400 durum eklendi. Aynı makinede `hat-1m` budama önizlemesi 1:1000'de 1,5 s → 10 ms (ADR 0008).
-- **Kalan:** **S1d, ölçüm ve belgeler:** önce/sonra etkileşim ölçümü (aşağıdaki yöntemle), ADR 0008'e sonuçlar, WASM boyutuna bakış.
-- **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur (bir kez `hat-1m`'de düştü). “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın; ikisi arasında başka ağır iş çalıştırmayın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır ve kaydırma senaryosu dakikalar sürer.
-  - Bulutta S1 öncesi kısmi taban (`parsel-50k`, p50, imleç başına): seçme yakın 13,2 ms, genel 18,9; kenet yakın 16,8, genel 22,3; buda kenar seçme 20,3.
-- **Kabul:** tabana göre p95'te gerileme olmamalı.
-  - Ölçüm kullanıcının makinesinde yapılır (bkz. §5); bulutta alınan sayı tabanla karşılaştırılamaz.
-  - Ayrıntıları ADR 0008'in “Geometri deposu” başlığına yazın.
+- **S1d yapıldı (bulut ölçümü):** P8 (`d8a7beb`) ve S1c (`21ac4c5`) aynı konteynerde SwiftShader ile ölçüldü (`docs/perf/interaction-s1-before.md`, `interaction-s1-after.md`, özet `docs/perf/README.md`, ADR 0008 “Uygulamada önce/sonra”). İmleç başına seçme ve kenet `parsel-50k`'da ~19 ms'den 0,1–3 ms'ye, `hat-1m` budama önizlemesi 972 ms'den 18 ms'ye indi. `hat-1m` genel görünümde kenet 32 ms (p95) ile hâlâ yüksek: sıradaki iyileştirme hedefi.
+- **Kabul ölçümü kullanıcıda:** `pnpm perf:interaction --label s1` (tabanla karşılaştırmalı, kullanıcının makinesinde). Kabul: tabana göre p95'te gerileme olmamalı. Sonuç gelince ADR 0008 ve `docs/perf/README.md`'ye yazılır.
+- **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur. “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır, bir koşu ~50 dk sürer. Makinede başka iş varken p95 güvenilmez.
 
 ### S2: çizim hattı (yapıldı)
 
@@ -195,3 +192,4 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 5. ADR 0005 (performans hedefleri) hâlâ taslak; onay bekliyor.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
+8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına yaklaşıyor (S3a'da 267 KB; S5 ile ~280 KB). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
