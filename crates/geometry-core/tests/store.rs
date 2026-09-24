@@ -2,13 +2,20 @@
 //! PickIndex it replaced (`fixtures/geometry/v1/store-v1.json`, recorded by
 //! `scripts/fixtures/record-store.test.ts`; docs/adr/0008, S1): picking,
 //! edge picking, snapping, window and crossing selection, enclosing shapes,
-//! overlapping objects and boundary edges on a fixed scene. The WASM build
-//! runs the same file (`src/wasm/store.wasm.test.ts`).
+//! overlapping objects, boundary edges, labels and grips on a fixed scene,
+//! and the tool previews and totals (trim, extend, ghosts, stretch ghosts,
+//! selection totals). The WASM build runs the same file
+//! (`src/wasm/store.wasm.test.ts`).
 
 // Test harness code, not the core: the std float methods are fine here.
 #![allow(clippy::disallowed_methods)]
 
+use std::collections::HashMap;
+
 use kentos_geometry_core::Vec2;
+use kentos_geometry_core::api::json::{FromJson, Json, ToJson};
+use kentos_geometry_core::entity::Entity;
+use kentos_geometry_core::geom::affine::Affine;
 use kentos_geometry_core::geom::intersect::Edge;
 use kentos_geometry_core::geometry::Bounds;
 use kentos_geometry_core::store::Store;
@@ -102,6 +109,17 @@ fn opt(id: Option<f64>) -> Value {
     id.map_or(Value::Null, |x| json!(x))
 }
 
+fn ids(v: &Value) -> Vec<f64> {
+    v.as_array().unwrap().iter().map(num).collect()
+}
+
+/// A core answer as the TypeScript's `toJson` writes it (NaN and ±∞ as `"#NaN"`, `"#Inf"`, `"#-Inf"`).
+fn core_json<T: ToJson + ?Sized>(v: &T) -> Value {
+    let mut out = String::new();
+    v.write_json(&mut out);
+    serde_json::from_str(&out).expect("core JSON")
+}
+
 #[test]
 fn the_store_gives_the_typescript_pick_index_answers() {
     let file: Value = serde_json::from_str(&std::fs::read_to_string(FILE).expect("store fixture"))
@@ -120,6 +138,18 @@ fn the_store_gives_the_typescript_pick_index_answers() {
     store
         .set_label_defaults_json(&serde_json::to_string(&file["labelDefaults"]).unwrap())
         .expect("label defaults");
+    let entities: HashMap<u64, Entity> = file["entities"]
+        .as_array()
+        .expect("entities")
+        .iter()
+        .map(|e| {
+            let json = Json::parse(&e.to_string()).expect("entity JSON");
+            (
+                num(&e["id"]).to_bits(),
+                Entity::from_json(&json).expect("entity"),
+            )
+        })
+        .collect();
     let cases = file["cases"].as_array().expect("cases");
     assert!(cases.len() > 500, "{} cases", cases.len());
     let mut failures = Vec::new();
@@ -153,9 +183,37 @@ fn the_store_gives_the_typescript_pick_index_answers() {
             "overlapping" => json!(store.overlapping(&rect(&a[0]), except(&a[1])).iter().map(|it| it.id).collect::<Vec<_>>()),
             "edgesIn" => json!(store.edges_in(&rect(&a[0]), except(&a[1])).iter().map(edge).collect::<Vec<_>>()),
             "labels" => json!(store.labels(&rect(&a[0]), num(&a[1]), a[2].as_f64())),
-            "grips" => {
-                let ids: Vec<f64> = a[0].as_array().unwrap().iter().map(num).collect();
-                json!(store.grips(&ids))
+            "grips" => json!(store.grips(&ids(&a[0]))),
+            "trim" | "extend" => {
+                let id = num(&a[0]);
+                let target = &entities[&id.to_bits()];
+                let pick = Vec2::new(num(&a[1]["x"]), num(&a[1]["y"]));
+                let chosen = (!a[3].is_null()).then(|| ids(&a[3]));
+                let view = rect(&a[2]);
+                if c["op"] == "trim" {
+                    core_json(&store.trim_preview(target, pick, Some(id), chosen.as_deref(), &view))
+                } else {
+                    core_json(&store.extend_preview(target, pick, Some(id), chosen.as_deref(), &view))
+                }
+            }
+            "ghosts" => {
+                let affines: Vec<Affine> = a[1]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|m| std::array::from_fn(|i| num(&m[i])))
+                    .collect();
+                core_json(&store.transform_outlines(&ids(&a[0]), &affines, num(&a[2]) as usize))
+            }
+            "stretchGhosts" => core_json(&store.stretch_outlines(
+                &ids(&a[0]),
+                &rect(&a[1]),
+                num(&a[2]),
+                num(&a[3]),
+            )),
+            "measure" => {
+                let (length, area) = store.measure(&ids(&a[0]));
+                core_json(&[length, area])
             }
             op => panic!("unknown op {op}"),
         };

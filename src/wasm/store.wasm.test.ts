@@ -4,8 +4,9 @@ import { sameResult, toJson, type Tolerance } from './parity/harness';
 
 /**
  * The frozen store fixture (fixtures/geometry/v1/store-v1.json: the
- * TypeScript PickIndex's answers on a fixed scene) through the app's path
- * into the WASM geometry store; Rust runs the same file natively
+ * TypeScript PickIndex's answers on a fixed scene, and the tool previews
+ * and totals it computed) through the app's path into the WASM geometry
+ * store; Rust runs the same file natively
  * (crates/geometry-core/tests/store.rs). It stays after the TypeScript
  * reference is deleted (docs/adr/0008, S1).
  */
@@ -16,7 +17,7 @@ interface StoreFile {
   tolerance: Tolerance;
   layers: unknown[];
   labelDefaults: unknown;
-  entities: unknown[];
+  entities: { id: number }[];
   cases: { name: string; op: string; args: unknown[]; expect: unknown }[];
 }
 
@@ -39,10 +40,17 @@ function edges(f: Float64Array): unknown[] {
   return out;
 }
 
-function answer(s: CoreStore, op: string, a: unknown[]): unknown {
+function answer(s: CoreStore, byId: Map<number, unknown>, op: string, a: unknown[]): unknown {
   const n = (i: number) => a[i] as number;
   const r = a[0] as Rect;
   const except = (a[1] as number | null) ?? undefined;
+  const ids = (i: number) => Float64Array.from(a[i] as number[]);
+  const tool = (f: typeof s.trimPreview) => {
+    const p = a[1] as { x: number; y: number };
+    const v = a[2] as Rect;
+    const chosen = a[3] as number[] | null;
+    return f.call(s, JSON.stringify(byId.get(n(0))), p.x, p.y, n(0), chosen && Float64Array.from(chosen), v.minX, v.minY, v.maxX, v.maxY);
+  };
   switch (op) {
     case 'hit':
       return s.hit(n(0), n(1), n(2)) ?? null;
@@ -72,7 +80,19 @@ function answer(s: CoreStore, op: string, a: unknown[]): unknown {
     case 'labels':
       return Array.from(s.labels(r.minX, r.minY, r.maxX, r.maxY, n(1), a[2] as number | null));
     case 'grips':
-      return Array.from(s.grips(Float64Array.from(a[0] as number[])));
+      return Array.from(s.grips(ids(0)));
+    case 'trim':
+      return tool(s.trimPreview);
+    case 'extend':
+      return tool(s.extendPreview);
+    case 'ghosts':
+      return Array.from(s.transformOutlines(ids(0), Float64Array.from((a[1] as number[][]).flat()), n(2)));
+    case 'stretchGhosts': {
+      const w = a[1] as Rect;
+      return Array.from(s.stretchOutlines(ids(0), w.minX, w.minY, w.maxX, w.maxY, n(2), n(3)));
+    }
+    case 'measure':
+      return Array.from(s.measure(ids(0)));
   }
   throw new Error(`bilinmeyen sorgu: ${op}`);
 }
@@ -90,7 +110,8 @@ for (const [path, text] of Object.entries(files)) {
       s.put(JSON.stringify(file.entities));
       s.setLayers(JSON.stringify(file.layers));
       s.setLabelDefaults(JSON.stringify(file.labelDefaults));
-      const failures = file.cases.map((c) => sameResult(toJson(answer(s, c.op, c.args)), c.expect, file.tolerance, `${c.op} ${c.name}`)).filter(Boolean);
+      const byId = new Map(file.entities.map((e) => [e.id, e]));
+      const failures = file.cases.map((c) => sameResult(toJson(answer(s, byId, c.op, c.args)), c.expect, file.tolerance, `${c.op} ${c.name}`)).filter(Boolean);
       s.dispose();
       expect(failures.slice(0, 5).join('\n')).toBe('');
     });

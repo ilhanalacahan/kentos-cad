@@ -1,6 +1,6 @@
 import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
-import { ENTITY_KIND_LABEL, entityGeometry, type Entity, type NewEntity } from '../model/entities';
+import { ENTITY_KIND_LABEL, type Entity, type NewEntity } from '../model/entities';
 import { dist, type Bounds, type Vec2 } from '../model/geometry';
 import { translation } from '../model/geom/affine';
 import { dimensionLabel } from '../model/geom/dimension';
@@ -9,9 +9,11 @@ import { joinEntities } from '../model/ops/join';
 import { stretchEntity } from '../model/ops/stretch';
 import { transformEntity } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
+import { CoreStore } from '../wasm/core';
+import { packEntities } from '../wasm/pack';
 import { parseNumber } from './coordinateInput';
 import { MAX_GHOSTS, SelectionFirstTool } from './modifyTools';
-import { drawTag, strokeGeometry, strokePath } from './preview';
+import { drawTag, strokePath, strokePaths } from './preview';
 import type { Tool, ToolPointer } from './Tool';
 import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
@@ -258,10 +260,8 @@ export class StretchTool implements Tool {
     strokePath(g, view, [{ x: w.minX, y: w.minY }, { x: w.maxX, y: w.minY }, { x: w.maxX, y: w.maxY }, { x: w.minX, y: w.maxY }], { color: pal.snap, closed: true, dash: [5, 4] });
     const dx = this.base && this.hover ? this.hover.x - this.base.x : 0;
     const dy = this.base && this.hover ? this.hover.y - this.base.y : 0;
-    for (const e of this.targets.slice(0, MAX_GHOSTS)) {
-      const geom = stretchEntity(e, w, dx, dy);
-      if (geom) strokeGeometry(g, view, geom, { color: pal.accent, dash: [4, 3] });
-    }
+    const ids = this.targets.slice(0, MAX_GHOSTS).map((e) => e.id);
+    strokePaths(g, view, this.ctx.view.stretchGhosts(ids, w, dx, dy), { color: pal.accent, dash: [4, 3] });
     if (this.base && this.hover) {
       strokePath(g, view, [this.base, this.hover], { color: pal.accent });
       drawTag(g, view.worldToScreen(this.hover), [this.ctx.format.length(dist(this.base, this.hover))], pal.accent, pal.labelHalo);
@@ -282,6 +282,7 @@ export class PasteTool implements Tool {
   private readonly ctx: AppContext;
   private readonly items: NewEntity[];
   private readonly base: Vec2;
+  private ghosts: CoreStore | null = null;
 
   constructor(ctx: AppContext, items: NewEntity[], base: Vec2) {
     this.ctx = ctx;
@@ -320,11 +321,24 @@ export class PasteTool implements Tool {
     this.ctx.tools.exit();
   }
 
+  deactivate(): void {
+    this.ghosts?.dispose();
+    this.ghosts = null;
+  }
+
   draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     if (!this.hover) return;
     const m = translation(this.hover.x - this.base.x, this.hover.y - this.base.y);
     const pal = this.ctx.view.palette;
-    for (const e of this.items.slice(0, MAX_GHOSTS)) strokeGeometry(g, view, entityGeometry(transformEntity({ ...e, id: 0 } as Entity, m)), { color: pal.accent, dash: [4, 3] });
+    // The copies are not in the drawing: a store of their own (numbered 1…n) outlines their ghosts.
+    const shown = Math.min(this.items.length, MAX_GHOSTS);
+    if (!this.ghosts) {
+      this.ghosts = new CoreStore();
+      const p = packEntities(this.items.slice(0, shown).map((e, i) => ({ ...e, id: i + 1 })));
+      this.ghosts.putPacked(p.nums, p.strings);
+    }
+    const ids = Float64Array.from({ length: shown }, (_, i) => i + 1);
+    strokePaths(g, view, this.ghosts.transformOutlines(ids, Float64Array.from(m), shown), { color: pal.accent, dash: [4, 3] });
   }
 }
 

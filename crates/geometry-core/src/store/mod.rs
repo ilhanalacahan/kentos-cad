@@ -17,6 +17,7 @@ mod pack;
 pub mod pick;
 mod rtree;
 pub mod snap;
+pub mod tools;
 
 use std::collections::HashMap;
 

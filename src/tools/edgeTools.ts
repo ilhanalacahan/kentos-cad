@@ -2,10 +2,9 @@ import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type EntityGeometry, type NewEntity } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
-import { closestOnEdge, type Edge } from '../model/geom/intersect';
+import { closestOnEdge } from '../model/geom/intersect';
 import { entityEdges } from '../model/ops/edges';
 import { offsetEntity } from '../model/ops/offset';
-import { extendEntity, trimEntity } from '../model/ops/trim';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
 import { drawTag, strokeGeometry } from './preview';
@@ -188,20 +187,10 @@ export class OffsetTool extends EdgePickTool {
  * the other operation, as in AutoCAD.
  */
 abstract class BoundaryEdgeTool extends EdgePickTool {
+  /** Chosen boundaries; null: every visible edge (the geometry store gathers them, the target left out). */
   private bounds: Set<number> | null = null;
   protected pickingBounds = false;
   protected shiftHeld = false;
-
-  /** Boundary edges, the target itself left out. */
-  protected boundaries(exceptId: number): Edge[] {
-    if (!this.bounds) return this.ctx.view.edgesIn(this.ctx.view.camera.visibleBounds(), exceptId);
-    const out: Edge[] = [];
-    for (const id of this.bounds) {
-      const e = id === exceptId ? null : this.ctx.doc.get(id);
-      if (e) out.push(...entityEdges(e));
-    }
-    return out;
-  }
 
   /** Prompt tail: how boundaries are chosen now. */
   protected boundsHint(): string {
@@ -276,14 +265,14 @@ abstract class BoundaryEdgeTool extends EdgePickTool {
 
   protected trimAt(e: Entity, at: Vec2): void {
     if (this.refuseHoled(e, 'budama')) return;
-    const r = trimEntity(e, at, this.boundaries(e.id));
+    const r = this.ctx.view.trim(e, at, this.bounds);
     if ('error' in r) return this.ctx.log.warn(r.error);
     this.replace('Buda', e, r.pieces);
     this.ctx.log.success(`Budandı: ${r.pieces.length} parça kaldı.`);
   }
 
   protected extendAt(e: Entity, at: Vec2): void {
-    const r = extendEntity(e, at, this.boundaries(e.id));
+    const r = this.ctx.view.extend(e, at, this.bounds);
     if ('error' in r) return this.ctx.log.warn(r.error);
     this.ctx.doc.update(e.id, r.geometry as Partial<Entity>);
     this.ctx.log.success('Uzatıldı.');
@@ -296,14 +285,14 @@ abstract class BoundaryEdgeTool extends EdgePickTool {
     const pal = this.ctx.view.palette;
     if (trim) {
       if (e.kind === 'polygon' && e.holes?.length) return;
-      const r = trimEntity(e, this.hover.world, this.boundaries(e.id));
+      const r = this.ctx.view.trim(e, this.hover.world, this.bounds);
       if ('error' in r) return;
       // The whole object dashed red, kept pieces solid on top: what remains red is what goes.
       strokeGeometry(g, view, entityGeometry(e), { color: pal.danger, dash: [5, 3], width: 2 });
       for (const piece of r.pieces) strokeGeometry(g, view, piece, { color: pal.accent, width: 1.5 });
       return;
     }
-    const r = extendEntity(e, this.hover.world, this.boundaries(e.id));
+    const r = this.ctx.view.extend(e, this.hover.world, this.bounds);
     if ('geometry' in r) strokeGeometry(g, view, r.geometry, { color: pal.accent, dash: [4, 3], width: 1.5 });
   }
 }

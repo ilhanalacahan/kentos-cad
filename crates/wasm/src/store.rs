@@ -4,11 +4,18 @@
 //! view; the clipboard has its own.
 
 use kentos_geometry_core::Vec2;
-use kentos_geometry_core::api::json::{FromJson, Json};
+use kentos_geometry_core::api::json::{self, FromJson, Json};
+use kentos_geometry_core::entity::Entity;
 use kentos_geometry_core::geom::intersect::Edge;
 use kentos_geometry_core::geometry::Bounds;
 use kentos_geometry_core::store::Store;
 use wasm_bindgen::prelude::*;
+
+fn read_entity(text: &str) -> Result<Entity, JsError> {
+    Json::parse(text)
+        .and_then(|v| Entity::from_json(&v))
+        .map_err(|e| JsError::new(&format!("Geometri deposu nesneyi okuyamadı: {e}")))
+}
 
 fn rect(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Bounds {
     Bounds {
@@ -240,6 +247,98 @@ impl GeometryStore {
     /// Grips of these objects (see `Store::grips`).
     pub fn grips(&self, ids: &[f64]) -> Vec<f64> {
         self.inner.grips(ids)
+    }
+
+    /// `trimEntity(target, …)` against the boundaries the trim tool would
+    /// pass: the `chosen` objects, or the visible edges in the view (the
+    /// target, `except`, left out). `{ pieces }` or `{ error }` as JSON.
+    #[wasm_bindgen(js_name = trimPreview)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn trim_preview(
+        &self,
+        target: &str,
+        x: f64,
+        y: f64,
+        has_except: bool,
+        except: f64,
+        chosen: Option<Box<[f64]>>,
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+    ) -> Result<String, JsError> {
+        let target = read_entity(target)?;
+        let cut = self.inner.trim_preview(
+            &target,
+            Vec2::new(x, y),
+            has_except.then_some(except),
+            chosen.as_deref(),
+            &rect(min_x, min_y, max_x, max_y),
+        );
+        Ok(json::to_string(&cut))
+    }
+
+    /// `extendEntity(target, …)` against the boundaries the extend tool
+    /// would pass (as `trimPreview`). `{ geometry }` or `{ error }` as JSON.
+    #[wasm_bindgen(js_name = extendPreview)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn extend_preview(
+        &self,
+        target: &str,
+        x: f64,
+        y: f64,
+        has_except: bool,
+        except: f64,
+        chosen: Option<Box<[f64]>>,
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+    ) -> Result<String, JsError> {
+        let target = read_entity(target)?;
+        let g = self.inner.extend_preview(
+            &target,
+            Vec2::new(x, y),
+            has_except.then_some(except),
+            chosen.as_deref(),
+            &rect(min_x, min_y, max_x, max_y),
+        );
+        Ok(json::to_string(&g))
+    }
+
+    /// Outlines of these objects moved by each affine (six numbers each), at
+    /// most `limit` + 1 objects: `flags, n, x0, y0, …` per path (flags 0 open,
+    /// 1 closed, 2 a marker).
+    #[wasm_bindgen(js_name = transformOutlines)]
+    pub fn transform_outlines(&self, ids: &[f64], affines: &[f64], limit: u32) -> Vec<f64> {
+        let ms: Vec<[f64; 6]> = affines
+            .chunks_exact(6)
+            .map(|m| [m[0], m[1], m[2], m[3], m[4], m[5]])
+            .collect();
+        self.inner.transform_outlines(ids, &ms, limit as usize)
+    }
+
+    /// Outlines of these objects stretched by the window and (dx, dy), as `transformOutlines`.
+    #[wasm_bindgen(js_name = stretchOutlines)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn stretch_outlines(
+        &self,
+        ids: &[f64],
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+        dx: f64,
+        dy: f64,
+    ) -> Vec<f64> {
+        self.inner
+            .stretch_outlines(ids, &rect(min_x, min_y, max_x, max_y), dx, dy)
+    }
+
+    /// `[length, area]`: the objects' total length (polygons left out) and area.
+    pub fn measure(&self, ids: &[f64]) -> Vec<f64> {
+        let (length, area) = self.inner.measure(ids);
+        vec![length, area]
     }
 
     /// Edges of visible objects overlapping the rectangle (see `pack_edges`).

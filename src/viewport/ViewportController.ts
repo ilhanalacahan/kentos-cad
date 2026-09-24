@@ -4,7 +4,9 @@ import { Emitter } from '../core/emitter';
 import { Signal } from '../core/signal';
 import type { Entity } from '../model/entities';
 import { dimensionLabel, type DimensionLayout } from '../model/geom/dimension';
+import type { Affine } from '../model/geom/affine';
 import type { Edge } from '../model/geom/intersect';
+import type { ExtendResult, TrimResult } from '../model/ops/trim';
 import type { Bounds, Vec2 } from '../model/geometry';
 import { parseHex, readCanvasPalette, withAlpha, type CanvasPalette } from '../render/color';
 import { createBackend } from '../render/createBackend';
@@ -253,6 +255,31 @@ export class ViewportController {
   /** Visible entities whose bounds overlap `r` (candidates for boundaries and cut lines). */
   entitiesIn(r: Bounds): Entity[] {
     return this.picker.overlapping(r);
+  }
+
+  /** Trim `target` at `at` against the chosen boundaries, or every visible edge in view. */
+  trim(target: Entity, at: Vec2, chosen: ReadonlySet<number> | null): TrimResult {
+    return this.picker.trim(target, at, this.camera.visibleBounds(), chosen);
+  }
+
+  /** Extend the end of `target` nearest `at` to the chosen boundaries, or to any visible edge in view. */
+  extend(target: Entity, at: Vec2, chosen: ReadonlySet<number> | null): ExtendResult {
+    return this.picker.extend(target, at, this.camera.visibleBounds(), chosen);
+  }
+
+  /** Ghost outlines of objects moved by each affine (see PickIndex.ghosts). */
+  ghosts(ids: readonly number[], affines: readonly Affine[], limit: number): Float64Array {
+    return this.picker.ghosts(ids, affines, limit);
+  }
+
+  /** Ghost outlines of objects stretched by a window and (dx, dy). */
+  stretchGhosts(ids: readonly number[], window: Bounds, dx: number, dy: number): Float64Array {
+    return this.picker.stretchGhosts(ids, window, dx, dy);
+  }
+
+  /** Total length (polygons' perimeters left out) and area of objects. */
+  measure(ids: Iterable<number>): { length: number; area: number } {
+    return this.picker.measure(ids);
   }
 
   /** Boundary edges of visible entities overlapping `r`, optionally excluding one entity. */

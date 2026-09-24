@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CadDocument } from '../../model/document';
 import type { Entity } from '../../model/entities';
-import { translation } from '../../model/geom/affine';
+import { mirror, rotation, scaling, translation, type Affine } from '../../model/geom/affine';
 import { transformEntity } from '../../model/ops/transform';
 import { createSampleProject } from '../../model/sampleProject';
 import { PickIndex } from '../../viewport/picking';
 import { readGrips } from '../../viewport/storeRecords';
 import { Gen, sameResult, TOLERANCE, toJson } from './harness';
 import { tsGrips, tsLabels } from './reference/overlay';
+import { tsExtend, tsGhosts, tsMeasure, tsStretchGhosts, tsTrim } from './reference/tools';
 import { TsPickIndex } from './reference/picking';
 import { SCENE_LAYER_IDS, SCENE_SCALES, SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneEntity, sceneKinds, sceneRect } from './sets/store-scene';
 
@@ -65,6 +66,36 @@ function compareOverlay(g: Gen, doc: CadDocument, rs: PickIndex): string | null 
     return r ? `${r}\n    görünüm ${JSON.stringify(view)}, ölçek ${scale}` : null;
   };
   return same('labels', Array.from(rs.labels(view, scale, editing)), tsLabels(doc, view, scale, editing)) ?? same('grips', rs.grips(selected), readGrips(Float64Array.from(tsGrips(doc, selected))));
+}
+
+/** Tool previews and totals: trim and extend (all visible edges or chosen ones), ghosts, stretch ghosts, selection totals. */
+function compareTools(g: Gen, doc: CadDocument, ts: TsPickIndex, rs: PickIndex): string | null {
+  const all = [...doc.all()];
+  if (!all.length) return null;
+  const target = g.pick(all);
+  const at = g.chance(0.7) && 'pts' in target && target.pts.length ? g.pick(target.pts) : sceneCursor(g, doc);
+  const pick = { x: at.x + g.num(-0.5, 0.5), y: at.y + g.num(-0.5, 0.5) };
+  const view = sceneRect(g, pick, [20, 200, 5000]);
+  const ids = all.map((e) => e.id);
+  const chosen = g.chance(0.3) ? new Set(ids.filter(() => g.chance(0.1))) : null;
+  const c = sceneCursor(g, doc);
+  const affines: Affine[] = Array.from({ length: g.int(1, 3) }, () => g.pick([translation(g.num(-50, 50), g.num(-50, 50)), rotation(g.num(-3, 3), c), scaling(g.num(0.2, 3), c), mirror(c, sceneCursor(g, doc))]));
+  const selected = [...ids.filter(() => g.chance(0.05)), ...(g.chance(0.2) ? [999_999] : [])];
+  const limit = g.pick([0, 3, 400]);
+  const w = sceneRect(g, pick, [5, 50]);
+  const dx = g.num(-10, 10);
+  const dy = g.num(-10, 10);
+  const same = (what: string, got: unknown, want: unknown) => {
+    const r = sameResult(toJson(got), toJson(want), TOLERANCE, what);
+    return r ? `${r}\n    hedef ${JSON.stringify(target).slice(0, 300)}, nokta ${JSON.stringify(pick)}` : null;
+  };
+  return (
+    same('trim', rs.trim(target, pick, view, chosen), tsTrim(doc, ts, target, pick, view, chosen)) ??
+    same('extend', rs.extend(target, pick, view, chosen), tsExtend(doc, ts, target, pick, view, chosen)) ??
+    same('ghosts', Array.from(rs.ghosts(selected, affines, limit)), tsGhosts(doc, selected, affines, limit)) ??
+    same('stretchGhosts', Array.from(rs.stretchGhosts(selected, w, dx, dy)), tsStretchGhosts(doc, selected, w, dx, dy)) ??
+    same('measure', rs.measure(selected), tsMeasure(doc, selected))
+  );
 }
 
 /** A random edit through the document's API (or its layers). */
@@ -138,7 +169,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
     const g = new Gen(20260924);
     const failures: string[] = [];
     for (let i = 0; i < ROUNDS && failures.length < 5; i++) {
-      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs);
       if (r) failures.push(r);
     }
     rs.dispose();
@@ -159,7 +190,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
         failures.push(`sıra ${i}. turda ayrıldı: ${got.length} / ${order.length} nesne`);
         break;
       }
-      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs);
       if (r) failures.push(r);
     }
     rs.dispose();

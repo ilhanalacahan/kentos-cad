@@ -1,12 +1,12 @@
 import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
-import { entityGeometry, type Entity, type NewEntity } from '../model/entities';
+import type { Entity, NewEntity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../model/geom/affine';
 import { transformEntity } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
 import { parseNumber } from './coordinateInput';
-import { drawSelectionBox, drawTag, strokeGeometry, strokePath } from './preview';
+import { drawSelectionBox, drawTag, strokePath, strokePaths } from './preview';
 import type { Tool, ToolPointer } from './Tool';
 import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tracking';
 
@@ -188,12 +188,7 @@ export abstract class SelectionFirstTool implements Tool {
     }
     const pal = this.ctx.view.palette;
     const ms = this.previewTransforms();
-    let drawn = 0;
-    for (const m of ms)
-      for (const e of this.targets()) {
-        if (drawn++ > MAX_GHOSTS) break;
-        strokeGeometry(g, view, entityGeometry(transformEntity(e, m)), { color: pal.accent, dash: [4, 3] });
-      }
+    if (ms.length) strokePaths(g, view, this.ctx.view.ghosts([...this.ctx.selection.ids.value], ms, MAX_GHOSTS), { color: pal.accent, dash: [4, 3] });
     const a = this.anchor();
     if (a && this.hover) strokePath(g, view, [a, this.hover], { color: pal.accent });
     const tag = this.previewTag();

@@ -25,17 +25,17 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş başladı (S1a–S1b):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları ve tutamaçlar artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (araç önizlemeleri, çizim hattı, araçların hesapları) hâlâ TypeScript; geçiş S1c–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **Geçiş başladı (S1a–S1c):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri ve seçim toplamları artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (çizim hattı, araçların ve işlemlerin hesapları) hâlâ TypeScript; geçiş S2–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
   - olay günlüğü budama (migration 0003);
   - etkileşim ölçüm düzeneği (`pnpm perf:interaction`) ve TypeScript tabanı.
-- **Son doğrulama (main, S1b commit'i, bulut konteyneri):**
+- **Son doğrulama (main, S1c commit'i, bulut konteyneri):**
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 741 KB, gzip ile 252 KB (S1a'da +32, S1b'de +5 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1 bitince boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
+- **WASM paketi:** 760 KB, gzip ile 260 KB (S1a'da +32, S1b'de +5, S1c'de +8 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -49,9 +49,8 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Nesneler JSON değil paketli gider (`src/wasm/pack.ts`, `store/pack.rs`): 26 MB JSON WASM'da 5–7 s sürüyordu, paketli 0,1–0,3 s.
   - Eski TS `PickIndex` `src/wasm/parity/reference/picking.ts`'te parity referansıdır; S3'te silinir. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
 - **S1b yapıldı:** etiket kararları (`labels`) ve tutamaçlar (`grips`) depodan; `drawLabels`, `drawGrips`, `gripAt` kayıtları kullanır (`viewport/storeRecords.ts`). Eski karar mantığı `src/wasm/parity/reference/overlay.ts`'te referanstır.
-- **Kalanlar (bu sırayla, her biri ayrı commit):**
-  - **S1c, araç önizlemeleri:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; budamada yalnız hedefin kutusuna değen kenarlar yeterlidir), `transformOutlines(ids, affine)` (en çok 400 hayalet), `stretchOutlines`, `measure(ids)` (`PropertiesPanel` toplamları). Pano için ikinci bir depo örneği.
-  - **S1d, ölçüm ve belgeler:** önce/sonra ölçümü ve ADR 0008.
+- **S1c yapıldı:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; depo `trim_entity`/`extend_entity`'e yalnız hedefe ya da ucun ışınına/çemberine değebilecek kenarları verir), `transformOutlines` (hayalet yolları), `stretchOutlines`, `measure` (`PropertiesPanel` toplamları); `PasteTool` kendi deposunu kurar. Eski hesap `src/wasm/parity/reference/tools.ts`'te referanstır; donmuş dosyaya 400 durum eklendi. Aynı makinede `hat-1m` budama önizlemesi 1:1000'de 1,5 s → 10 ms (ADR 0008).
+- **Kalan:** **S1d, ölçüm ve belgeler:** önce/sonra etkileşim ölçümü (aşağıdaki yöntemle), ADR 0008'e sonuçlar, WASM boyutuna bakış.
 - **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur (bir kez `hat-1m`'de düştü). “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın; ikisi arasında başka ağır iş çalıştırmayın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır ve kaydırma senaryosu dakikalar sürer.
   - Bulutta S1 öncesi kısmi taban (`parsel-50k`, p50, imleç başına): seçme yakın 13,2 ms, genel 18,9; kenet yakın 16,8, genel 22,3; buda kenar seçme 20,3.
 - **Kabul:** tabana göre p95'te gerileme olmamalı.

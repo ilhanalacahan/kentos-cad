@@ -176,6 +176,31 @@ export class CoreStore {
     return typed(() => this.raw.grips(ids));
   }
 
+  /** `trimEntity` against the trim tool's boundaries (`chosen` ids, or the visible edges in the view). */
+  trimPreview(target: string, x: number, y: number, except: number | null, chosen: Float64Array | null, minX: number, minY: number, maxX: number, maxY: number): unknown {
+    return readResult(typed(() => this.raw.trimPreview(target, x, y, except !== null, except ?? 0, chosen, minX, minY, maxX, maxY)));
+  }
+
+  /** `extendEntity` against the extend tool's boundaries (as `trimPreview`). */
+  extendPreview(target: string, x: number, y: number, except: number | null, chosen: Float64Array | null, minX: number, minY: number, maxX: number, maxY: number): unknown {
+    return readResult(typed(() => this.raw.extendPreview(target, x, y, except !== null, except ?? 0, chosen, minX, minY, maxX, maxY)));
+  }
+
+  /** Outlines of objects moved by each affine (six numbers each): `flags, n, x0, y0, …` per path. */
+  transformOutlines(ids: Float64Array, affines: Float64Array, limit: number): Float64Array {
+    return typed(() => this.raw.transformOutlines(ids, affines, limit));
+  }
+
+  /** Outlines of objects stretched by a window and a displacement. */
+  stretchOutlines(ids: Float64Array, minX: number, minY: number, maxX: number, maxY: number, dx: number, dy: number): Float64Array {
+    return typed(() => this.raw.stretchOutlines(ids, minX, minY, maxX, maxY, dx, dy));
+  }
+
+  /** `[length, area]` of these objects. */
+  measure(ids: Float64Array): Float64Array {
+    return typed(() => this.raw.measure(ids));
+  }
+
   /** Ids in the document's order. */
   ids(): Float64Array {
     return typed(() => this.raw.ids());

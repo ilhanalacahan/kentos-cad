@@ -394,8 +394,8 @@ export class PropertiesPanel extends Panel {
     const layer = ents.every((e) => e.layerId === ents[0].layerId) ? ents[0].layerId : null;
     const color = ents.every((e) => e.color === ents[0].color) ? ents[0].color : null;
     const anyLocked = ents.some((e) => this.ctx.doc.layers.isLocked(e.layerId));
-    const length = ents.reduce((s, e) => s + (e.kind === 'polygon' ? 0 : (entityLength(e) ?? 0)), 0);
-    const area = ents.reduce((s, e) => s + (entityArea(e) ?? 0), 0);
+    // Summed by the geometry store: a selection can hold tens of thousands of objects.
+    const { length, area } = this.ctx.view.measure(ids);
     const rows: PropRow[] = [
       { label: 'Katman', value: 'Kilitli katman içeriyor', editor: anyLocked ? undefined : this.layerEditor(ids, layer) },
       { label: 'Renk', value: '', editor: anyLocked ? undefined : this.colorEditor(ids, color) },

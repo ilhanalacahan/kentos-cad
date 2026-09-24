@@ -2,8 +2,10 @@ import { DisposableStore } from '../core/disposable';
 import type { CadDocument } from '../model/document';
 import type { Entity } from '../model/entities';
 import type { Bounds, Vec2 } from '../model/geometry';
+import type { Affine } from '../model/geom/affine';
 import type { Edge } from '../model/geom/intersect';
 import type { LayerNode, LayerStore } from '../model/layers';
+import type { ExtendResult, TrimResult } from '../model/ops/trim';
 import { CoreStore } from '../wasm/core';
 import { packEntities } from '../wasm/pack';
 import { DEFAULT_LABELS, labelRule, readGrips, type GripSet } from './storeRecords';
@@ -52,7 +54,8 @@ const LABEL_DEFAULTS = JSON.stringify(Object.fromEntries(Object.entries(DEFAULT_
 
 /**
  * Spatial queries: picking, object snap, window selection, boundaries,
- * and what the overlay draws (labels, grips). The
+ * what the overlay draws (labels, grips) and what tools preview (trim,
+ * extend, ghosts) or total. The
  * Rust geometry store answers them (docs/adr/0008, S1: an R-tree and the
  * rules that were here, in the document's order); this keeps its copy of
  * the objects in step. Removals go at once; puts wait for the next query
@@ -234,6 +237,45 @@ export class PickIndex {
     for (let i = 0; i < SNAP_BITS.length; i++) if (kinds.has(SNAP_BITS[i])) mask |= 1 << i;
     const r = this.store.snap(p.x, p.y, tol, mask, from);
     return r.length ? { kind: SNAP_BITS[r[0]], point: { x: r[1], y: r[2] }, entityId: r[3] } : null;
+  }
+
+  /**
+   * Trim `target` at `at` (`trimEntity`) against the chosen boundaries or,
+   * when none are chosen, every visible edge in `view`; the store hands the
+   * trim only the edges near the target, which gives the same result.
+   */
+  trim(target: Entity, at: Vec2, view: Bounds, chosen: ReadonlySet<number> | null): TrimResult {
+    this.sync();
+    return this.store.trimPreview(JSON.stringify(target), at.x, at.y, target.id, chosen ? Float64Array.from(chosen) : null, view.minX, view.minY, view.maxX, view.maxY) as TrimResult;
+  }
+
+  /** Extend the end of `target` nearest `at` (`extendEntity`), boundaries as in `trim`. */
+  extend(target: Entity, at: Vec2, view: Bounds, chosen: ReadonlySet<number> | null): ExtendResult {
+    this.sync();
+    return this.store.extendPreview(JSON.stringify(target), at.x, at.y, target.id, chosen ? Float64Array.from(chosen) : null, view.minX, view.minY, view.maxX, view.maxY) as ExtendResult;
+  }
+
+  /**
+   * Outlines of objects moved by each affine, for ghosts: at most `limit` +
+   * 1 objects, counted as the modify tools counted them (paths as
+   * ../tools/preview.ts `strokePaths` draws them).
+   */
+  ghosts(ids: readonly number[], affines: readonly Affine[], limit: number): Float64Array {
+    this.sync();
+    return this.store.transformOutlines(Float64Array.from(ids), Float64Array.from(affines.flat()), limit);
+  }
+
+  /** Outlines of objects stretched by a window and (dx, dy) (`stretchEntity`), for ghosts. */
+  stretchGhosts(ids: readonly number[], window: Bounds, dx: number, dy: number): Float64Array {
+    this.sync();
+    return this.store.stretchOutlines(Float64Array.from(ids), window.minX, window.minY, window.maxX, window.maxY, dx, dy);
+  }
+
+  /** Total length (polygons' perimeters left out) and total area, summed in the given order. */
+  measure(ids: Iterable<number>): { length: number; area: number } {
+    this.sync();
+    const [length, area] = this.store.measure(Float64Array.from(ids));
+    return { length, area };
   }
 
   /** Window (fully inside) or crossing (touching) selection. */

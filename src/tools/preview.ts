@@ -76,6 +76,30 @@ export function strokeGeometry(
   if (geom.kind === 'polygon') for (const h of geom.holes ?? []) strokePath(g, view, polygonRing(h), { ...opts, closed: true });
 }
 
+/**
+ * Outlines the geometry store computed (ghosts of moved, stretched or
+ * pasted objects): `flags, n, x0, y0, …` per path, flags 0 open, 1 closed,
+ * 2 a marker drawn as a small square, as `strokeGeometry` draws points.
+ */
+export function strokePaths(g: CanvasRenderingContext2D, view: ViewTransform, paths: Float64Array, opts: { color: string; dash?: number[]; width?: number }): void {
+  for (let i = 0; i + 1 < paths.length; ) {
+    const flags = paths[i];
+    const n = paths[i + 1];
+    const pts: Vec2[] = [];
+    for (let k = 0; k < n; k++) pts.push({ x: paths[i + 2 + 2 * k], y: paths[i + 3 + 2 * k] });
+    i += 2 + 2 * n;
+    if (flags === 2) {
+      if (!pts.length) continue;
+      const s = view.worldToScreen(pts[0]);
+      g.save();
+      g.strokeStyle = opts.color;
+      g.setLineDash([]);
+      g.strokeRect(Math.round(s.x) - 3.5, Math.round(s.y) - 3.5, 7, 7);
+      g.restore();
+    } else strokePath(g, view, pts, { ...opts, closed: flags === 1 });
+  }
+}
+
 /** An area (outer ring and holes) filled with the even–odd rule and outlined: area tool previews. */
 export function drawArea(
   g: CanvasRenderingContext2D,
