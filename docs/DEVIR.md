@@ -123,7 +123,11 @@ Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gere
   - Düzenek çalışma dizinindeki kaynağı sunar: ölçüm sürerken `apps/web/src/` değişirse ölçüm bozulur. Ölçülecek commit'i ayrı bir git worktree'sinde çalıştırın (`node_modules` bağı ve `apps/web/src/wasm/pkg` kopyasıyla); ana dizinde çalışmaya devam edilebilir.
 - **Ağır işler:** kullanıcının makinesinde cargo, tam vitest, e2e ve ölçüm aynı anda çalışmaz (makine bir kez dondu). Bulut konteynerinde paralel çalıştırılabilir (kullanıcı izin verdi), ama ölçüm sürerken başka ağır iş çalışmaz.
 - **Alt ajan:** kullanıcı kredinin azaldığını söyledi; yalnız gerçekten gerekirse ve tek tek. Alt ajan ayrı worktree'de çalışır, main'e push etmez; sonucunu siz inceleyip sınar ve alırsınız.
-- **Commit ve push:** dilim başına bir commit, mevcut biçimde İngilizce mesajla (ör. “Shared core, P8: …”). `tsc`, `pnpm test`, clippy ve gerekiyorsa `pnpm e2e` geçince main'e push edilir.
+- **Commit ve push (her iş sonunda, kullanıcının kuralı):** dilim başına bir commit, mevcut biçimde İngilizce mesajla (ör. “Shared core, P8: …”). `pnpm typecheck`, `pnpm test`, clippy ve gerekiyorsa `pnpm e2e` geçince:
+  1. çalışma dalı push edilir;
+  2. kendi deponun (`ilhanalacahan/kentos-cad`, `origin`) `main`'i o dala ileri sarılır (`git push origin HEAD:main`; birleştirme commit'i yok);
+  3. asıl depoya (`mcihad/kentos-cad`, uzak adı `upstream`) PR: bu oturumdan açılamıyor (aynı adlı iki depo bir oturuma bağlanmaz; Claude GitHub uygulamasının `mcihad`'e erişimi yok), kullanıcıya karşılaştırma bağlantısı verilir: https://github.com/mcihad/kentos-cad/compare/main...ilhanalacahan:kentos-cad:main?expand=1 . Açık bir PR varsa `main`'e her push onu kendiliğinden günceller.
+  - Asıl depo ilerlediyse önce `git fetch upstream main` ve ileri sarma; iki taraf ayrıştıysa birleştirmeden önce kullanıcıya sorulur.
 - **Test ve doğrulama:**
   - Hata düzeltmesi önce hatayı yeniden üreten testle başlar.
   - Her değişiklikte `pnpm typecheck` temiz, `pnpm test` geçer.

@@ -124,7 +124,7 @@ pnpm perf:interaction     # etkileşim ölçümü (parsel-50k, hat-1m): seçme, 
   - Etkin motor durum çubuğunun sağ alt köşesinde yazar. Tıklayınca motor seçilir: seçim hemen uygulanır (`view.switchBackend`, sayfa yenilenmez) ve `prefs.rendererPreference` ile hatırlanır. Aynı seçim **Görünüm → Çizim motoru** menüsünde ve Uygulama ayarları → Çizim motoru bölümünde de vardır.
   - `?renderer=webgpu` ya da `?renderer=webgl2` URL parametresi açılışta kayıtlı tercihi geçersiz kılar.
   - WebGPU başlatılamazsa WebGL2'ye düşülür ve uyarı yazılır.
-- Her değişiklikten sonra `tsc` temiz olmalı ve `pnpm test` geçmeli (bkz. §9.4).
+- Her değişiklikten sonra `pnpm typecheck` temiz olmalı ve `pnpm test` geçmeli (bkz. §9.4).
 - Geliştirme modunda uygulama bağlamı `window.kentos` olarak açıktır (üretim derlemesinde yoktur). Tarayıcıda doğrulama yaparken durumu buradan okuyun, ör. `kentos.doc.size`, `kentos.tools.activeId.value`.
 - Arayüzü etkileyen her değişiklik **gerçek tarayıcıda** denenmelidir: tıklama, klavye, açık ve koyu tema, "Büyük" yazı boyutu.
 - Tercihler `localStorage`'da `kentos.ui.v1` (yerleşim), `kentos.prefs.v1` (uygulama ayarları) `kentos.processing.v1` (işlem araçlarının son değerleri ve kullanıcı modelleri) ve `kentos.styles.v1` (kullanıcının stil kitaplığı) anahtarlarında durur. Bulut projelerinin gönderilmemiş değişiklikleri IndexedDB'de (`kentos.cloud` / `drafts`, hesap ve proje başına) durur. Temiz başlangıç için bu anahtarları silin.
@@ -146,7 +146,7 @@ pnpm perf:interaction     # etkileşim ölçümü (parsel-50k, hat-1m): seçme, 
   - bakım altında olmalı
 
   Aday örnekleri: `earcut` (üçgenleme), `flatbush`/`rbush` (R-tree), `proj4` (dönüşüm). Eklemeden önce kullanıcıya sorun.
-- **Araç zinciri:** Vite 8, TypeScript 6, pnpm. Hedef ES2023.
+- **Araç zinciri:** Vite 8, TypeScript 6, pnpm (çalışma alanı: kök ve `apps/web`). Hedef ES2023.
 - **Tarayıcı kısayolları:** Tarayıcının yakaladığı kısayollar bağlanmaz: `Ctrl+N`, `Ctrl+T`, `Ctrl+W`, `Ctrl+Shift+T`, `Alt+F`, `Alt+D`, `Alt+E`.
 
 ---
@@ -735,6 +735,7 @@ Kurallar:
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
 - **Uçtan uca duman testi** `apps/web/scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`apps/web/scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `apps/web/scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi, yerleşik modelin tek geri alma adımıyla çalışması, tasarımcıda girdiye bağlı adımlı modelin kaydedilmesi), Yeni proje (`Ctrl+Alt+N`: ad, sistem, ölçek; kaydedilmemiş değişiklik sorusu ve Vazgeç'in pencereye dönmesi; boş çizimde yazılan çizgi ve ilk kayıtta yerin proje adıyla sorulması), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), dosya alışverişi (bellek içi seçiciyle koordinat listesi içe aktarma: önizlemede Ad Y X Z önerisi ve bozuk satır, başka koordinat sistemi seçilince içe aktarmanın kapanması, tam koordinatlar ve dosya adıyla yeni katman, tek geri alma adımı; seçili noktaların NCN olarak aynı metinle dışa aktarılması; DXF içe aktarmada katman tablosu ve alınmayanların raporu, dosya adlı grupta yeni katmanlar, tam koordinatla patlatılmış bloklar, işareti kaldırılan katmanın dışarıda kalması, içe aktarılan nesnenin hemen seçilebilmesi (geometri deposu), tek geri alma adımı), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
+- **Fixture kaydedicileri** uygulamanın yolundan kaydeder ve `apps/web/scripts/fixtures/record-*.test.ts`'tedir: `GOLDEN_WRITE=1 pnpm -C apps/web exec vitest run scripts/fixtures/<ad>.test.ts` (değişen dosya bilinçli bir golden değişikliğidir, farkı okunur). Dilden bağımsız referans üreticileri kökten çalışır: `python3 scripts/fixtures/<ad>.py`.
 - **Etkileşim ölçümü** `apps/web/scripts/perf/interaction.mjs` (`pnpm perf:interaction`; bir şeyi doğrulamaz, ölçer): kendi Vite sunucusunu ve tek başsız Chrome'u açar (WebGL2 makinenin GPU'sunda, `--use-angle=gl`; SwiftShader'da tek kare saniyeler sürdüğü için onu reddeder), ADR 0005'in `parsel-50k` ve `hat-1m` veri setlerini sayfada tohumlu üretip `doc.replaceWith` ile açar. Gerçek fare hareketleriyle seç (üzerine gelme), çizgi (ilk noktadan sonra kenet) ve buda araçlarında olay başına süreyi 1:1000 ve genel görünümde, orta tuşla kaydırmada kare süresini ve GPU dahil kare aralığını, buda önizlemesinde kare süresini, stil değişikliğinde büyük katmanın yeniden kurulmasını `view.probe` ile toplar. Her koşu sayfayı yeniden açar; 3 koşunun p50/p95/p99'u ve p95 aralığı `docs/perf/interaction-<etiket>.{json,md}`'ye yazılır (`--label baseline` tabanı yazar; başka etiket tabanla karşılaştırılır). Nesne izleme ve bilgi kartı ölçümde kapalıdır (beklemeye bağlıdırlar). Makinede başka ağır süreç çalışırken çalıştırılmaz.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme).
 
@@ -1016,6 +1017,11 @@ arka uçları, stil motoru ve `SceneLayer` sözleşmesi mevcuttur.
 > - TS algoritmaları, TS ile yan yana derin koşulardan (işlem başına 20 000 rastgele durum) sonra silindi; cephelerde aritmetik olmadığını bir test denetler.
 >
 > Komutların sunucuda çekirdekle yeniden doğrulanması (§14, §18), stil motorunun geometrisi (style-core) ve §23.3 sağlam kararlar yoktur. Etkileşim ölçümü bulutta yazılım GPU'suyla yapıldı; kullanıcının makinesindeki kabul ölçümü bekliyor (§11, `docs/perf/`).
+>
+> **Doğrulanmış durum (2026-09-24, `0ebd723` sonrası):** depo kullanıcı kararıyla monorepo düzenine geçti (ADR 0001 “Güncelleme”):
+> - Tarayıcı uygulaması `apps/web/` (pnpm çalışma alanı paketi `@kentos/web`); komutlar kökten çalışır.
+> - Rust crate'leri `crates/shared/` (geometry-core, contracts, formats: platformdan bağımsız), `crates/wasm/` (geometry-wasm, formats-wasm) ve `crates/server/` (postgres, application) altında; `contracts`'ın TS üretimi `ts` özelliğinde.
+> - Hesap, sözleşme ve arayüz davranışı değişmedi; `apps/desktop` (wgpu) henüz yoktur.
 
 **Kesin karar:** Ana kalıcı veri deposu PostgreSQL + PostGIS. Bu proje için
 ayrı bir disk motoru, WAL, MVCC, uzamsal indeks veya dağıtık veritabanı
@@ -1062,7 +1068,7 @@ süreçte çalışır; bağlantı havuzu ve sorgu süreleri bütçelenir. Ağır
 hesabı Tokio I/O görevini bloke etmez; sınırlandırılmış CPU havuzu veya
 ayrı worker kullanılır. Stack değişikliği sessizce yapılmaz; ADR gerekir.
 
-Mevcut `apps/web/src/` ağacını toplu taşımayın. Çalışan dikey dilim ilerledikçe
+Mevcut `apps/web/src/` ağacını (2026-09-24'te kullanıcı kararıyla kökteki `src/`'den taşındı, ADR 0001) toplu yeniden düzenlemeyin. Çalışan dikey dilim ilerledikçe
 modüler Cargo workspace ekleyin. İlk kapsam için ayrı Rust **api** ve
 **worker** süreç modları ile ortak uygulama çekirdeği yeterlidir:
 
