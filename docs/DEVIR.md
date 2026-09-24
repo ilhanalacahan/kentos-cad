@@ -101,22 +101,28 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - Bunlar ayrı `style-core` işidir; geometriyi çekirdekten alırlar.
 - §23.3 robust predicates, S6'dan sonra ayrı bir dilimdir: yalnız Rust'ta, bağımsız referanslarla. Değişen sonuçlar bilinçli olarak golden dosyaya işlenir.
 
-### Park edilmiş dal: `wip/formats-dxf`
+### Dosya biçimleri (eski `wip/formats-dxf`, main'e alındı)
 
-- **Taban:** eski bir main'e (P2 dönemi, `7254f20`) dayanır ve hiç gözden geçirilmedi.
-- **Commit'ler:**
-  - `7ff6950` koordinat listeleri: Netcad NCN, TXT, CSV içe/dışa aktarma (bitti);
-  - `dcf3f2e` DXF içe aktarma: ASCII DXF, bloklar tam patlatılır (bitti);
-  - `0320b7f` WIP: DXF genişletilmiş veri (yarım; derlenmedi, sınanmadı).
-- **Yeni crate'ler:** `crates/formats` ve `crates/formats-wasm`.
-  - Tarayıcıda `src/io/pkg` olarak yalnız dosya içe/dışa aktarılınca yüklenir.
-  - Yeni dış bağımlılık yok.
-- **Yapılacak:**
-  - main'e rebase (CLAUDE.md, package.json, Cargo.toml ve contracts'ta çakışma beklenir);
-  - inceleme; WIP commit'ini bitirme ya da çıkarma;
-  - testler (`cargo test -p kentos-formats`, `pnpm test`, `pnpm e2e`);
-  - sonra main.
-- **Öncelik:** ortak çekirdektir; kullanıcı aksini söylemedikçe bu dal ondan sonra ele alınır.
+- **Durum (24 Eylül):** park edilmiş dal yeniden kuruldu, incelendi, düzeltildi, sınandı ve S5'ten sonra main'e alındı (beş commit). Uzak `wip/formats-dxf` olduğu gibi duruyor. ADR 0009 “önerildi”: sahibinin onayını bekliyor; açık kararlar §6'da.
+- **Commit'ler (sırayla):**
+  - koordinat listeleri: Netcad NCN, TXT, CSV içe/dışa aktarma (eski `7ff6950`);
+  - DXF içe aktarma: ASCII DXF, bloklar tam patlatılır (eski `dcf3f2e`);
+  - incelemenin düzeltmeleri ve testleri;
+  - `crates/formats` ve `crates/formats-wasm`'da yalnız rustfmt (dal biçimlenmemişti, `cargo fmt --all -- --check` düşüyordu);
+  - belgeler (CLAUDE.md §1–12, ADR 0009, bu dosya).
+- **Çakışmalar:** CLAUDE.md (§4.3 `files` satırı, §4.8 Kaydet/Aç ve Yeni proje, §9.4 duman testi, §11, §12), `app/createApp.ts` (bulut yeniden adlandırma ve silme ile komut kaydı), `app/fileIO.ts` (`DiscardChoice` ile `PickedFile`, `pickForImport`). Hepsinde main'in metni korundu, dalın eklemeleri üstüne kondu. `Cargo.lock` yalnız cargo ile güncellendi; yeni dış bağımlılık yok (npm de).
+- **WIP `0320b7f` alınmadı** (uzak dalda duruyor). DXF yazıcısının (Dosya → Dışa aktar → DXF) başlangıcıydı ve derlenmiyordu (`dxf/xdata.rs` modül listesinde bile yoktu):
+  - sözleşmede `DxfWriteLayer` ve `DxfWriteInput`;
+  - KentOS'un kendi genişletilmiş verisini (1001 `KENTOS`: etiket, öznitelikler, deliğin dış halkasının tanıtıcısı, Catmull-Rom ve kapalı işaretleri) okuyan bir ayrıştırıcı;
+  - KentOS eğrisini tam Bézier parçalarına çeviren `catmull_rom_beziers` (testli).
+  - Yazıcının kendisi, `writeDxf`, pencere, komut ve testler yoktu. DXF dışa aktarma ayrı bir dilimdir ve oradan başlayabilir. İçe aktarıcıdaki kancaları (varlık tanıtıcısı, `KENTOS` verisinin okunması) bu yüzden kaldırıldı.
+- **İncelemede düzeltilenler** (ayrıntı commit iletisinde ve ADR 0009'da):
+  - Biçimler, uygulamanın da hesapladığını ortak çekirdekten alır (`bulge_path_outline`, alan, içerme); kopyaları silindi. DXF taramasının çoklu çizgi sınırı artık uygulamanın kendi taramasıyla aynı noktaları alır. Biçim modülü 494 KB (gzip 187 KB), öncekinden 5 KB küçük.
+  - DXF: katman adı tablodaki yazılışıyla (büyük/küçük harf); okunamayan ATTRIB raporlanır; blok açmada adım sınırı (hiçbir şey çizmeyen iç içe bloklar worker'ı kilitliyordu); MINSERT hücreleri 10 000'den çok sütunda yanlış satıra düşüyordu, dizi 10 000 × 10 000 ile sınırlandı; NURBS derecesi en çok 25; hesaplanamayan tarama eğrisi raporlanır; ACI 251–254 AutoCAD'in gri tonları.
+  - Tarayıcı: `readDxf` bütün arabelleği devreder, görünümü kopyalar (pencere `bytes.buffer` gönderiyordu); koordinat listesi penceresi kapanınca önizleme okuması durur; açık düzenleme ya da model grubu varken içe aktarma beklenir (modelin geri alma adımına katılıp iptaliyle geri alınıyordu).
+  - Yeni testler: `io/client.test.ts`, `io/coords.test.ts`, `io/apply.test.ts`'e çalışan model; Rust'ta katman adı, öznitelik raporu, dolaşma sınırı, MINSERT ızgarası, derece sınırı, sınır bayrakları, örnekleme kuralı, gri tonlar.
+- **Doğrulama (bulut konteyneri, dalın son hâli):** `cargo test -p kentos-formats` 49 test; `pnpm rust:test` (workspace testleri ve clippy `-D warnings`) temiz, 220 test (veritabanı testleri sır olmadığı için atlandı); `cargo fmt --all -- --check` temiz; `npx tsc --noEmit -p .` temiz; `pnpm test` 791 test geçti (5 fixture kaydedicisi atlandı); `pnpm e2e`: 100 denetim geçti; düşen üçü bu konteynerde main'de de düşen WebGPU denetimleri (aygıt kaybı).
+- **Kalan:** sahibinin ADR 0009 onayı; DXF dışa aktarma dilimi; büyük dosyada içe aktarmanın ana iş parçacığındaki süresinin ölçülmesi (JSON ayrıştırma, denetim, belgeye ekleme; ölçülmedi).
 
 ## 4. Taşıma yöntemi (P dilimleri ve S'deki yeni çekirdek işlevleri)
 
@@ -192,3 +198,6 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
 8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına yaklaşıyor (S3a'da 267 KB, S5 ile 283 KB). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
+9. Dosya biçimleri (ADR 0009) main'e alındı; ADR'nin onayı bekliyor.
+10. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
+11. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.
