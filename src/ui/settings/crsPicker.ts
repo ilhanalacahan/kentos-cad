@@ -12,9 +12,10 @@ export interface CrsPickerOptions {
   defaultSrid?: number;
   /**
    * `assign`: changes the open project's CRS (warns that coordinates are
-   * not reprojected). `default`: picks the CRS for future projects.
+   * not reprojected). `default`: picks the CRS for future projects. `new`:
+   * picks the CRS of a new, empty project (nothing to reproject).
    */
-  mode: 'assign' | 'default';
+  mode: 'assign' | 'default' | 'new';
   /** Search text survives section re-renders through this holder. */
   state: { query: string };
   /** `rerender: false` means the picker already patched itself. */
@@ -45,7 +46,7 @@ export function crsPicker(o: CrsPickerOptions): Child {
     const c = crsBySrid(value)!;
     replaceChildren(current, currentCard(c, value !== o.initial, o.mode));
     replaceChildren(details, detailsCard(c));
-    replaceChildren(notes, o.mode === 'assign' ? assignNotes(c, crsBySrid(o.initial)!) : []);
+    replaceChildren(notes, o.mode === 'assign' ? assignNotes(c, crsBySrid(o.initial)!) : o.mode === 'new' ? unitNotes(c) : []);
   };
 
   const renderList = () => {
@@ -102,12 +103,21 @@ export function crsPicker(o: CrsPickerOptions): Child {
   ];
 }
 
-function currentCard(c: CrsDef, changed: boolean, mode: 'assign' | 'default'): Child {
+function currentCard(c: CrsDef, changed: boolean, mode: CrsPickerOptions['mode']): Child {
   const label =
-    mode === 'assign' ? (changed ? 'Kaydedince projeye atanacak sistem' : 'Projenin koordinat sistemi') : changed ? 'Kaydedince yeni projelerde kullanılacak' : 'Yeni projelerde kullanılan sistem';
+    mode === 'new'
+      ? 'Yeni projenin koordinat sistemi'
+      : mode === 'assign'
+        ? changed
+          ? 'Kaydedince projeye atanacak sistem'
+          : 'Projenin koordinat sistemi'
+        : changed
+          ? 'Kaydedince yeni projelerde kullanılacak'
+          : 'Yeni projelerde kullanılan sistem';
+  // A new project has nothing to change: its system is chosen, not about to change (no amber "değişecek").
   return h(
     'div',
-    { class: 'crs-current', 'data-changed': changed ? '' : null },
+    { class: 'crs-current', 'data-changed': changed && mode !== 'new' ? '' : null },
     h('div', { class: 'crs-current__label' }, label),
     h('div', { class: 'crs-current__row' }, h('span', { class: 'crs-current__name' }, c.name), h('span', { class: 'crs-chip num' }, `EPSG:${c.srid}`)),
   );
@@ -143,6 +153,10 @@ function assignNotes(c: CrsDef, initial: CrsDef): Child[] {
       ),
     );
   }
-  if (c.kind === 'geographic') out.push(note('info', 'Coğrafi sistemlerde birim derecedir. Çizim ve ölçüm araçları metre cinsinden projeksiyonlu bir sistem bekler.'));
+  out.push(...unitNotes(c));
   return out;
+}
+
+function unitNotes(c: CrsDef): Child[] {
+  return c.kind === 'geographic' ? [note('info', 'Coğrafi sistemlerde birim derecedir. Çizim ve ölçüm araçları metre cinsinden projeksiyonlu bir sistem bekler.')] : [];
 }

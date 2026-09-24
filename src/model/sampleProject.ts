@@ -2,66 +2,14 @@ import { crsBySrid, DEFAULT_SRID } from '../geo/crs';
 import { CadDocument } from './document';
 import type { NewEntity } from './entities';
 import { signedArea, type Vec2 } from './geometry';
-import { LayerStore, type LayerInit } from './layers';
+import { LayerStore } from './layers';
+import { STANDARD_ACTIVE_LAYER, standardLayers } from './standardLayers';
 
 /**
  * Procedurally generated cadastral sheet so the UI can be judged against
  * realistic density: blocks (ada), parcels, buildings, curbs, road axes,
  * contours, benchmarks and a sheet frame (coordinates in the default TM zone).
  */
-
-export const LAYER_TREE: LayerInit[] = [
-  { id: 'taslak', name: 'Taslak', style: { color: 'ink' } },
-  {
-    id: 'g-kadastro',
-    name: 'Kadastro',
-    children: [
-      {
-        id: 'ada',
-        name: 'Ada sınırı',
-        style: {
-          color: 'fg',
-          lineWeight: 0.35,
-          label: { placement: 'center', size: 12, grow: 3, maxSize: 22, weight: 600, template: '{label} ada', minFeaturePx: 90, maxScale: 5, ink: 'fg' },
-        },
-      },
-      { id: 'parsel', name: 'Parsel sınırı', style: { color: 'fg-dim', lineWeight: 0.18, label: { placement: 'center', size: 9, grow: 1.2, maxSize: 14, minFeaturePx: 26 } } },
-      { id: 'yapi', name: 'Yapı', style: { color: '#7FB2E5', lineWeight: 0.25, fill: '#7FB2E52E' } },
-    ],
-  },
-  {
-    id: 'g-ulasim',
-    name: 'Ulaşım',
-    children: [
-      { id: 'yol-ekseni', name: 'Yol ekseni', style: { color: '#E06C75', lineType: 'dashdot', lineWeight: 0.13 } },
-      { id: 'kaldirim', name: 'Kaldırım', style: { color: '#8C9AAA', lineWeight: 0.18 } },
-    ],
-  },
-  {
-    id: 'g-topo',
-    name: 'Topografya',
-    children: [
-      { id: 'esyukselti', name: 'Eşyükselti', style: { color: '#A87C54', lineWeight: 0.13 } },
-      { id: 'ana-esyukselti', name: 'Ana eşyükselti', style: { color: '#C9955F', lineWeight: 0.25, label: { placement: 'along', size: 10, minScale: 1.6 } } },
-      { id: 'kot', name: 'Kot noktaları', style: { color: '#9CCB7E', point: { symbol: 'cross', size: 7 }, label: { placement: 'beside', size: 10.5, minScale: 2.2 } } },
-    ],
-  },
-  {
-    id: 'g-jeodezi',
-    name: 'Jeodezi',
-    children: [{ id: 'poligon', name: 'Poligon noktaları', style: { color: '#56B6C2', point: { symbol: 'triangle', size: 11 }, label: { placement: 'beside', size: 10.5, minScale: 0.9 } } }],
-  },
-  {
-    id: 'g-pafta',
-    name: 'Pafta',
-    expanded: false,
-    children: [
-      { id: 'pafta', name: 'Pafta çerçevesi', style: { color: '#6B7785', lineWeight: 0.5, pickInterior: false, label: { placement: 'corner', size: 12, template: 'Pafta {label}   1:1000', minFeaturePx: 200, ink: 'fg-dim' } } },
-      { id: 'karelaj', name: 'Karelaj', style: { color: '#6B7785', lineWeight: 0.13 } },
-      { id: 'yazi', name: 'Yazılar', style: { color: 'fg-dim' } },
-    ],
-  },
-];
 
 const ORIGIN: Vec2 = { x: 486_780, y: 4_420_080 };
 const ROT = (14 * Math.PI) / 180;
@@ -108,7 +56,7 @@ function roundedRect(x0: number, y0: number, x1: number, y1: number, r: number, 
 const fmtArea = (pts: Vec2[]) => Math.abs(signedArea(pts)).toFixed(2);
 
 export function createSampleProject(srid = DEFAULT_SRID): CadDocument {
-  const layers = new LayerStore(LAYER_TREE, 'taslak');
+  const layers = new LayerStore(standardLayers(1000), STANDARD_ACTIVE_LAYER);
   const crs = crsBySrid(srid) ?? crsBySrid(DEFAULT_SRID)!;
   const doc = new CadDocument({
     name: 'Ornek_1244-1249_Ada.kcad',

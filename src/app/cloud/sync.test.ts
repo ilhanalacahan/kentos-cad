@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Entity as ContractEntity } from '../../contracts/generated/Entity';
 import { CadDocument } from '../../model/document';
 import type { Entity } from '../../model/entities';
@@ -216,6 +216,31 @@ describe('cloud autosave', () => {
     await editor.sync.flush();
     expect(editor.server.metaVersion).toBe(1);
     expect(editor.sync.state.value).toBe('saved');
+  });
+
+  it('a project left while a command is on its way never touches the next drawing', async () => {
+    const { doc, server, sync, drafts } = setup();
+    doc.add(pt(1));
+    let release!: () => void;
+    server.gate = new Promise((r) => (release = r));
+    const sending = sync.flush();
+    await vi.waitFor(() => expect(server.waiting).toBe(1));
+    doc.add(pt(2));
+    // As CloudSession.leave does: what is unsent goes to the device, then the sync stops and another drawing comes in.
+    await sync.keepDraft();
+    sync.dispose();
+    const other = (id: number, x: number): Entity => ({ id, kind: 'point', layerId: 'cizim', p: { x, y: 4420210 }, attrs: {} });
+    doc.replaceWith({ name: 'Başka', settings: doc.settings.toJSON(), origin: doc.origin, homeView: null, layers: [...layers().tree], activeLayer: 'cizim', entities: [other(1, 50), other(2, 60)], styles: { items: [], categories: [] } });
+    release();
+    expect(await sending).toBe(false);
+    // The command on its way was committed; nothing of the other drawing was sent after it.
+    expect([server.commits, server.store.size]).toEqual([1, 1]);
+    expect([...server.store.values()][0].entity).toMatchObject({ p: { x: 1 } });
+    // The device draft still holds both changes and the command, for the next time the project opens.
+    const draft = await drafts.get('u1/t/p');
+    expect([Object.keys(draft!.changes).length, !!draft!.inflight]).toEqual([2, true]);
+    await sync.receive([server.commitAs('baska', [{ op: 'create', id: crypto.randomUUID(), entity: wire(other(0, 70)) }])]);
+    expect(doc.size).toBe(2);
   });
 
   it('refuses objects from the server that break the drawing’s rules', async () => {

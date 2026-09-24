@@ -332,6 +332,7 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
   - Proje sistemini değiştirmek **"Koordinatlar dönüştürülmez"** uyarı notunu gösterir.
 - **Kontroller:** bölümlü seçici (segmented; seçili dilim kabarık), switch (açıkken amber), adımlayıcı (− değer + birim), tema kartları (etkin temadan bağımsız renkli mini çalışma alanı), motor kartları (radyo, rozet: Varsayılan / Deneysel / Desteklenmiyor).
 - **Birimler bölümünde "Önizleme" kartı** vardır: kesikli kenarlıkla koordinat, kenar, alan ve semt örneklerini canlı gösterir.
+- **Yeni proje** (Dosya → Yeni proje…, `Ctrl+Alt+N`) aynı satırları ve koordinat sistemi seçicisini düz bir pencerede kullanır (760 px, bölüm menüsü yok): Proje adı (açılışta seçili, yazmak yerine geçer), çizim ölçeği, koordinat sistemi. Seçicinin kartı “Yeni projenin koordinat sistemi” der; amber “değişecek” çerçevesi ve “Koordinatlar dönüştürülmez” notu yoktur, çünkü değişen bir şey yoktur. Altta bir bilgi notu ne açılacağını (katman grupları, varsayılan birimler), gerekirse ikinci not açık çizime ne olacağını söyler. Alt çubukta “Vazgeç” ve birincil “Oluştur”. Kaydedilmemiş değişiklik sorusu pencerenin üstünde açılır; oradaki Vazgeç Yeni proje penceresine döner.
 
 ### 7.11 İşlem araçları (pencere ve araç kutusu)
 

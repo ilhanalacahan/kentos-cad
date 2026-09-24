@@ -27,6 +27,10 @@ export class FakeServer implements CloudApi {
   offline = false;
   /** Commit the next command, then fail as if its answer were lost. */
   loseNextAnswer = false;
+  /** While set, commands wait for it before anything happens (one still on its way over a slow network). */
+  gate: Promise<void> | null = null;
+  /** Commands waiting at the gate. */
+  waiting = 0;
   commits = 0;
 
   constructor(meta: FakeServer['meta']) {
@@ -67,6 +71,11 @@ export class FakeServer implements CloudApi {
 
   async command(envelope: CommandEnvelope): Promise<CommitResult> {
     this.check();
+    if (this.gate) {
+      this.waiting++;
+      await this.gate;
+      this.waiting--;
+    }
     const earlier = this.log.get(envelope.idempotencyKey);
     if (earlier) return { ...earlier, replayed: true };
     const input = envelope.input as ProjectChanges;

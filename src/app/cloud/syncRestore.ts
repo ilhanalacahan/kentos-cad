@@ -31,7 +31,10 @@ export async function restoreDraft(core: SyncCore, draft: Draft): Promise<Restor
       await o.api.command(draft.inflight);
       core.own.add(draft.inflight.requestId);
       await core.takeServerCopies(sent.map((f) => f.id));
+      if (core.closed) return { waiting: false, conflicts: [], changed: false };
     } catch (e) {
+      // Left meanwhile: the draft stays as it is for the next time the project opens.
+      if (core.closed) return { waiting: false, conflicts: [], changed: false };
       if (!(e instanceof ApiFailure) || e.transient) {
         await o.drafts.put(o.draftKey, draft);
         return { waiting: true };
@@ -60,6 +63,7 @@ export async function restoreDraft(core: SyncCore, draft: Draft): Promise<Restor
   }
   if (moved.length) {
     const fresh = await o.api.featuresById(o.tenantId, o.projectId, moved);
+    if (core.closed) return { waiting: false, conflicts: [], changed: false };
     const byId = new Map(fresh.features.map((f) => [f.id, f]));
     for (const id of moved) {
       const rec = byId.get(id) ?? null;

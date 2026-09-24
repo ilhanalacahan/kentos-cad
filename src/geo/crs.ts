@@ -94,6 +94,30 @@ export function crsBySrid(srid: number): CrsDef | undefined {
   return BY_SRID.get(srid);
 }
 
+/** Centre of Türkiye (35° D, 39° K): where a new, empty project is anchored. */
+const WORK_LON = 35;
+const WORK_LAT = 39;
+/** Northing of 39° K on the central meridian (GRS80 meridian arc, rounded; TM k = 1 and UTM k = 0.9996 both land within 3 km). */
+const WORK_NORTHING = 4_320_000;
+
+/**
+ * Where a new, empty project in `crs` is anchored (its local origin, the
+ * GPU's float32 reference) before any object exists: the middle of the
+ * zone's band at Türkiye's centre latitude. Every point of the country is
+ * then within ~340 km of it. Rounded values; this is an anchor, not a
+ * transformation (none is done here).
+ */
+export function workAreaCentre(crs: CrsDef): { x: number; y: number } {
+  if (crs.kind === 'geographic') return { x: WORK_LON, y: WORK_LAT };
+  if (crs.projection === 'Pseudo-Mercator') {
+    const r = 6_378_137;
+    const x = r * ((WORK_LON * Math.PI) / 180);
+    const y = r * Math.log(Math.tan(Math.PI / 4 + (WORK_LAT * Math.PI) / 360));
+    return { x: Math.round(x / 1000) * 1000, y: Math.round(y / 1000) * 1000 };
+  }
+  return { x: crs.falseEasting ?? 500_000, y: (crs.falseNorthing ?? 0) + WORK_NORTHING };
+}
+
 /** Suggests the TUREF TM zone for a longitude (degrees east). */
 export function turefZoneFor(lon: number): CrsDef | undefined {
   const cm = TM_MERIDIANS.reduce((best, m) => (Math.abs(m - lon) < Math.abs(best - lon) ? m : best));

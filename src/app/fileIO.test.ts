@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CadDocument } from '../model/document';
 import { LayerStore } from '../model/layers';
+import { newProjectContent } from '../model/newProject';
 import { toSnapshot } from '../model/snapshot';
 import { snapshotSampleDocument } from '../model/snapshotSample';
 import type { AppContext } from './context';
-import { DocumentFiles, type DrawingFileHandle, type DrawingFilePicker } from './fileIO';
+import { DocumentFiles, type DiscardChoice, type DrawingFileHandle, type DrawingFilePicker } from './fileIO';
 
 /** An in-memory file; `fail` makes its writer throw on close, `during` runs while it is being written. */
 function memoryFile(name: string, opts: { text?: string; fail?: boolean; during?: () => void } = {}) {
@@ -29,20 +30,50 @@ function memoryFile(name: string, opts: { text?: string; fail?: boolean; during?
   return file satisfies DrawingFileHandle;
 }
 
-function setup(doc = new CadDocument({ name: 'Proje', layers: new LayerStore([{ id: 'x', name: 'X' }], 'x'), origin: { x: 0, y: 0 } })) {
+/** A cloud project as the file service sees it: open or not, autosaving or not, and how many changes stay unsent. */
+function fakeCloud(open: { name: string; canWrite: boolean; unsent: number } | null) {
+  const cloud = {
+    project: { value: open ? { name: open.name, canWrite: open.canWrite } : null },
+    left: 0,
+    autosaves: () => !!cloud.project.value?.canWrite,
+    leave: async () => {
+      cloud.left++;
+      cloud.project.value = null;
+      return open?.unsent ?? 0;
+    },
+    detach: () => {
+      cloud.project.value = null;
+    },
+  };
+  return cloud;
+}
+
+function setup(doc = new CadDocument({ name: 'Proje', layers: new LayerStore([{ id: 'x', name: 'X' }], 'x'), origin: { x: 0, y: 0 } }), cloud = fakeCloud(null)) {
   const messages: string[] = [];
   const say = (kind: string) => (text: string) => messages.push(`${kind}: ${text}`);
+  const fitted: unknown[] = [];
   const ctx = {
     doc,
     log: { success: say('ok'), warn: say('uyarı'), error: say('hata'), info: say('bilgi') },
     tools: { activate: () => {} },
     selection: { clear: () => {} },
-    view: { camera: { fit: () => {} }, zoomExtents: () => {} },
-    cloud: { detach: () => {} },
+    view: { camera: { fit: (b: unknown) => fitted.push(b) }, zoomExtents: () => {} },
+    cloud,
   } as unknown as AppContext;
   const files = new DocumentFiles(ctx);
-  return { doc, files, messages };
+  // Every question is recorded and answered with the next choice (none left: the test did not expect one).
+  const asked: string[] = [];
+  const answers: DiscardChoice[] = [];
+  files.ask = async (_name, after) => {
+    asked.push(after);
+    const next = answers.shift();
+    if (!next) throw new Error(`beklenmeyen soru: ${after}`);
+    return next;
+  };
+  return { doc, files, messages, asked, answers, cloud, fitted };
 }
+
+const fresh = () => newProjectContent({ name: 'Ada 200', srid: 5254, plotScale: 500 });
 
 const pick = (save: DrawingFileHandle | null, open: DrawingFileHandle | null = null): DrawingFilePicker => ({ save: async () => save, open: async () => open });
 
@@ -120,5 +151,74 @@ describe('local drawing files', () => {
     expect(await files.save()).toBe(false);
     expect(await first).toBe(true);
     expect(files.busy.value).toBe(false);
+  });
+});
+
+describe('new project', () => {
+  it('replaces a clean drawing without asking and has no file yet', async () => {
+    const { doc, files, asked, messages, fitted } = setup();
+    files.handle = memoryFile('eski.kcad');
+    expect(await files.newProject(fresh())).toBe(true);
+    expect([doc.size, doc.name.value, doc.crs.value.srid, doc.settings.plotScale.value, doc.dirty.value]).toEqual([0, 'Ada 200', 5254, 500, false]);
+    expect([files.handle, asked.length]).toEqual([null, 0]);
+    // One sheet at 1:500 around the zone's work-area centre.
+    expect(fitted).toEqual([{ minX: 499_875, minY: 4_319_906.25, maxX: 500_125, maxY: 4_320_093.75 }]);
+    expect(messages.at(-1)).toBe('ok: “Ada 200” yeni projesi açıldı: TUREF / TM30 (EPSG:5254), 1:500. İlk kayıtta dosyanın yeri sorulur.');
+  });
+
+  it('asks about unsaved changes: stay keeps everything, drop replaces, save writes first', async () => {
+    const { doc, files, asked, answers } = setup();
+    doc.add({ kind: 'point', layerId: 'x', p: { x: 1, y: 2 }, attrs: {} });
+    answers.push('stay');
+    expect(await files.newProject(fresh())).toBe(false);
+    expect([doc.size, doc.dirty.value, asked[0]]).toEqual([1, true, 'Yeni proje açılırsa bu değişiklikler kaybolur.']);
+    answers.push('save');
+    const file = memoryFile('Proje.kcad');
+    files.picker = pick(file);
+    expect(await files.newProject(fresh())).toBe(true);
+    expect(JSON.parse(file.text).entities).toHaveLength(1);
+    expect([doc.size, files.handle]).toEqual([0, null]);
+    doc.add({ kind: 'point', layerId: 'taslak', p: { x: 1, y: 2 }, attrs: {} });
+    answers.push('drop');
+    expect(await files.newProject(fresh())).toBe(true);
+    expect([doc.size, doc.dirty.value]).toEqual([0, false]);
+    // A failed save stays: nothing is replaced.
+    doc.add({ kind: 'point', layerId: 'taslak', p: { x: 1, y: 2 }, attrs: {} });
+    answers.push('save');
+    files.picker = pick(memoryFile('dolu.kcad', { fail: true }));
+    expect(await files.newProject(fresh())).toBe(false);
+    expect(doc.size).toBe(1);
+  });
+
+  it('leaves an autosaving cloud project without asking and says what stayed on the device', async () => {
+    const cloud = fakeCloud({ name: 'Ada 101', canWrite: true, unsent: 2 });
+    const { doc, files, asked, messages } = setup(undefined, cloud);
+    doc.add({ kind: 'point', layerId: 'x', p: { x: 1, y: 2 }, attrs: {} });
+    expect(await files.newProject(fresh())).toBe(true);
+    expect([asked.length, cloud.left, cloud.project.value]).toEqual([0, 1, null]);
+    expect(messages).toContain('bilgi: “Ada 101” bulut projesi kapatıldı. Gönderilemeyen 2 değişiklik bu cihazda saklanıyor; proje yeniden açılınca geri gelir.');
+  });
+
+  it('asks a viewer, whose cloud edits are not kept', async () => {
+    const cloud = fakeCloud({ name: 'Ada 101', canWrite: false, unsent: 0 });
+    const { doc, files, asked, answers } = setup(undefined, cloud);
+    doc.add({ kind: 'point', layerId: 'x', p: { x: 1, y: 2 }, attrs: {} });
+    answers.push('stay');
+    expect(await files.newProject(fresh())).toBe(false);
+    expect([asked.length, cloud.left, doc.size]).toEqual([1, 0, 1]);
+  });
+
+  it('waits while an edit is open, and opening a file leaves the cloud project too', async () => {
+    const { doc, files, messages } = setup(undefined, fakeCloud({ name: 'Ada 101', canWrite: true, unsent: 0 }));
+    const group = doc.beginGroup('işlem');
+    expect(await files.newProject(fresh())).toBe(false);
+    expect(messages.at(-1)).toMatch(/^uyarı: Bir işlem sürerken yeni proje açılamaz/);
+    group.cancel();
+    doc.add({ kind: 'point', layerId: 'x', p: { x: 1, y: 2 }, attrs: {} });
+    const src = snapshotSampleDocument();
+    files.picker = pick(null, memoryFile('Örnek.kcad', { text: JSON.stringify(toSnapshot(src)) }));
+    // Dirty, but the cloud project keeps the changes: no question.
+    expect(await files.open()).toBe(true);
+    expect(doc.size).toBe(src.size);
   });
 });

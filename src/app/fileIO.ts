@@ -1,4 +1,6 @@
 import { Signal } from '../core/signal';
+import { crsBySrid } from '../geo/crs';
+import { sheetAround } from '../model/newProject';
 import { DOCUMENT_EXTENSION, readSnapshot, toSnapshot } from '../model/snapshot';
 import { h } from '../ui/dom';
 import { Dialog } from '../ui/widgets/Dialog';
@@ -13,7 +15,10 @@ import type { DocumentContent } from '../model/document';
  * the revision that was written (an edit made meanwhile stays unsaved;
  * CLAUDE.md §13.1, §21.3). Where the browser cannot write files, the drawing
  * is offered as a download and stays marked unsaved, since nothing confirms
- * it was kept. Cloud save arrives with the server (Faz B).
+ * it was kept. Yeni proje replaces the drawing with an empty one. Whatever
+ * replaces the drawing asks first about unsaved local changes; an open
+ * cloud project needs no question, since its changes are sent or kept in
+ * the device draft (it is left first, `CloudSession.leave`).
  */
 
 /** A file the app can read and write: a File System Access handle, or an in-memory one in tests. */
@@ -61,6 +66,9 @@ export const browserPicker: DrawingFilePicker = {
   },
 };
 
+/** What the user chose about unsaved changes. */
+export type DiscardChoice = 'save' | 'drop' | 'stay';
+
 /** Puts a whole drawing on screen: select tool, no selection, the new content, its start view. */
 export function replaceDrawing(ctx: AppContext, content: DocumentContent): void {
   ctx.tools.activate('select');
@@ -81,6 +89,8 @@ export class DocumentFiles {
   picker: DrawingFilePicker = browserPicker;
   /** A save or open is in progress (commands stay disabled meanwhile). */
   readonly busy = new Signal(false);
+  /** Asks about unsaved changes; `after` says what would lose them. A dialog in the app; tests answer themselves. */
+  ask: (name: string, after: string) => Promise<DiscardChoice> = askAboutUnsaved;
   private readonly ctx: AppContext;
 
   constructor(ctx: AppContext) {
@@ -100,7 +110,7 @@ export class DocumentFiles {
   /** Opens a drawing, asking first about unsaved changes. True when one was opened. */
   open(): Promise<boolean> {
     return this.run(async () => {
-      if (this.ctx.doc.dirty.value && !(await this.confirmDiscard())) return false;
+      if (this.mustAsk() && !(await this.confirmDiscard('Başka bir çizim açılırsa bu değişiklikler kaybolur.'))) return false;
       let handle: DrawingFileHandle | null | undefined;
       try {
         handle = await this.picker.open();
@@ -119,30 +129,87 @@ export class DocumentFiles {
         this.ctx.log.error(`“${handle.name}” okunamadı: ${message(e)}.`);
         return false;
       }
-      return this.load(text, handle, readOnly);
+      const content = this.read(text, handle);
+      if (!content) return false;
+      // A local file replaces an open cloud project: what waits is sent, the rest stays in the device draft.
+      await this.leaveCloud();
+      this.show(content, handle, readOnly);
+      return true;
     });
   }
 
-  /** Reads a drawing's text into the app; `handle` becomes the file Save writes to unless `readOnly`. */
+  /** Reads a drawing's text into the app at once; `handle` becomes the file Save writes to unless `readOnly`. */
   load(text: string, handle: DrawingFileHandle | null, readOnly = false): boolean {
+    const content = this.read(text, handle);
+    if (!content) return false;
+    // Nothing is waited for here: an open cloud project's unsent changes stay in its device draft.
+    this.ctx.cloud.detach();
+    this.show(content, handle, readOnly);
+    return true;
+  }
+
+  /**
+   * Replaces the drawing with a new, empty project (Dosya → Yeni proje).
+   * Unsaved local changes are asked about first; an open cloud project is
+   * left. The new drawing has no file yet, so the next Save asks where.
+   * True when it is on screen.
+   */
+  newProject(content: DocumentContent): Promise<boolean> {
+    return this.run(async () => {
+      const { ctx } = this;
+      if (ctx.doc.busy) {
+        ctx.log.warn('Bir işlem sürerken yeni proje açılamaz; işlem bitince yeniden deneyin.');
+        return false;
+      }
+      if (this.mustAsk() && !(await this.confirmDiscard('Yeni proje açılırsa bu değişiklikler kaybolur.'))) return false;
+      await this.leaveCloud();
+      replaceDrawing(ctx, content);
+      this.handle = null;
+      const crs = crsBySrid(content.settings.srid);
+      // An empty drawing has no extent: it opens on one sheet around its origin.
+      if (!content.entities.length) ctx.view.camera.fit(sheetAround(content.origin, content.settings.plotScale, crs?.unit));
+      const system = crs ? `${crs.name} (EPSG:${crs.srid})` : `EPSG:${content.settings.srid}`;
+      ctx.log.success(`“${ctx.doc.name.value}” yeni projesi açıldı: ${system}, 1:${content.settings.plotScale}. İlk kayıtta dosyanın yeri sorulur.`);
+      return true;
+    });
+  }
+
+  /** The drawing in `text`, checked like any file someone sent; null (and the reason, said) when unreadable. */
+  private read(text: string, handle: DrawingFileHandle | null): DocumentContent | null {
     const { ctx } = this;
+    const where = handle ? `“${handle.name}”` : 'Dosya';
     const read = readSnapshot(text);
     if (!read.ok) {
-      ctx.log.error(`${handle ? `“${handle.name}”` : 'Dosya'} açılamadı: ${read.error}`);
-      return false;
+      ctx.log.error(`${where} açılamadı: ${read.error}`);
+      return null;
     }
     // The project's own symbols are checked like any shared style file (untrusted data).
     const styles = projectStylesProblem(read.content.styles);
     if (styles) {
-      ctx.log.error(`${handle ? `“${handle.name}”` : 'Dosya'} açılamadı: ${styles}.`);
-      return false;
+      ctx.log.error(`${where} açılamadı: ${styles}.`);
+      return null;
     }
-    // A local file replaces an open cloud project (its unsent changes stay in the device draft).
-    ctx.cloud.detach();
-    replaceDrawing(ctx, read.content);
+    return read.content;
+  }
+
+  private show(content: DocumentContent, handle: DrawingFileHandle | null, readOnly: boolean): void {
+    const { ctx } = this;
+    replaceDrawing(ctx, content);
     this.handle = readOnly ? null : handle;
     ctx.log.success(`“${handle?.name ?? ctx.doc.name.value}” açıldı: ${ctx.doc.size} nesne, ${ctx.doc.layers.leaves().length} katman.`);
-    return true;
+  }
+
+  /** Unsaved changes that replacing the drawing would lose: local ones, or edits a cloud project does not keep (a viewer's). */
+  private mustAsk(): boolean {
+    return this.ctx.doc.dirty.value && !this.ctx.cloud.autosaves();
+  }
+
+  /** Leaves an open cloud project before the drawing is replaced, and says what stayed on this device. */
+  private async leaveCloud(): Promise<void> {
+    const project = this.ctx.cloud.project.value;
+    if (!project) return;
+    const unsent = await this.ctx.cloud.leave();
+    if (unsent) this.ctx.log.info(`“${project.name}” bulut projesi kapatıldı. Gönderilemeyen ${unsent} değişiklik bu cihazda saklanıyor; proje yeniden açılınca geri gelir.`);
   }
 
   private async run(task: () => Promise<boolean>): Promise<boolean> {
@@ -188,34 +255,11 @@ export class DocumentFiles {
   }
 
   /** Unsaved changes: save them, drop them, or stay. Resolves true when the caller may go on. */
-  private confirmDiscard(): Promise<boolean> {
-    return new Promise((resolve) => {
-      let answered = false;
-      const done = (v: boolean) => {
-        if (answered) return;
-        answered = true;
-        dialog.close();
-        resolve(v);
-      };
-      const save = h('button', { class: 'btn btn--primary', type: 'button' }, 'Kaydet ve devam et');
-      const drop = h('button', { class: 'btn', type: 'button' }, 'Kaydetmeden devam et');
-      const stay = h('button', { class: 'btn', type: 'button' }, 'Vazgeç');
-      const dialog = new Dialog({
-        title: 'Kaydedilmemiş değişiklikler',
-        width: 460,
-        content: [h('p', null, `“${this.ctx.doc.name.value}” içinde kaydedilmemiş değişiklikler var. Başka bir çizim açılırsa bu değişiklikler kaybolur.`)],
-        footer: [h('div', { class: 'dialog__foot-spacer' }), stay, drop, save],
-        onClose: () => done(false),
-      });
-      stay.addEventListener('click', () => done(false));
-      drop.addEventListener('click', () => done(true));
-      save.addEventListener('click', () => {
-        answered = true;
-        dialog.close();
-        // Saving is part of this command: the busy flag is already held.
-        void (this.handle ? this.writeTo(this.handle) : this.chooseAndWrite()).then(resolve);
-      });
-    });
+  private async confirmDiscard(after: string): Promise<boolean> {
+    const choice = await this.ask(this.ctx.doc.name.value, after);
+    if (choice !== 'save') return choice === 'drop';
+    // Saving is part of this command: the busy flag is already held.
+    return this.handle ? this.writeTo(this.handle) : this.chooseAndWrite();
   }
 
   /** Save as, inside a command that already holds the busy flag. */
@@ -236,6 +280,36 @@ export class DocumentFiles {
     if (name && doc.name.value !== name) doc.name.set(name);
     return this.writeTo(handle);
   }
+}
+
+/**
+ * The question about unsaved changes. It stacks over a dialog that asked
+ * for the replacement (Yeni proje), so staying goes back to that dialog.
+ */
+function askAboutUnsaved(name: string, after: string): Promise<DiscardChoice> {
+  return new Promise((resolve) => {
+    let answered = false;
+    const done = (v: DiscardChoice) => {
+      if (answered) return;
+      answered = true;
+      dialog.close();
+      resolve(v);
+    };
+    const save = h('button', { class: 'btn btn--primary', type: 'button' }, 'Kaydet ve devam et');
+    const drop = h('button', { class: 'btn', type: 'button' }, 'Kaydetmeden devam et');
+    const stay = h('button', { class: 'btn', type: 'button' }, 'Vazgeç');
+    const dialog = new Dialog({
+      title: 'Kaydedilmemiş değişiklikler',
+      width: 460,
+      stack: true,
+      content: [h('p', null, `“${name}” içinde kaydedilmemiş değişiklikler var. ${after}`)],
+      footer: [h('div', { class: 'dialog__foot-spacer' }), stay, drop, save],
+      onClose: () => done('stay'),
+    });
+    stay.addEventListener('click', () => done('stay'));
+    drop.addEventListener('click', () => done('drop'));
+    save.addEventListener('click', () => done('save'));
+  });
 }
 
 /** Where the browser has no open dialog API: a hidden file input. */

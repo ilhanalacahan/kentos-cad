@@ -62,6 +62,8 @@ export interface CommandHooks {
   openAppSettings: (section?: string) => void;
   /** Proje ayarları — CRS, units, plot scale; stored in the project file. */
   openProjectSettings: (section?: string) => void;
+  /** Yeni proje — an empty drawing with the standard layers, a CRS and a plot scale. */
+  openNewProject: () => void;
   focusCommandLine: () => void;
 }
 
@@ -77,7 +79,18 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
 
   commands.registerAll([
     // Dosya
-    pending(ctx, 'file.new', 'Yeni proje', F, 'fileNew'),
+    {
+      id: 'file.new',
+      title: 'Yeni proje…',
+      category: F,
+      icon: 'fileNew',
+      description:
+        'Boş bir çizim açar: standart katman ağacı, seçilen koordinat sistemi ve çizim ölçeği. Kaydedilmemiş değişiklikler varsa önce sorar; açık bulut projesi kapanır.',
+      aliases: ['YENI', 'NEW'],
+      run: () => hooks.openNewProject(),
+      isEnabled: () => !ctx.files.busy.value,
+      watch: [ctx.files.busy],
+    },
     {
       id: 'file.open',
       title: 'Aç…',

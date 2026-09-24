@@ -79,8 +79,15 @@ export class ProjectSync {
     return this.core.cursor;
   }
 
+  /**
+   * Stops for good (the project is left). Whatever is still on its way is
+   * abandoned, not finished: the drawing may already hold another project,
+   * and the device draft (saved before every send) keeps the command with
+   * its idempotency key for the next time this project opens.
+   */
   dispose(): void {
     this.disposed = true;
+    this.core.closed = true;
     clearTimeout(this.timer);
     clearTimeout(this.draftTimer);
     clearTimeout(this.restoreTimer);
@@ -151,8 +158,17 @@ export class ProjectSync {
     };
   }
 
+  /** Writes what is still unsent to this device now (before the project is left). A viewer's edits are never kept. */
+  async keepDraft(): Promise<void> {
+    clearTimeout(this.draftTimer);
+    if (this.o.canWrite === false) return;
+    await this.saveDraft();
+  }
+
   private async saveDraft(): Promise<void> {
     clearTimeout(this.draftTimer);
+    // After leaving, the drawing is not this project's any more: its draft stays as last saved.
+    if (this.disposed) return;
     try {
       const d = this.draft();
       if (d) await this.o.drafts.put(this.o.draftKey, d);
@@ -192,6 +208,7 @@ export class ProjectSync {
     clearTimeout(this.timer);
     if (core.inflight && !(await this.send(core.inflight))) return false;
     for (;;) {
+      if (this.disposed) return false;
       const planned: Planned[] = [];
       for (const id of [...core.dirty]) {
         const p = core.tracker.plan(doc, id);
@@ -218,7 +235,7 @@ export class ProjectSync {
       core.inflight = { envelope, planned, meta: patch ? metaParts(doc) : null, revision: doc.revision };
       // Kept on the device before it goes: after a crash the same key is sent again.
       await this.saveDraft();
-      if (!(await this.send(core.inflight))) return false;
+      if (this.disposed || !(await this.send(core.inflight))) return false;
     }
     this.firstPending = 0;
     this.pending.set(0);
@@ -235,6 +252,8 @@ export class ProjectSync {
     core.own.add(f.envelope.requestId);
     try {
       const result = await this.o.api.command(f.envelope);
+      // Left while it was on its way: the answer belongs to a drawing that is gone.
+      if (this.disposed) return false;
       for (const p of f.planned) {
         core.tracker.acknowledge(p, result.versions[p.featureId]);
         if (core.tracker.settled(this.o.doc, p)) core.dirty.delete(p.localId);
@@ -250,6 +269,7 @@ export class ProjectSync {
       this.pending.set(core.pendingCount());
       return true;
     } catch (e) {
+      if (this.disposed) return false;
       const failure = e instanceof ApiFailure ? e : new ApiFailure(0, {}, String(e));
       if (failure.code === 'conflict') {
         core.inflight = null;
@@ -306,6 +326,7 @@ export class ProjectSync {
       for (const c of list) {
         if (c.reason === 'project') {
           const m = await core.serverMeta();
+          if (this.disposed) return;
           if (m) {
             meta = m.meta;
             core.metaVersion = m.version;
@@ -327,6 +348,7 @@ export class ProjectSync {
         }
       }
       await core.whenIdle();
+      if (this.disposed) return;
       doc.applyExternal({ put, remove, meta });
       if (meta) {
         core.metaBase = metaParts(doc);
@@ -357,7 +379,11 @@ export class ProjectSync {
   /** Applies committed events (from the socket, in order). Our own commits are skipped. */
   receive(events: readonly EventRecord[]): Promise<void> {
     this.remoteQueue = this.remoteQueue
-      .then(async () => this.addConflicts(await applyEvents(this.core, events)))
+      .then(async () => {
+        if (this.disposed) return;
+        const found = await applyEvents(this.core, events);
+        if (!this.disposed) this.addConflicts(found);
+      })
       .catch((e) => this.o.warn(`Başka kullanıcıların değişiklikleri alınamadı: ${(e as Error).message}`));
     return this.remoteQueue;
   }
@@ -366,6 +392,7 @@ export class ProjectSync {
   async restore(draft: Draft): Promise<void> {
     if (draft.userId !== this.o.userId || this.disposed) return;
     const r = await restoreDraft(this.core, draft);
+    if (this.disposed) return;
     if (r.waiting) {
       this.state.set('offline_pending');
       clearTimeout(this.restoreTimer);

@@ -613,3 +613,25 @@
   background: var(--canvas-snap);
   clip-path: polygon(0 0, 100% 0, 0 100%, 100% 100%, 84% 100%, 0 14%, 0 86%, 84% 0);
 }
+
+/* ── New project (Dosya → Yeni proje) ───────────────────────────────
+ * The settings rows and the CRS picker in a plain dialog: the first group
+ * sits right under the title, the CRS picker keeps its own layout.
+ */
+.dialog--newproj {
+  max-height: min(88vh, 820px);
+}
+.dialog--newproj .dialog__body > .sgroup:first-child {
+  margin-top: 0;
+}
+.dialog--newproj .dialog__body > .note {
+  margin-top: 16px;
+}
+.newproj__status {
+  margin: 0;
+  color: var(--c-danger);
+  font-size: var(--fs-xs);
+}
+.newproj__status:not(:empty) {
+  margin-top: 10px;
+}

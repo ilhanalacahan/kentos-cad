@@ -959,6 +959,58 @@ try {
   check('undo/redo keeps the document intact', (await b.eval('window.kentos.doc.size')) === before);
 
   await b.shot('smoke-final');
+
+  // Dosya → Yeni proje (Ctrl+Alt+N): name, system and scale in the dialog; unsaved changes are asked about over it.
+  {
+    const center = (sel, text = '') =>
+      b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.trim().startsWith(${JSON.stringify(text)})); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const press = async (sel, text) => {
+      const p = await center(sel, text);
+      if (!p) throw new Error(`bulunamadı: ${sel} ${text ?? ''}`);
+      await b.click(...p);
+      await sleep(150);
+    };
+    check('the drawing has unsaved changes before Yeni proje', await b.eval('window.kentos.doc.dirty.value'));
+    await key('n', { ctrl: true, alt: true });
+    await b.waitFor(`document.querySelector('.dialog--newproj')`, 3000).catch(() => {});
+    // The name field opens focused with its text selected: typing replaces it.
+    await b.type('Ada 200');
+    await press('.dialog--newproj .crs-search__input');
+    await b.type('5254');
+    await press('.dialog--newproj .seg__opt', '1:500');
+    await b.shot('newproject-dialog');
+    await press('.dialog__foot .btn', 'Oluştur');
+    await b.waitFor(`[...document.querySelectorAll('.dialog__foot .btn')].some((x) => x.textContent === 'Kaydetmeden devam et')`, 3000).catch(() => {});
+    // Vazgeç in the question goes back to the dialog, with nothing changed.
+    const question = '.dialog[aria-label="Kaydedilmemiş değişiklikler"] .dialog__foot .btn';
+    await press(question, 'Vazgeç');
+    const stayed = await b.eval(`!!document.querySelector('.dialog--newproj') && window.kentos.doc.size > 0 && window.kentos.doc.dirty.value`);
+    await press('.dialog--newproj .dialog__foot .btn', 'Oluştur');
+    await b.waitFor(`[...document.querySelectorAll('.dialog__foot .btn')].some((x) => x.textContent === 'Kaydetmeden devam et')`, 3000).catch(() => {});
+    check('Yeni proje asks about unsaved changes, and Vazgeç returns to its dialog', stayed && !!(await center(question, 'Kaydetmeden devam et')));
+    await press(question, 'Kaydetmeden devam et');
+    await b.waitFor(`!document.querySelector('.dialog--newproj') && window.kentos.doc.size === 0`, 5000).catch(() => {});
+    const np = await b.eval(`(() => { const k = window.kentos; const leaves = k.doc.layers.leaves().map((l) => l.id); return { size: k.doc.size, name: k.doc.name.value, srid: k.doc.crs.value.srid, scale: k.doc.settings.plotScale.value, dirty: k.doc.dirty.value, undo: k.doc.canUndo.value, file: k.files.handle, parcel: leaves.includes('parsel') && leaves.includes('kot'), active: k.doc.layers.active.value, origin: k.doc.origin }; })()`);
+    check(
+      'Yeni proje opens an empty drawing with the chosen name, system and scale',
+      np.size === 0 && np.name === 'Ada 200' && np.srid === 5254 && np.scale === 500 && !np.dirty && !np.undo && np.file === null && np.parcel && np.active === 'taslak',
+      JSON.stringify(np),
+    );
+    // A typed line lands exactly; the first Ctrl+S asks where to write, under the project's name.
+    await key('l');
+    await cmd(`${np.origin.x + 10},${np.origin.y + 10}`);
+    await cmd(`${np.origin.x + 60},${np.origin.y + 10}`);
+    await key('Escape');
+    const drawn = await b.eval('[...window.kentos.doc.all()]');
+    await b.eval(`(() => { window.__asked = null; window.kentos.files.picker = { save: async (n) => { window.__asked = n; return window.__files.file(n); }, open: async () => null }; })()`);
+    await b.key('s', { ctrl: true });
+    await b.waitFor(`!window.kentos.files.busy.value && window.__asked !== null`, 5000).catch(() => {});
+    const asked = await b.eval('window.__asked');
+    check('a line in the new project, and the first save asks for “Ada 200.kcad”', drawn.length === 1 && drawn[0].b.x === np.origin.x + 60 && asked === 'Ada 200.kcad' && !(await b.eval('window.kentos.doc.dirty.value')), `${asked}`);
+    await b.eval(`(() => { window.kentos.files.picker = window.__files.original; window.kentos.files.handle = null; })()`);
+    await b.shot('newproject-drawn');
+  }
+
   const errors = b.consoleLog.filter((l) => /^(error|EXCEPTION)/.test(l));
   check('no console errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

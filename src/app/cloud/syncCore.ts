@@ -71,6 +71,12 @@ export class SyncCore {
   inflight: Inflight | null = null;
   /** The newest event cursor applied. */
   cursor: string;
+  /**
+   * The project was left (the sync disposed): the drawing may already hold
+   * another project, so nothing may read or change it on this project's
+   * behalf any more. Every step that awaits checks this before going on.
+   */
+  closed = false;
 
   constructor(o: SyncOptions) {
     this.o = o;
@@ -145,6 +151,7 @@ export class SyncCore {
   async takeServerCopies(ids: readonly string[]): Promise<void> {
     if (!ids.length) return;
     const fresh = await this.o.api.featuresById(this.o.tenantId, this.o.projectId, ids);
+    if (this.closed) return;
     const byId = new Map(fresh.features.map((f) => [f.id, f]));
     const good = this.checked(fresh.features.map((f) => ({ key: f.id, entity: f.entity })));
     const doc = this.o.doc;
@@ -166,6 +173,7 @@ export class SyncCore {
       }
     }
     await this.whenIdle();
+    if (this.closed) return;
     doc.applyExternal({ put, remove });
   }
 }

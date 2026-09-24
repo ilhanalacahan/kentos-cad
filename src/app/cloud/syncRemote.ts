@@ -29,13 +29,16 @@ export async function applyEvents(core: SyncCore, events: readonly EventRecord[]
     const page = await o.api.featuresById(o.tenantId, o.projectId, wanted.slice(i, i + BATCH));
     for (const f of page.features) fetched.set(f.id, f);
   }
+  if (core.closed) return [];
   const conflicts: SyncConflict[] = [];
   if (meta) {
     const m = await core.serverMeta();
+    if (core.closed) return [];
     if (m && core.sendsMeta()) conflicts.push({ featureId: '@project', localId: null, reason: 'project', server: null, actual: m.version });
     else if (m) {
       core.metaVersion = m.version;
       await core.whenIdle();
+      if (core.closed) return [];
       o.doc.applyExternal({ meta: m.meta });
       core.metaBase = metaParts(o.doc);
     }
@@ -64,6 +67,7 @@ export async function applyEvents(core: SyncCore, events: readonly EventRecord[]
     }
   }
   await core.whenIdle();
+  if (core.closed) return [];
   if (put.length || remove.length) doc.applyExternal({ put, remove });
   core.cursor = last;
   return conflicts;

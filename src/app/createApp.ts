@@ -8,6 +8,7 @@ import { TOOL_CATALOG } from '../tools/catalog';
 import { ToolManager } from '../tools/ToolManager';
 import { openAboutDialog, openShortcutsDialog } from '../ui/dialogs';
 import { openAppSettings, type AppSettingsSection } from '../ui/settings/AppSettingsDialog';
+import { openNewProjectDialog } from '../ui/settings/NewProjectDialog';
 import { openProjectSettings, type ProjectSettingsSection } from '../ui/settings/ProjectSettingsDialog';
 import { AppShell } from '../ui/shell/AppShell';
 import { openModelDialog, openToolDialog } from '../ui/processing/ToolDialog';
@@ -100,6 +101,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     openAbout: () => openAboutDialog(ctx),
     openAppSettings: (section) => openAppSettings(ctx, section as AppSettingsSection | undefined),
     openProjectSettings: (section) => openProjectSettings(ctx, section as ProjectSettingsSection | undefined),
+    openNewProject: () => openNewProjectDialog(ctx),
     focusCommandLine: () => shell?.bottom.commandLine.focus(),
   });
   registerProcessingCommands(ctx, {

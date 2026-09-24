@@ -125,6 +125,35 @@ export class CloudSession {
     return this.sync.value?.flush() ?? Promise.resolve(true);
   }
 
+  /**
+   * Whether the open cloud project keeps this drawing's changes (sent, or
+   * waiting in the device draft), so replacing the drawing loses nothing.
+   * A viewer's edits are never sent: they are not kept.
+   */
+  autosaves(): boolean {
+    return !!this.project.value?.canWrite && !!this.sync.value;
+  }
+
+  /**
+   * Leaves the open cloud project before another drawing takes its place:
+   * what waits is sent if the server answers within `waitMs`, and whatever
+   * is still unsent stays in this device's draft (it comes back when the
+   * project is opened again). Returns how many changes stayed on the device.
+   */
+  async leave(waitMs = 5000): Promise<number> {
+    const sync = this.sync.value;
+    if (sync) {
+      let timer = 0;
+      const gaveUp = new Promise<void>((resolve) => (timer = setTimeout(resolve, waitMs) as unknown as number));
+      await Promise.race([sync.flush().catch(() => false), gaveUp]);
+      clearTimeout(timer);
+      await sync.keepDraft();
+    }
+    const unsent = sync?.pending.value ?? 0;
+    this.detach();
+    return unsent;
+  }
+
   /** Leaves the open cloud project (a local file is about to replace the drawing); any open in progress is dropped. */
   detach(dropOpening = true): void {
     if (dropOpening) this.generation++;
@@ -177,7 +206,16 @@ export class CloudSession {
       onError: (m) => this.ctx.log.warn(`Canlı bağlantı: ${m}`),
     });
     this.socket = socket;
-    this.unlink = socket.state.subscribe((s) => this.link.set(s), true);
+    const unlinkSocket = socket.state.subscribe((s) => this.link.set(s), true);
+    // The drawing's name is the project's name: a rename here, or by another editor, shows in the status bar too.
+    const unname = this.ctx.doc.name.subscribe((name) => {
+      const p = this.project.value;
+      if (p && p.name !== name) this.project.set({ ...p, name });
+    });
+    this.unlink = () => {
+      unlinkSocket();
+      unname();
+    };
     this.sync.set(sync);
     this.project.set(project);
     socket.start();
