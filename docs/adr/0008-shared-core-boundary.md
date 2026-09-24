@@ -320,7 +320,7 @@ SVG düzenleyicisinin geometrisi TypeScript'ten Rust'a taşındı: yol verisi, B
 - **Yer:** yeni crate `crates/shared/svg-core`. `kentos-geometry-core` ve `kentos-style-core`'a bağlıdır; DOM, WASM ve ağ bilmez; `clippy.toml` std aşkın işlevlerini yasaklar. TS dosyası başına bir modül:
   - `path.rs` (pathData), `bezier.rs`, `fit.rs` (fitCurve), `boolean.rs` (pathBool: kirişi izlenen düzleştirme, dolgu kuralları, geometri çekirdeğinin düzlem bindirmesi, eğrilerin geri kurulması, yolu kes), `stroke.rs` (pathStroke), `ops.rs` (pathOps);
   - `model.rs` ve `shape.rs` (svgModel), `nodes.rs` (nodeOps), `snap.rs` (snapping), `arrange.rs`, `trace.rs`;
-  - `values.rs` (svgValues), `import.rs` (importSvg), `export.rs` (exportSvg);
+  - `values/` (svgValues; kavram başına bir dosya: `number` JavaScript'in sayı okuması, `color` renk ve boya, `units` dönüşüm, uzunluk ve viewBox, `xml` dosyanın öğe listesi, `css` stil sayfaları), `import.rs` (importSvg), `export.rs` (exportSvg);
   - `api.rs`: çağrı tablosu (99 işlem, adları TS işlevlerininki).
 - **Paket:** `crates/wasm/svg-wasm` → `apps/web/src/style/svg/pkg` (`pnpm rust:wasm:svg`; `scripts/wasm/ensure.mjs` üçüncü paket olarak derler; depoya girmez). `openSvgEditor` önce `initSvgCore()`'u bekler (indirme ve derleme bir kez). Yüklenemezse düzenleyici açılmaz, Türkçe hata yazılır, sonraki açılış yeniden dener (CLAUDE.md §20.2). Testlerde `style/svg/testSetup.ts` paketi baytlarından başlatır.
 - **Sınır:**
