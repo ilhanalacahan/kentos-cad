@@ -6,7 +6,7 @@ import { Gen } from './calls/harness';
 import { entity } from './calls/sets/p5-entities';
 
 /**
- * Packed objects (./pack.ts → crates/geometry-core/src/store/pack.rs) must
+ * Packed objects (./pack.ts → crates/shared/geometry-core/src/store/pack.rs) must
  * build the very objects their JSON builds: every kind, with bulges, holes,
  * optional fields present and absent, labels and layers.
  */

@@ -9,7 +9,7 @@ import { StoreScene, type StoreFile } from './calls/storeCases';
  * corner numbering and edge labels), recorded from the TypeScript the
  * store replaced (docs/adr/0008, S1, S4), through the app's path into the
  * WASM geometry store (processing's through a run's own `ObjectStore`);
- * Rust runs the same files natively (crates/geometry-core/tests/store.rs).
+ * Rust runs the same files natively (crates/shared/geometry-core/tests/store.rs).
  */
 
 const files = import.meta.glob<string>('../../fixtures/geometry/v1/store-*.json', { query: '?raw', import: 'default', eager: true });

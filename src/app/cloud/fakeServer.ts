@@ -13,7 +13,7 @@ import { ApiFailure, type CloudApi } from './api';
  * An in-memory stand-in for the server's edit protocol, for the sync tests:
  * versions and 409s, idempotent replays, events with request ids, a
  * deleted project (410), and switches for a dead network and a lost
- * answer. It follows crates/application/src/changes.rs and lifecycle.rs;
+ * answer. It follows crates/server/application/src/changes.rs and lifecycle.rs;
  * the real thing is tested against PostgreSQL in Rust and end to end in
  * the browser.
  */

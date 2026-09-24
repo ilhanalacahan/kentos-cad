@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import formatsRs from '../../crates/contracts/src/formats.rs?raw';
+import formatsRs from '../../crates/shared/contracts/src/formats.rs?raw';
 import type { CoordRead } from '../contracts/generated/CoordRead';
 import type { CoordReadOptions } from '../contracts/generated/CoordReadOptions';
 import type { CoordWriteInput } from '../contracts/generated/CoordWriteInput';
@@ -9,8 +9,8 @@ import { FORMATS_VERSION } from './version';
 
 /**
  * The Rust file formats as the browser runs them: the formats WASM module
- * (crates/formats-wasm → src/io/pkg, built by `pnpm wasm`) on the shared
- * fixtures (fixtures/formats/v1, which crates/formats/tests reads natively
+ * (crates/wasm/formats-wasm → src/io/pkg, built by `pnpm wasm`) on the shared
+ * fixtures (fixtures/formats/v1, which crates/shared/formats/tests reads natively
  * too). Skipped only when the package has not been built.
  */
 

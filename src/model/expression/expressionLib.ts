@@ -37,7 +37,7 @@ const MEASURE_STRIDE = 6;
 
 /**
  * The geometry values of object `i` in a geometry store `measures` answer
- * (crates/geometry-core/src/store/draw.rs), for drawing a layer and for
+ * (crates/shared/geometry-core/src/store/draw.rs), for drawing a layer and for
  * processing runs alike (docs/adr/0008, S2 and S4).
  */
 export function measuredAt(values: Float64Array, i: number): Measured {

@@ -7,7 +7,7 @@ import type { LayerStyle } from '../model/layers';
 /**
  * Coordinate lists (Netcad NCN, TXT, CSV) as the dialogs offer them: column
  * orders, delimiters and output formats, and the points of a drawing to
- * write. Reading and writing themselves are in Rust (crates/formats).
+ * write. Reading and writing themselves are in Rust (crates/shared/formats).
  * Y is to the right (east, the model's x), X is up (north) (CLAUDE.md §5).
  */
 

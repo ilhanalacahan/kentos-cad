@@ -15,9 +15,9 @@ import { spawnSync } from 'node:child_process';
 const ROOT = new URL('../..', import.meta.url).pathname;
 const PINS = ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml'];
 const PACKAGES = [
-  { label: 'Geometri çekirdeği', script: 'rust:wasm', out: 'src/wasm/pkg', lib: 'kentos_wasm', sources: ['crates/geometry-core', 'crates/wasm', ...PINS] },
+  { label: 'Geometri çekirdeği', script: 'rust:wasm', out: 'src/wasm/pkg', lib: 'kentos_geometry_wasm', sources: ['crates/shared/geometry-core', 'crates/wasm/geometry-wasm', ...PINS] },
   // The formats use the core's own sampling of bulged rings (docs/adr/0009): a core edit rebuilds both.
-  { label: 'Dosya biçimleri', script: 'rust:wasm:formats', out: 'src/io/pkg', lib: 'kentos_formats_wasm', sources: ['crates/formats', 'crates/formats-wasm', 'crates/contracts', 'crates/geometry-core', ...PINS] },
+  { label: 'Dosya biçimleri', script: 'rust:wasm:formats', out: 'src/io/pkg', lib: 'kentos_formats_wasm', sources: ['crates/shared/formats', 'crates/wasm/formats-wasm', 'crates/shared/contracts', 'crates/shared/geometry-core', ...PINS] },
 ];
 
 function files(path) {

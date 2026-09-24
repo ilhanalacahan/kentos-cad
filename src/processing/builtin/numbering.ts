@@ -7,7 +7,7 @@ import type { CoreCorner, CornerWalk } from '../geometry';
  * a ring is walked in, one number per location across many shapes
  * (neighbouring parcels share their common corners) and the outward
  * direction at a corner come from the geometry core
- * (crates/geometry-core/src/processing/numbering.rs, docs/adr/0008 S4).
+ * (crates/shared/geometry-core/src/processing/numbering.rs, docs/adr/0008 S4).
  */
 
 export interface NumberFormat {

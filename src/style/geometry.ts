@@ -38,7 +38,7 @@ export function geometryClassOf(e: Entity): GeometryClass | null {
   }
 }
 
-/** Record kinds and point references of the store's drawn geometry (crates/geometry-core/src/store/draw.rs). */
+/** Record kinds and point references of the store's drawn geometry (crates/shared/geometry-core/src/store/draw.rs). */
 const MARKER = 1;
 const LINE = 2;
 const FILL = 3;

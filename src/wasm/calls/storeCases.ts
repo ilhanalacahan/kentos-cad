@@ -10,7 +10,7 @@ import type { Tolerance } from './harness';
  * geometry store's queries on it, by name. The WASM test
  * (src/wasm/store.wasm.test.ts) and the recorders
  * (scripts/fixtures/record-store*.test.ts) ask the store the same way;
- * Rust reads the same files natively (crates/geometry-core/tests/store.rs).
+ * Rust reads the same files natively (crates/shared/geometry-core/tests/store.rs).
  */
 
 export interface StoreCase {

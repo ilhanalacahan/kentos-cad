@@ -18,7 +18,7 @@ import { zoomToImported } from './zoom';
 
 /**
  * Koordinat listesi içe aktar (Netcad NCN, TXT, CSV). The worker reads the
- * file (crates/formats); the window shows what it found (delimiter,
+ * file (crates/shared/formats); the window shows what it found (delimiter,
  * decimal mark, header, what each column holds) with the first rows, and
  * every choice re-reads the file. The coordinate system is asked, the
  * project's by default; any other blocks the import (no silent

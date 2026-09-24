@@ -1,6 +1,6 @@
 /**
  * Objects packed as numbers for the Rust geometry store (docs/adr/0008:
- * points cross as Float64Array; crates/geometry-core/src/store/pack.rs has
+ * points cross as Float64Array; crates/shared/geometry-core/src/store/pack.rs has
  * the layout). A JSON array of 80 000 parcels is 26 MB and made the core
  * build millions of small values before reading one object; packed, it is
  * one run of float64s (ids and coordinates bit for bit, −0 and NaN

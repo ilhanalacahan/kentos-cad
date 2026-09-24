@@ -3,7 +3,7 @@ import text from '../../../fixtures/geometry/v1/cases.json?raw';
 import { close, run, type GoldenFile } from './goldenCases';
 
 /**
- * Golden geometry cases shared with the Rust core (crates/geometry-core,
+ * Golden geometry cases shared with the Rust core (crates/shared/geometry-core,
  * tests/golden.rs) and its WASM build: the same inputs must give the same
  * results within the tolerance in the file (docs/adr/0002-contracts-fixtures.md).
  * The expected values were recorded once from this TypeScript reference

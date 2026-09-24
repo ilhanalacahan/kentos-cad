@@ -16,9 +16,9 @@ Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. F
 
   | Crate | Görev | Bağımlılık |
   |---|---|---|
-  | `crates/geometry-core` | Saf analitik geometri (f64), `src/model/geom` ve `src/model/geometry.ts`'in birebir karşılığı; §23 sayısal politikası (`numeric`); çağrı tablosu (`api`, ADR 0008) | Yalnızca saf crate'ler (rust_decimal, libm, serde, serde_json). Dosya sistemi, ağ, Tokio, SQLx, HTTP ya da WebGPU'ya bağlanamaz; wasm32 için de derlenir |
-  | `crates/contracts` | Sürümlü veri sözleşmeleri; TS tipleri buradan üretilir (ADR 0002) | serde, serde_json, ts-rs |
-  | `crates/wasm` | Çekirdeğin tarayıcı sınırı: çağrı tablosu (JSON) ve düz `Float64Array` giriş-çıkışlı sıcak yollar (ADR 0008) | geometry-core, wasm-bindgen |
+  | `crates/shared/geometry-core` | Saf analitik geometri (f64), `src/model/geom` ve `src/model/geometry.ts`'in birebir karşılığı; §23 sayısal politikası (`numeric`); çağrı tablosu (`api`, ADR 0008) | Yalnızca saf crate'ler (rust_decimal, libm, serde, serde_json). Dosya sistemi, ağ, Tokio, SQLx, HTTP ya da WebGPU'ya bağlanamaz; wasm32 için de derlenir |
+  | `crates/shared/contracts` | Sürümlü veri sözleşmeleri; TS tipleri buradan üretilir (ADR 0002) | serde, serde_json, ts-rs |
+  | `crates/wasm/geometry-wasm` | Çekirdeğin tarayıcı sınırı: çağrı tablosu (JSON) ve düz `Float64Array` giriş-çıkışlı sıcak yollar (ADR 0008) | geometry-core, wasm-bindgen |
   | `apps/api` | HTTP API; Faz A'da yalnızca `GET /v1/health` | contracts, axum, tokio |
 
 - Bağımlılıklar kullanıcı onayıyla eklendi ve tam sürüme kilitlendi (`=`). `Cargo.lock` depoya girer.
@@ -44,8 +44,8 @@ Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. F
 - `src/` ağacı taşınmadı. Rust çekirdeği TypeScript'e parça parça girecek. Aynı anlam iki dilde uzun süre paralel geliştirilmez (§14).
 - CLAUDE.md §14'teki diğer bileşenler ilgili fazda eklenir:
   - `apps/worker`;
-  - `crates/application` (ortak kullanım durumları, yetki, iş sözleşmesi);
-  - `crates/postgres` (SQLx, PostGIS SQL, migration);
+  - `crates/server/application` (ortak kullanım durumları, yetki, iş sözleşmesi);
+  - `crates/server/postgres` (SQLx, PostGIS SQL, migration);
   - `crates/tiles` (Martin arkasında TileJSON/MVT, önbellek geçersizleştirme);
   - `crates/style-core`.
 - SQLx ve Tower Faz B'de PostgreSQL ile birlikte girer. Faz A'da veritabanı yoktur.

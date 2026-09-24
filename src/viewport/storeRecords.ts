@@ -4,7 +4,7 @@ import type { LabelStyle } from '../model/layers';
 
 /**
  * What the geometry store hands the overlay (docs/adr/0008, S1): label
- * records and grips, as flat numbers (crates/geometry-core/src/store/
+ * records and grips, as flat numbers (crates/shared/geometry-core/src/store/
  * labels.rs). The store decides which labels a frame draws and where; the
  * overlay reads their strings and styles from the objects.
  */

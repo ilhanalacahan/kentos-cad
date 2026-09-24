@@ -7,7 +7,7 @@ import { op } from '../wasm/core';
 
 /**
  * What the tools compute from their points and typed values, from the Rust
- * core (crates/geometry-core/src/tools, docs/adr/0008 S5): the point
+ * core (crates/shared/geometry-core/src/tools, docs/adr/0008 S5): the point
  * calculator's arithmetic, directions and angles, typed-radius polygons,
  * arc and ellipse helpers, polyline arc bulges, rotate/scale/polar array/align
  * transforms, fillet and chamfer corners, dimension arms. The tools only

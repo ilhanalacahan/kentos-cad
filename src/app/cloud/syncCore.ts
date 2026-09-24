@@ -17,7 +17,7 @@ import { Tracker, entityJson, metaParts, type MetaParts, type Planned } from './
 /** `deleted`: the project was deleted on the server; nothing more is sent, edits stay in the device draft. */
 export type SaveState = 'saved' | 'pending' | 'saving' | 'offline_pending' | 'conflict' | 'error' | 'readonly' | 'deleted';
 
-/** Event kind of a deleted project (`PROJECT_DELETED` in crates/contracts). */
+/** Event kind of a deleted project (`PROJECT_DELETED` in crates/shared/contracts). */
 export const PROJECT_DELETED = 'project.deleted';
 
 export interface SyncConflict {

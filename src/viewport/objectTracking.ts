@@ -3,7 +3,7 @@ import { op } from '../wasm/core';
 
 /**
  * Object snap tracking ("nesne izleme"), computed by the Rust core
- * (crates/geometry-core/src/tools/object_tracking.rs, docs/adr/0008 S5).
+ * (crates/shared/geometry-core/src/tools/object_tracking.rs, docs/adr/0008 S5).
  * Points acquired by resting the cursor on a snap emit alignment lines
  * (horizontal/vertical, plus polar steps when polar tracking is on). The
  * cursor locks onto the nearest line, or onto the crossing of two lines

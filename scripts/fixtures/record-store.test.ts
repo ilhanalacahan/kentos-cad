@@ -3,7 +3,7 @@
 // snapping, boxes, labels and grips; the tool previews and totals (trim,
 // extend, ghosts, stretch ghosts, selection totals, S1c); what the layer
 // builders draw and the expressions' geometry values (S2). Rust reads the
-// file natively (crates/geometry-core/tests/store.rs), the app through the
+// file natively (crates/shared/geometry-core/tests/store.rs), the app through the
 // WASM build (src/wasm/store.wasm.test.ts).
 // The committed answers were recorded from the TypeScript the store
 // replaced; since S3c the recorder asks the core itself, so rewriting a

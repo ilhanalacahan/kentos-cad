@@ -2,7 +2,7 @@
 // (docs/adr/0008, S4) into fixtures/geometry/v1/store-processing.json: the
 // "visible" scope's box test, corner numbering and edge-length labels, by
 // id, on a fixed scene of grid parcels (origin and TM) and objects of every
-// kind. Rust reads the file natively (crates/geometry-core/tests/store.rs),
+// kind. Rust reads the file natively (crates/shared/geometry-core/tests/store.rs),
 // the app through the WASM build (src/wasm/store.wasm.test.ts).
 // The committed answers were recorded from the TypeScript the core
 // replaced; since S3c the recorder asks the core itself, so rewriting a

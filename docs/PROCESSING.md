@@ -76,7 +76,7 @@ src/styles/model.css          Model tasarımcısı stilleri
 
 Yeni bir araç ailesi büyüdükçe `builtin/` altında alt klasör açılır
 (`builtin/cadastre/…`). Geometri araç dosyasında hesaplanmaz: Rust
-çekirdeğindedir (`crates/geometry-core`; işlem araçlarına özgü olanlar
+çekirdeğindedir (`crates/shared/geometry-core`; işlem araçlarına özgü olanlar
 `src/processing/` altında: köşe numaralama, kenar ölçüleri) ve araç onu
 `ctx.geometry` ile nesne kimliğinden sorar (ADR 0008 S4). Araç dosyasında
 metin, sayaç, süzgeç ve akış kalır.
@@ -271,7 +271,7 @@ değişmiş, katman silinmiş) değerler varsayılana döner.
 
 ## 9. Yeni işlem aracı tarifi
 
-1. Geometriyi Rust çekirdeğine yazın ve test edin (`crates/geometry-core`; araca özgüyse `src/processing/` altına, bir depo sorgusu ve `ObjectStore`'da bir yöntemle); TS'te metin ve akış kalır. Taşıma yöntemi ADR 0008'dedir.
+1. Geometriyi Rust çekirdeğine yazın ve test edin (`crates/shared/geometry-core`; araca özgüyse `src/processing/` altına, bir depo sorgusu ve `ObjectStore`'da bir yöntemle); TS'te metin ve akış kalır. Taşıma yöntemi ADR 0008'dedir.
 2. `processing/builtin/<ad>.ts` içinde `defineTool({...})` ile tanımı yazın: kimlik, etiket, kategori, simge, açıklama, yardım, anahtar kelimeler, takma adlar, `targets`, `parameters` (`as const`), `outputs`, gerekirse `validate` ve `preview`, `run`.
 3. `processing/builtin/index.ts` içindeki `BUILTIN_TOOLS` listesine ekleyin. Kategori yoksa `categories.ts`'e ekleyin.
 4. Simge yoksa `ui/icons.ts`'e çizin (DESIGN.md §6).

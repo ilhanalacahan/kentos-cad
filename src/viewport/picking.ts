@@ -30,7 +30,7 @@ export const SNAP_LABEL: Record<SnapKind, string> = {
   nearest: 'En yakın',
 };
 
-/** The core's snap kinds by bit number (crates/geometry-core/src/store/snap.rs). */
+/** The core's snap kinds by bit number (crates/shared/geometry-core/src/store/snap.rs). */
 const SNAP_BITS: readonly SnapKind[] = ['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection', 'perpendicular', 'tangent', 'nearest'];
 
 type LayerRow = { id: string; visible: boolean; locked: boolean; pickInterior: boolean; label?: ReturnType<typeof labelRule> };

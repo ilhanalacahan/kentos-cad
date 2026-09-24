@@ -914,7 +914,7 @@ try {
     await b.eval(`window.kentos.ui.dockTab.set('layers'); window.kentos.ui.processingTab.set('tools'); window.kentos.selection.clear()`);
   }
 
-  // File exchange (src/io, crates/formats): an in-memory picker hands files to the importers and takes the
+  // File exchange (src/io, crates/shared/formats): an in-memory picker hands files to the importers and takes the
   // exported bytes; the Rust formats module runs in its own worker. Coordinates must arrive exactly.
   const ioCenter = (sel, text = '') =>
     b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.trim().startsWith(${JSON.stringify(text)})); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);

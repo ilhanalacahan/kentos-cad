@@ -5,7 +5,7 @@ import { sameResult, toJson, type CallFile } from './calls/harness';
 /**
  * The frozen call fixtures (fixtures/geometry/v1/calls-*.json) through the
  * app's own path into the WASM core; Rust runs the same files natively
- * (crates/geometry-core/tests/calls.rs). The answers were recorded from the
+ * (crates/shared/geometry-core/tests/calls.rs). The answers were recorded from the
  * TypeScript each operation was ported from, before it was deleted
  * (docs/adr/0008, S3).
  */

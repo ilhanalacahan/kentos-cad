@@ -14,7 +14,7 @@ interface Wasm {
   coreVersion(): string;
 }
 
-const glue = import.meta.glob<Wasm>('./pkg/kentos_wasm.js');
+const glue = import.meta.glob<Wasm>('./pkg/kentos_geometry_wasm.js');
 const loader = Object.values(glue)[0];
 
 describe.skipIf(!loader)('the WASM build', () => {

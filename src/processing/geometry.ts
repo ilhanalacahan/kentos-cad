@@ -68,7 +68,7 @@ export interface RunGeometry {
   edgeLengths(ids: readonly number[], height: number, minLength: number, side: 'outside' | 'inside', shared: boolean): { labels: CoreEdgeLabel[]; skipped: number };
 }
 
-/** The core's start codes (crates/geometry-core/src/processing/numbering.rs `StartCorner::from_code`). */
+/** The core's start codes (crates/shared/geometry-core/src/processing/numbering.rs `StartCorner::from_code`). */
 const START: Record<CornerWalk['start'], number> = { northwest: 0, north: 1, first: 2, point: 3 };
 /** Numbers per corner (`store::processing::CORNER_STRIDE`) and per edge label (`EDGE_LABEL_STRIDE`). */
 const CORNER_STRIDE = 5;

@@ -6,7 +6,7 @@ import { FORMATS_VERSION } from './version';
 /**
  * Entry of the formats Web Worker (started by client.ts the first time a
  * file is imported or exported). It loads the Rust formats module
- * (crates/formats-wasm) on its first message; parsing a large file never
+ * (crates/wasm/formats-wasm) on its first message; parsing a large file never
  * blocks the page. One request at a time, in order.
  */
 const scope = self as unknown as {

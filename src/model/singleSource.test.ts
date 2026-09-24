@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * the algorithms were only passes calls through (`op('name')`) or reads
  * the core's flat answers. This test parses those files and fails on
  * arithmetic or `Math.` in them, so an algorithm cannot come back into
- * TypeScript unnoticed: write it in crates/geometry-core and call it.
+ * TypeScript unnoticed: write it in crates/shared/geometry-core and call it.
  *
  * Counting and indexing into a flat buffer is not geometry and passes when
  * every operand is an index: an integer, `i`/`j`/`k`/`n`/`at`, an
@@ -137,7 +137,7 @@ describe('one source of computation (CLAUDE.md §14)', () => {
         if (EXCEPTIONS[f]?.[x.owner]) used.add(`${f} ${x.owner}`);
         else failures.push(`${f}:${x.line} [${x.owner}] ${x.text}`);
       }
-    expect(failures, 'Hesabı crates/geometry-core içinde yazıp op() ile çağırın (CLAUDE.md §14).').toEqual([]);
+    expect(failures, 'Hesabı crates/shared/geometry-core içinde yazıp op() ile çağırın (CLAUDE.md §14).').toEqual([]);
     // An exception nothing needs any more is removed rather than left to excuse a new algorithm.
     const stale = Object.entries(EXCEPTIONS).flatMap(([f, fns]) => Object.keys(fns).filter((fn) => !used.has(`${f} ${fn}`)).map((fn) => `${f} ${fn}`));
     expect(stale).toEqual([]);

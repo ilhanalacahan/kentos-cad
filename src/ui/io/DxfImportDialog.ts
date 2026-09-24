@@ -12,7 +12,7 @@ import { CrsQuestion, extentLine, fileLine, reportLines, reportText, summaryLine
 import { zoomToImported } from './zoom';
 
 /**
- * DXF içe aktar. The worker reads the whole file once (crates/formats:
+ * DXF içe aktar. The worker reads the whole file once (crates/shared/formats:
  * blocks exploded, object coordinate systems applied, a report of what was
  * converted or left out); the window shows the source's layers with their
  * object counts and where each goes (a project layer with the same name,

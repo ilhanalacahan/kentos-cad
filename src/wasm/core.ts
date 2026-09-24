@@ -17,11 +17,11 @@ import {
   scratchPointInPolygon as wasmScratchPointInPolygon,
   scratchSignedArea as wasmScratchSignedArea,
   triangulateMany as wasmTriangulateMany,
-} from './pkg/kentos_wasm.js';
-import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
+} from './pkg/kentos_geometry_wasm.js';
+import wasmUrl from './pkg/kentos_geometry_wasm_bg.wasm?url';
 
 /**
- * The Rust geometry core in this page (crates/wasm, docs/adr/0008). It is
+ * The Rust geometry core in this page (crates/wasm/geometry-wasm, docs/adr/0008). It is
  * compiled once before the app starts (`initCore`), after which every call
  * is synchronous: snapping, drawing and tools run inside pointer events and
  * animation frames. The processing worker gets the compiled module with its

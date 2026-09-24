@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import contractsLib from '../../crates/contracts/src/lib.rs?raw';
+import contractsLib from '../../crates/shared/contracts/src/lib.rs?raw';
 import type { DefaultsContext } from '../processing/types';
 import type { RunJob } from '../processing/job';
 import type { Entity } from '../model/entities';
@@ -16,7 +16,7 @@ import { CONTRACTS_VERSION } from './version';
 
 /**
  * The app's own types checked against the versioned contracts generated from
- * Rust (crates/contracts → src/contracts/generated, docs/adr/0002). The
+ * Rust (crates/shared/contracts → src/contracts/generated, docs/adr/0002). The
  * checks are type assignments: if a field is added, renamed or retyped on
  * one side only, `tsc` fails here. Readonly lists become plain lists on the
  * wire, so the internal side is compared through `Wire<…>`.

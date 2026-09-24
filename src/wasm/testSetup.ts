@@ -7,4 +7,4 @@ import { initCoreFrom } from './core';
  * (scripts/wasm/ensure.mjs).
  */
 const fs = (globalThis as unknown as { process: { getBuiltinModule(id: 'node:fs'): { readFileSync(u: URL): Uint8Array<ArrayBuffer> } } }).process.getBuiltinModule('node:fs');
-initCoreFrom(new WebAssembly.Module(fs.readFileSync(new URL('./pkg/kentos_wasm_bg.wasm', import.meta.url))));
+initCoreFrom(new WebAssembly.Module(fs.readFileSync(new URL('./pkg/kentos_geometry_wasm_bg.wasm', import.meta.url))));

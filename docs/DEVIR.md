@@ -20,9 +20,9 @@ işler ve kurallar durur.
 
 ## 2. Nerede kaldık
 
-- **Kullanıcının hedefi “öncelikle ortak çekirdeği tamamlayalım” tamamlandı** (P0–P8, S1–S6; `main`, 24 Eylül). CLAUDE.md §14: CAD hesabı `crates/geometry-core` içinde bir kez yazılır, native ve wasm32 olarak derlenir; TS algoritmaları eşdeğerlik kanıtlanınca silindi.
+- **Kullanıcının hedefi “öncelikle ortak çekirdeği tamamlayalım” tamamlandı** (P0–P8, S1–S6; `main`, 24 Eylül). CLAUDE.md §14: CAD hesabı `crates/shared/geometry-core` içinde bir kez yazılır, native ve wasm32 olarak derlenir; TS algoritmaları eşdeğerlik kanıtlanınca silindi.
 - **Kapsam: yalnız hesap Rust'ta, arayüz TypeScript'te kalır.** Kullanıcı bunu açıkça sordu ve doğruladı; bu ayrımı koruyun.
-  - Rust'ta (`crates/geometry-core`, tarayıcıda WASM): geometri işlemleri (kesişim, budama, uzatma, öteleme, köşe yuvarlama, alan cebiri ve bindirme, yay/elips/eğri, ölçü yerleşimi, tarama çizgileri, üçgenleme), nesne ölçüleri, geometri deposu (seçme, kenet, pencere seçimi, etiket ve tutamaç kararları, araç önizlemeleri, çizilecek geometri, ifadelerin geometri değerleri), işlem araçlarının geometrisi (köşe numaralama, kenar ölçüleri), araçların yapı hesapları (nokta girişi, orto/kutupsal, nesne izleme), dosya biçimleri (`crates/formats`), sunucunun PostGIS geometrisi (tessellate, EWKB), §23 sayısal politika.
+  - Rust'ta (`crates/shared/geometry-core`, tarayıcıda WASM): geometri işlemleri (kesişim, budama, uzatma, öteleme, köşe yuvarlama, alan cebiri ve bindirme, yay/elips/eğri, ölçü yerleşimi, tarama çizgileri, üçgenleme), nesne ölçüleri, geometri deposu (seçme, kenet, pencere seçimi, etiket ve tutamaç kararları, araç önizlemeleri, çizilecek geometri, ifadelerin geometri değerleri), işlem araçlarının geometrisi (köşe numaralama, kenar ölçüleri), araçların yapı hesapları (nokta girişi, orto/kutupsal, nesne izleme), dosya biçimleri (`crates/shared/formats`), sunucunun PostGIS geometrisi (tessellate, EWKB), §23 sayısal politika.
   - TypeScript'te: bütün arayüz (DOM, paneller, pencereler, menüler, komutlar, kısayollar), araçların akışı (tıklama, istem, önizlemenin çizimi), belge modeli ve geri alma, çizim motorları (WebGL2/WebGPU), kamera ve ekran pikseli hesapları, bulut eşitleme, stil motoru, ifade dili ve SVG düzenleyicisi. Son üçünün kendi geometrisi ileride ayrı bir `style-core` dilimidir (§3); acelesi yok.
   - Cepheler (`src/model/geom`, `src/model/ops`, `model/geometry.ts`, `entities.ts`, `render/triangulate.ts`, `tools/constructions.ts` …) yalnız çağırır: `op('ad')` ile çağrı tablosuna, sıcak yollarda tipli girişlere. `src/model/singleSource.test.ts` bu dosyalarda aritmetik ya da `Math.` görürse düşer.
 - **Dilimler** (her biri tek commit; ayrıntı ADR 0008'in aynı adlı başlığında):
@@ -41,7 +41,7 @@ işler ve kurallar durur.
   | Performans | `24d466e` | `CadDocument` katman dizini (`byLayer`), ızgaranın yeniden kullanımı, `JSON.stringify`'sız geometri karşılaştırması (CLAUDE.md §6.3) |
   | Kenet | `602bf5c` | Genel görünümde kesişim keneti ~7 kat hızlı, yanıtlar bit bit aynı (ADR 0008, geometri deposu) |
 
-- **Dosya biçimleri** (`wip/formats-dxf` dalından, `33f9981` … `96f4460`): koordinat listesi (Netcad NCN, TXT, CSV) içe/dışa aktarma ve DXF içe aktarma Rust'ta (`crates/formats`, ayrı ve yalnız komutla yüklenen WASM paketi `src/io/pkg`). ADR 0009 “önerildi”, onay bekliyor. DXF dışa aktarma yok (§3).
+- **Dosya biçimleri** (`wip/formats-dxf` dalından, `33f9981` … `96f4460`): koordinat listesi (Netcad NCN, TXT, CSV) içe/dışa aktarma ve DXF içe aktarma Rust'ta (`crates/shared/formats`, ayrı ve yalnız komutla yüklenen WASM paketi `src/io/pkg`). ADR 0009 “önerildi”, onay bekliyor. DXF dışa aktarma yok (§3).
 - **WASM paketi:** 883 087 bayt, gzip 297 912 bayt. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; ~2 KB kaldı. Çekirdeğe eklenecek bir sonraki kod bu sınırı aşar: önce kullanıcının kararı gerekir (§6 madde 8).
 - **Son doğrulama** (`main` `602bf5c`, 24 Eylül, bulut konteyneri): `npx tsc --noEmit -p .` temiz; `pnpm test` 612 test geçti, 6 atlandı (fixture kaydedicileri); `cargo fmt --all -- --check` temiz; `pnpm rust:test` (cargo test ve clippy `-D warnings`) temiz, veritabanı testleri sır olmadığı için atlandı; `pnpm e2e` 100 denetim geçti, düşen üçü bu konteynerde hep düşen WebGPU denetimleri (§5).
 - **Ölçüm:**
@@ -69,7 +69,7 @@ Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gere
 
 ## 4. Taşıma yöntemi ve yeni çekirdek işlevleri
 
-- **Birebir taşıma.** JavaScript sayı anlamı `crates/geometry-core/src/jsmath.rs`'tedir:
+- **Birebir taşıma.** JavaScript sayı anlamı `crates/shared/geometry-core/src/jsmath.rs`'tedir:
   - `js_round`, `js_sign`;
   - NaN yayan `js_min`/`js_max`;
   - V8 algoritmalı `js_hypot`;
@@ -78,7 +78,7 @@ Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gere
 - **Aşkın işlevler `libm`'den gelir.** `clippy.toml` std `sin/cos/tan/atan2/hypot/powi/mul_add/round/signum/min/max`'ı yasaklar.
   - V8'in `Math.sin`/`cos`'u çağrıların ~%2'sinde son bitte farklıdır.
   - Native ve WASM ise hep bit bit aynıdır.
-- **Kayıt:** TS dosyası başına bir modül; `pub(crate) static OPS: &[Op]` içinde `op!("tsAdı", |a: A, b: B| gövde)`. Modül `crates/geometry-core/src/api/tables.rs` içindeki `TABLES` listesine eklenir.
+- **Kayıt:** TS dosyası başına bir modül; `pub(crate) static OPS: &[Op]` içinde `op!("tsAdı", |a: A, b: B| gövde)`. Modül `crates/shared/geometry-core/src/api/tables.rs` içindeki `TABLES` listesine eklenir.
 - **JSON:** `src/api/json.rs`.
   - `json_struct!`, `json_tagged!`; açık `null` için `Nullable`.
   - `None` alan yazılmaz.

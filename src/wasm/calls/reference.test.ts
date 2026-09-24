@@ -6,7 +6,7 @@ import { callNamed } from '../core';
  * Accuracy against the independent reference for named operations
  * (fixtures/geometry/v1/reference-calls.json: Python fractions and 60-digit
  * roots, scripts/fixtures/geometry_call_reference.py; CLAUDE.md §23.4):
- * the Rust core through WASM (natively: crates/geometry-core/tests/calls.rs).
+ * the Rust core through WASM (natively: crates/shared/geometry-core/tests/calls.rs).
  * Agreeing with the TypeScript it replaced was not accuracy; the core must
  * stay within each case's bound.
  */
