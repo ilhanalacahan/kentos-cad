@@ -1134,6 +1134,76 @@ try {
     await b.eval(`(() => { const k = window.kentos; k.files.picker = window.__io.original; k.selection.clear(); })()`);
   }
 
+  // DXF export (crates/shared/formats dxf/writer): the selected objects go out through the in-memory picker as an
+  // AutoCAD 2007 DXF; imported back, the same objects return onto the same layer with the same coordinates, bit for
+  // bit, and with their labels and attributes (KentOS data in the file). Exporting is not saving: the drawing stays as it was.
+  {
+    await ioPicker('kullanilmaz.dxf', '');
+    const made = await b.eval(`(() => {
+      const k = window.kentos;
+      const layer = k.doc.layers.add({ name: 'DXF deneme', style: { color: '#7FB2E5', lineType: 'dashed', lineWeight: 0.35 } });
+      const P = (x, y) => ({ x: ${E + 900.123} + x, y: ${N + 50.456} + y });
+      const objects = [
+        { kind: 'polygon', pts: [P(0, 0), P(20, 0), P(20, 20), P(0, 20)], bulges: [0, 0.2, 0, 0], holes: [{ pts: [P(2, 2), P(4, 2), P(4, 4)] }], label: '101', attrs: { Ada: '12', Parsel: '101' } },
+        { kind: 'arc', c: P(30, 5), r: 3.25, a0: 0.1, a1: 2.2, attrs: {} },
+        { kind: 'spline', pts: [P(0, 30), P(5, 35), P(10, 30), P(15, 36)], closed: false, attrs: {} },
+        { kind: 'text', p: P(0, 40), text: 'Çınar ağacı', height: 2, rotation: 15, attrs: {} },
+        { kind: 'point', p: P(1 / 3, 0.1 + 0.2), z: 105.25, label: 'P7', attrs: { Ad: 'P7' } },
+        { kind: 'line', a: P(0, -5), b: P(20, -5), color: '#FF0000', attrs: {} },
+      ];
+      const ids = [];
+      k.doc.transact('DXF deneme', () => { for (const o of objects) ids.push(k.doc.add({ ...o, layerId: layer.id }).id); });
+      k.selection.set(ids);
+      return { ids, layerId: layer.id, dirty: k.doc.dirty.value, size: k.doc.size };
+    })()`);
+    await b.eval(`window.kentos.commands.execute('file.export.dxf')`);
+    await b.waitFor(`document.querySelector('.dialog--io .io-summary')`, 10000).catch(() => {});
+    const rows = await b.eval(`[...document.querySelectorAll('.dialog--io tbody tr')].map((r) => [r.children[1].textContent.trim(), r.children[2].textContent.trim()])`);
+    const summary = await b.eval(`document.querySelector('.dialog--io .io-summary')?.textContent ?? ''`);
+    check(
+      'DXF export: the window lists the selection by layer and says what DXF changes',
+      JSON.stringify(rows) === '[["DXF deneme","6"]]' && /6 nesne 1 katmanla yazılacak/.test(summary) && /adalı alan/.test(summary) && /KentOS verisi/.test(summary),
+      `${JSON.stringify(rows)} ${summary.slice(0, 200)}`,
+    );
+    await b.shot('io-dxf-export');
+    await ioPress('.dialog--io .dialog__foot .btn--primary', 'Dışa aktar');
+    await b.waitFor(`window.__io.written`, 10000).catch(() => {});
+    const dxf = await ioWritten();
+    const kept = await b.eval(`({ dirty: window.kentos.doc.dirty.value, size: window.kentos.doc.size, open: !!document.querySelector('.dialog--io') })`);
+    check(
+      'DXF export writes an AutoCAD 2007 DXF and leaves the drawing as it was',
+      !!dxf && /\.dxf$/.test(dxf.name) && dxf.text.includes('$ACADVER\r\n  1\r\nAC1021\r\n') && dxf.text.endsWith('  0\r\nEOF\r\n') && kept.dirty === made.dirty && kept.size === made.size && !kept.open,
+      `${dxf?.name} ${dxf?.text.length} ${JSON.stringify(kept)}`,
+    );
+    await b.eval(`(() => {
+      const k = window.kentos;
+      const parts = window.__io.written.parts;
+      k.selection.clear();
+      k.files.picker = { ...k.files.picker, open: async () => ({ name: 'geri.dxf', getFile: async () => new Blob(parts) }) };
+    })()`);
+    const lastId = await b.eval(`Math.max(...[...window.kentos.doc.all()].map((e) => e.id))`);
+    await b.eval(`window.kentos.commands.execute('file.import.dxf')`);
+    await b.waitFor(`document.querySelector('.dialog--io .io-table tbody tr')`, 20000).catch(() => {});
+    const where = await b.eval(`[...document.querySelectorAll('.dialog--io tbody tr')].map((r) => [r.children[1].textContent.trim(), r.children[3].textContent.trim()])`);
+    check('DXF export → import: the file\'s layer goes back to the drawing\'s layer of the same name', where.length === 1 && where[0][0] === 'DXF deneme' && /katmanına eklenir/.test(where[0][1]), JSON.stringify(where));
+    await ioPress('.dialog--io .dialog__foot .btn--primary', 'İçe aktar');
+    await b.waitFor(`!document.querySelector('.dialog--io')`, 10000).catch(() => {});
+    const back = await b.eval(`(() => {
+      const k = window.kentos;
+      // Key order and absent fields aside, JSON of every field: numbers print exactly, so equal text is equal bits.
+      const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).filter((key) => key !== 'id' && v[key] !== undefined).sort().map((key) => [key, canon(v[key])])) : v);
+      const mine = ${JSON.stringify(made.ids)}.map((id) => JSON.stringify(canon(k.doc.get(id))));
+      const got = [...k.doc.all()].filter((e) => e.id > ${lastId}).map((e) => JSON.stringify(canon(e)));
+      return { same: JSON.stringify(mine) === JSON.stringify(got), mine, got };
+    })()`);
+    check('DXF export → import: the same objects come back, coordinates bit for bit, with labels and attributes', back.same, back.same ? '' : `${back.mine.join(' ')} ≠ ${back.got.join(' ')}`.slice(0, 600));
+    await b.eval(`window.kentos.commands.execute('edit.undo')`);
+    await b.eval(`window.kentos.commands.execute('edit.undo')`);
+    const cleared = await b.eval('window.kentos.doc.size');
+    check('DXF export → import: the import and the test objects each undo in one step', cleared === made.size - made.ids.length, `${made.size} → ${cleared}`);
+    await b.eval(`(() => { const k = window.kentos; k.files.picker = window.__io.original; k.selection.clear(); })()`);
+  }
+
   // Local .kcad files: Ctrl+S writes (dirty clears only after the write), Ctrl+O asks about unsaved changes and reopens it.
   // Headless Chrome has no native file dialogs, so an in-memory picker stands in for them.
   {
