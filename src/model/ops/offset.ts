@@ -17,8 +17,9 @@ export function offsetEntity(e: Entity, distance: number, through: Vec2): Offset
   switch (e.kind) {
     case 'line': {
       const side = sideOf([e.a, e.b], false, through);
-      const [a, b] = offsetPath([e.a, e.b], side * distance, false);
-      return { geometry: { kind: 'line', a, b } };
+      const pts = offsetPath([e.a, e.b], side * distance, false);
+      // A zero-length line has no direction to offset along.
+      return pts.length === 2 ? { geometry: { kind: 'line', a: pts[0], b: pts[1] } } : { error: 'Öteleme sonucu geçerli bir şekil oluşmadı.' };
     }
     case 'polyline':
     case 'polygon': {

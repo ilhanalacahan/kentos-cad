@@ -6,6 +6,7 @@ import { P3 } from './sets/p3-offset-annotation';
 import { P4 } from './sets/p4-overlay';
 import { P5 } from './sets/p5-entities';
 import { P6 } from './sets/p6-path-editing';
+import { P7 } from './sets/p7-editing';
 
 /** Every call set, in the order the core was ported (docs/adr/0008). */
-export const SETS: CallSet[] = [P0, P1, P2, P3, P4, P5, P6];
+export const SETS: CallSet[] = [P0, P1, P2, P3, P4, P5, P6, P7];

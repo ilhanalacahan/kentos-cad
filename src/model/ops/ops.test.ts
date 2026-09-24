@@ -109,6 +109,9 @@ describe('offsetEntity', () => {
     const r = offsetEntity({ ...base, kind: 'circle', c: { x: 0, y: 0 }, r: 5 }, 2, { x: 1, y: 0 });
     expect('geometry' in r && r.geometry.kind === 'circle' && r.geometry.r).toBeCloseTo(3);
   });
+  it('refuses a zero-length line instead of returning one without points', () => {
+    expect(offsetEntity(line(3, 4, 3, 4), 2, { x: 5, y: 5 })).toEqual({ error: 'Öteleme sonucu geçerli bir şekil oluşmadı.' });
+  });
 });
 
 describe('filletLines', () => {

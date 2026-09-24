@@ -487,6 +487,15 @@ impl<T: ToJson, const N: usize> ToJson for [T; N] {
 }
 
 /// Writes `"name":value` for a struct field unless it is absent.
+/// An Option written as `null` instead of being left out (a TypeScript field set to `null`).
+pub struct Nullable<'a, T>(pub &'a Option<T>);
+
+impl<T: ToJson> ToJson for Nullable<'_, T> {
+    fn write_json(&self, out: &mut String) {
+        self.0.write_json(out);
+    }
+}
+
 pub fn field<T: ToJson + ?Sized>(out: &mut String, first: &mut bool, name: &str, v: &T) {
     if v.is_absent() {
         return;

@@ -2,7 +2,7 @@
 //! axis at a left and a right distance, and the corridor between them as an area.
 
 use crate::api::Op;
-use crate::api::json::{ToJson, field};
+use crate::api::json::{Nullable, ToJson, field};
 use crate::geom::arrangement::{Area, Ring};
 use crate::geom::offset::offset_path;
 use crate::geometry::signed_area;
@@ -42,15 +42,6 @@ impl ToJson for Sides {
         field(out, &mut first, "left", &Nullable(&self.left));
         field(out, &mut first, "right", &Nullable(&self.right));
         out.push('}');
-    }
-}
-
-/// An Option written as `null` instead of being left out.
-struct Nullable<'a, T>(&'a Option<T>);
-
-impl<T: ToJson> ToJson for Nullable<'_, T> {
-    fn write_json(&self, out: &mut String) {
-        self.0.write_json(out);
     }
 }
 

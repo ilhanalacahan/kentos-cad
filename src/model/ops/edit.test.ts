@@ -14,7 +14,7 @@ import { divisionParams, pathOf, pointAtS } from './path';
 import { stretchEntity } from './stretch';
 import { transformEntity } from './transform';
 import { extendEntity, trimEntity } from './trim';
-import { insertVertex, removeVertex } from './vertex';
+import { insertVertex, nearestSegment, removeVertex } from './vertex';
 import { mirror } from '../geom/affine';
 
 let nextId = 1;
@@ -321,5 +321,14 @@ describe('uzat-kısalt', () => {
     expect(nearEnd(line, v(9, 0))).toBe(true);
     const arc = withId({ kind: 'arc', c: v(0, 0), r: 1, a0: 0, a1: Math.PI / 2 });
     expect(lengthToward(arc, true, v(-1, 0.001))).toBeCloseTo(Math.PI, 2);
+  });
+});
+
+describe('nearestSegment', () => {
+  it('gives a near-tie to the first edge, so the last bits of a distance do not decide', () => {
+    // The third edge is 2.5·10⁻¹⁰ m nearer than the first: the same distance for drawing.
+    const e = withId({ kind: 'polyline', pts: [v(0, 0), v(10, 0), v(10, 2), v(0, 2 - 5e-10)] });
+    expect(nearestSegment(e, v(5, 1))).toBe(0);
+    expect(nearestSegment(e, v(5, 1.5))).toBe(2);
   });
 });

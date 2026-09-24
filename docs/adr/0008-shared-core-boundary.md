@@ -97,6 +97,7 @@ Kullanıcının kararları (2026-09-24):
   | serde'siz JSON | 303 KB | 105 KB | Kendi JSON modülü (27 KB kod) ve tek bir kararlı sıralama (`jsmath::stable_sort`; std `sort_by` her karşılaştırıcı için yeniden üretiliyordu). Kod 244 KB, geometri 70 KB |
   | P4 + P5 (+40 işlem) | 494 KB | 170 KB | Düzlem bindirme motoru, alan cebiri, nesne modeli ve işlemleri |
   | P6 (+23 işlem) | 559 KB | 190 KB | Yol parametresi, budama, uzatma, kırma, uzat-kısalt; elips ve yardımcı çizgi kesimleri |
+  | P7 (+13 işlem) | 618 KB | 210 KB | Öteleme, köşe yuvarla ve pah, birleştir, köşe ekle/sil, patlat, nesne ↔ alan |
 
 ### Doğrulama
 
@@ -124,6 +125,10 @@ Kullanıcının kararları (2026-09-24):
   - Eski iki beklenti yanlıştı: “yay dışında en yakın uç” 15,97 m uzaktaki noktayı veriyordu (doğru uç 11,18 m), bir diğeri ise normalleştirilmemiş açıydı (2π farkı). P2 dosyası yeniden kaydedildi.
   - Hatayı `ellipse.test.ts` yeniden üretir: yay ucu olan beş durum ve TM'de dik ayak.
 - **TS'in çöktüğü yer:** tek köşeli çoklu çizgiyi uzatmak TS'te `TypeError` fırlatıyordu. İki taraf da “Uzatmak için en az iki köşe gerekir.” der (`ops.test.ts`). Uzat-kısalt böyle bir çizgiyi zaten “Nesnenin uzunluğu yok.” diyerek reddeder; Rust'taki denetim yalnız dizin erişimini korur.
+- **P7'de bulunanlar (TS de düzeltildi):**
+  - Sıfır uzunluklu çizgiyi ötelemek TS'te noktasız bir çizgi (`a`, `b` tanımsız) döndürüyordu. Artık iki taraf da “Öteleme sonucu geçerli bir şekil oluşmadı.” der (`ops.test.ts`).
+  - `nearestSegment` ortak köşede eşit uzaklıktaki iki kenardan birini yayın ucundaki sin/cos'un son bitine göre seçiyordu; 20 000 durumda 2 kez iki taraf farklı kenarı verdi. Artık 1e-9 m içindeki kenarlar eşit sayılır ve ilki kazanır (`edit.test.ts`).
+- **TS'in istisna fırlattığı girdiler:** boş çoklu çizgiyi birleştirmek, olmayan kenara köşe eklemek, kapalı alanda olmayan köşeyi yuvarlamak. Çekirdek de burada hata fırlatır (`Err` → JS istisnası), panik olmaz; kümeler bu girdileri üretmez.
 - **Golden sahipliği:** TS silindikten sonra dosyalar donmuş davranış kilididir. Bilinçli bir davranış değişikliği (ör. §23.3 robust kararlar) dosyayı incelemeyle günceller.
 
 ## Sonuçlar

@@ -137,7 +137,7 @@ export const P6: CallSet = {
       return [e, v(a.x + g.num(-30, 30), a.y + g.num(-30, 30)), boundaries(g, a)];
     }),
     ...repeat(g, 'extendEntity', n, () => {
-      // Two or more vertices: the TypeScript throws on a shorter path (the core refuses it).
+      // Two or more vertices here; the named case covers a shorter path.
       let e = entity(g, g.pick(['line', 'polyline', 'arc', 'ellipse', 'circle', 'text'] as const));
       while (e.kind === 'polyline' && e.pts.length < 2) e = entity(g, 'polyline');
       const a = anchorOf(e);

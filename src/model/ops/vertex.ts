@@ -6,12 +6,16 @@ import { entityEdges } from './edges';
 
 export type VertexResult = { geometry: EntityGeometry } | { error: string };
 
-/** Index of the segment of a line/polyline/polygon nearest to p. */
+/**
+ * Index of the segment of a line/polyline/polygon nearest to p. Edges within
+ * 1e-9 m of each other tie and the first wins: at a shared vertex both edges
+ * are nearest, and rounding in an arc's end must not pick between them.
+ */
 export function nearestSegment(e: Entity, p: Vec2): number {
   let best = { d: Infinity, i: 0 };
   entityEdges(e).forEach((ed, i) => {
     const d = closestOnEdge(ed, p).d;
-    if (d < best.d) best = { d, i };
+    if (d < best.d - 1e-9) best = { d, i };
   });
   return best.i;
 }
