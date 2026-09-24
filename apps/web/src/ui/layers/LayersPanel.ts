@@ -33,11 +33,12 @@ interface Row {
  * Layer tree: visibility, lock, colour, active layer, groups, filter.
  *
  * The tree is rendered again only when its shape changes (layers added,
- * renamed or replaced, a group opened or closed). An edit changes object
- * counts and layer state a few cells (visibility, lock, colour, the active
- * layer): both are written into the rows in place, so an edit costs the
- * same beside 3 layers or 300 and a row stays the same element across
- * edits, undo and redo (hover, focus and an open rename field survive them).
+ * renamed or replaced, a group opened or closed), once per task. An edit
+ * changes object counts and layer state a few cells (visibility, lock,
+ * colour, the active layer): both are written into the rows in place, so an
+ * edit costs the same beside 3 layers or 300 and a row stays the same
+ * element across edits, undo and redo (hover, focus and an open rename
+ * field survive them).
  */
 export class LayersPanel extends Panel {
   private readonly ctx: AppContext;
@@ -46,6 +47,7 @@ export class LayersPanel extends Panel {
   private readonly rows = new Map<string, Row>();
   /** Object count of every node; a group's is the sum over all its layers. */
   private totals = new Map<string, number>();
+  private rebuildQueued = false;
 
   constructor(ctx: AppContext) {
     super({ title: 'Katmanlar', className: 'panel--layers', actions: [] });
@@ -82,12 +84,27 @@ export class LayersPanel extends Panel {
       }),
     );
 
-    this.d.add(layers.events.on('structure', () => this.rebuild()));
-    this.d.add(layers.events.on('expanded', () => this.rebuild()));
+    this.d.add(layers.events.on('structure', () => this.scheduleRebuild()));
+    this.d.add(layers.events.on('expanded', () => this.scheduleRebuild()));
     this.d.add(layers.events.on('state', () => this.writeStates()));
     this.d.add(watchAll([layers.active, ctx.ui.theme], () => this.writeStates()));
     this.d.add(ctx.doc.events.on('changed', () => this.writeCounts()));
     this.rebuild();
+  }
+
+  /**
+   * Rebuilds once, at the end of the current task: a DXF import adds its
+   * layers one by one (300 for a large file), and each would otherwise
+   * render the whole growing tree again. Until then counts and layer state
+   * go to the old rows, which the rebuild replaces.
+   */
+  private scheduleRebuild(): void {
+    if (this.rebuildQueued) return;
+    this.rebuildQueued = true;
+    queueMicrotask(() => {
+      this.rebuildQueued = false;
+      this.rebuild();
+    });
   }
 
   /** Renders the whole tree again: its shape changed. */
