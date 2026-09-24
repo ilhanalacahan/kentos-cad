@@ -57,7 +57,6 @@ function path(g: Gen): Vec2[] {
 
 export const P1: CallSet = {
   file: 'calls-p1-primitives.json',
-  fns: {},
   named: [
     { name: 'boş halkanın ağırlık merkezi (NaN)', fn: 'centroid', args: [[]] },
     { name: 'doğrusal noktalar', fn: 'centroid', args: [[v(0, 0), v(1, 1), v(2, 2)]] },

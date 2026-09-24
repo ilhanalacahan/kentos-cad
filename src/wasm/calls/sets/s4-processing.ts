@@ -3,7 +3,6 @@ import type { Vec2 } from '../../../model/geometry';
 import type { NumberingInput } from '../../../processing/builtin/numbering';
 import type { CornerWalk } from '../../../processing/geometry';
 import { repeat, type CallSet, type Gen } from '../harness';
-import { tsCoreCorners, tsCornerTextAt, tsEdgeLengthLabels, tsRingOrder } from '../reference/processing';
 import { entity } from './p5-entities';
 
 /**
@@ -90,12 +89,6 @@ export function labelledObjects(g: Gen, n: number): Entity[] {
 
 export const S4: CallSet = {
   file: 'calls-s4-processing.json',
-  fns: {
-    ringOrder: tsRingOrder,
-    numberCorners: tsCoreCorners,
-    cornerTextAt: tsCornerTextAt,
-    edgeLengthLabels: tsEdgeLengthLabels,
-  },
   named: [
     { name: 'kare, kuzeybatıdan saat yönünde', fn: 'ringOrder', args: [square(0, 0, 10), true, 'cw', 'northwest', null] },
     { name: 'kare, kuzeybatıdan saat yönünün tersine', fn: 'ringOrder', args: [square(0, 0, 10), true, 'ccw', 'northwest', null] },

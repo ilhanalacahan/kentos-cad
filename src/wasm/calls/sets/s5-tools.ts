@@ -2,40 +2,8 @@ import type { EntityGeometry } from '../../../model/entities';
 import type { Vec2 } from '../../../model/geometry';
 import { TAU } from '../../../model/geom/arc';
 import type { EllipseGeom } from '../../../model/geom/ellipse';
+import type { CornerGeom } from '../../../tools/constructions';
 import { repeat, type CallSet, type Gen } from '../harness';
-import {
-  circleOnDiameter,
-  centreBulge,
-  degDirection,
-  directionAngle,
-  donutRings,
-  ellipseParamToward,
-  ellipseRotationHalf,
-  endTangent,
-  offsetAlong,
-  radialPoint,
-  radiusBulge,
-  regularPolygonRadius,
-  textAngle,
-  unitToward,
-  xlineDirection,
-} from '../reference/drawing';
-import {
-  alignTransform,
-  chamferLine,
-  edgeArms,
-  filletArc,
-  filletRadiusFor,
-  linesCornerAt,
-  polarArrayTransforms,
-  pulledDistance,
-  radialDimension,
-  rotationAngle,
-  scaleFactor,
-  vertexArms,
-  vertexCorner,
-  type CornerGeom,
-} from '../reference/editing';
 
 /** S5: the drawing, modify, corner and dimension tools' own constructions (docs/adr/0008). */
 
@@ -107,13 +75,6 @@ function pickedEdge(g: Gen, c: Vec2): { a: Vec2; b: Vec2; at: Vec2 } {
 
 export const S5_TOOLS: CallSet = {
   file: 'calls-s5-tools.json',
-  fns: {
-    directionAngle, regularPolygonRadius, endTangent, degDirection, circleOnDiameter, ellipseParamToward, ellipseRotationHalf, unitToward, xlineDirection,
-    radialPoint, radiusBulge, centreBulge, offsetAlong, textAngle, donutRings,
-    rotationAngle, scaleFactor, polarArrayTransforms, alignTransform,
-    vertexCorner, linesCornerAt, pulledDistance, filletRadiusFor, filletArc, chamferLine,
-    vertexArms, edgeArms, radialDimension,
-  },
   named: [
     { name: 'doğrultu açısı, aynı nokta', fn: 'directionAngle', args: [v(E, N), v(E, N)] },
     { name: 'doğrultu açısı, batı', fn: 'directionAngle', args: [v(0, 0), v(-5, 0)] },

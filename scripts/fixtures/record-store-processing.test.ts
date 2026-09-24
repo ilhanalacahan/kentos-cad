@@ -1,23 +1,24 @@
-// Records what the processing tools asked of their objects' geometry as the
-// TypeScript computed it (docs/adr/0008, S4) into
-// fixtures/geometry/v1/store-processing.json: the "visible" scope's box
-// test, corner numbering and edge-length labels, by id, on a fixed scene of
-// grid parcels (origin and TM) and objects of every kind. The Rust geometry
-// store must give them natively (crates/geometry-core/tests/store.rs) and
-// through the WASM build (src/wasm/store.wasm.test.ts) after the
-// TypeScript is gone. Runs only on purpose, while the reference exists:
+// Records what the processing tools ask of their objects' geometry
+// (docs/adr/0008, S4) into fixtures/geometry/v1/store-processing.json: the
+// "visible" scope's box test, corner numbering and edge-length labels, by
+// id, on a fixed scene of grid parcels (origin and TM) and objects of every
+// kind. Rust reads the file natively (crates/geometry-core/tests/store.rs),
+// the app through the WASM build (src/wasm/store.wasm.test.ts).
+// The committed answers were recorded from the TypeScript the core
+// replaced; since S3c the recorder asks the core itself, so rewriting a
+// case is a deliberate change of the frozen answers, to be read in the diff.
+// Runs only on purpose:
 //   GOLDEN_WRITE=1 npx vitest run scripts/fixtures/record-store-processing.test.ts
 import { writeFileSync } from 'node:fs';
 import { it } from 'vitest';
-import type { Entity, NewEntity } from '../../src/model/entities';
+import type { NewEntity } from '../../src/model/entities';
 import type { Vec2 } from '../../src/model/geometry';
-import type { NumberingInput } from '../../src/processing/builtin/numbering';
 import type { CornerWalk } from '../../src/processing/geometry';
 import { layerTable } from '../../src/viewport/picking';
 import { DEFAULT_LABELS, labelRule } from '../../src/viewport/storeRecords';
-import { Gen, TOLERANCE, toJson } from '../../src/wasm/parity/harness';
-import { tsCoreCorners, tsEdgeLengthLabels, tsInBox } from '../../src/wasm/parity/reference/processing';
-import { sceneCursor, sceneDocument, sceneRect } from '../../src/wasm/parity/sets/store-scene';
+import { Gen, TOLERANCE, toJson } from '../../src/wasm/calls/harness';
+import { sceneCursor, sceneDocument, sceneRect } from '../../src/wasm/calls/sets/store-scene';
+import { StoreScene, storeFileText, type StoreCase, type StoreFile } from '../../src/wasm/calls/storeCases';
 
 /** Rounds per query, and the largest answer kept. */
 const ROUNDS = 180;
@@ -27,13 +28,6 @@ const N = 4420187.52;
 
 const v = (x: number, y: number): Vec2 => ({ x, y });
 const square = (x: number, y: number, s: number) => [v(x, y), v(x + s, y), v(x + s, y + s), v(x, y + s)];
-
-/** The rings the store numbers for an object (polygons: outer ring, then holes; polylines open). */
-function numberingInput(e: Entity): NumberingInput | null {
-  if (e.kind === 'polygon') return { rings: [{ pts: e.pts, closed: true }, ...(e.holes ?? []).map((h) => ({ pts: h.pts, closed: true }))] };
-  if (e.kind === 'polyline') return { rings: [{ pts: e.pts, closed: false }] };
-  return null;
-}
 
 it.runIf(!!process.env.GOLDEN_WRITE)('records the processing tools’ geometry into the store fixture', () => {
   const g = new Gen(2025);
@@ -50,13 +44,8 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the processing tools’ geometry i
   extra.push({ kind: 'point', layerId: 'a', attrs: {}, p: v(E + 20, N + 20), label: 'P00007' });
   const cluster = extra.map((e) => doc.add(e).id);
   const all = [...doc.all()];
-  const ids = all.map((e) => e.id);
-  const byId = new Map(all.map((e) => [e.id, e]));
-  const cases: { name: string; op: string; args: unknown[]; expect: unknown }[] = [];
-  const add = (name: string, op: string, args: unknown[], expect: unknown) => {
-    const e = toJson(expect);
-    if (JSON.stringify(e).length <= MAX_ANSWER) cases.push({ name, op, args: toJson(args) as unknown[], expect: e });
-  };
+  const asked: Omit<StoreCase, 'expect'>[] = [];
+  const add = (name: string, op: string, args: unknown[]) => asked.push({ name, op, args: toJson(args) as unknown[] });
   /** A few objects: often neighbours from the TM grid (shared corners and edges), else areas and paths of the scene, now and then anything. */
   const shapes = all.filter((e) => e.kind === 'polygon' || e.kind === 'polyline' || e.kind === 'line');
   const some = () => {
@@ -67,7 +56,7 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the processing tools’ geometry i
   const corners = all.flatMap((e) => (e.kind === 'polygon' || e.kind === 'polyline' ? e.pts : []));
   for (let i = 1; i <= ROUNDS; i++) {
     const r = sceneRect(g, sceneCursor(g, doc), [0.1, 3, 20, 200, 5000]);
-    add(`kutu ${i}`, 'inBox', [r], tsInBox(all, r));
+    add(`kutu ${i}`, 'inBox', [r]);
     const chosen = some();
     const walk: CornerWalk = { dir: g.pick(['cw', 'ccw']), start: g.pick(['northwest', 'north', 'first', 'point']), point: g.chance(0.8) ? sceneCursor(g, doc) : null, tolerance: g.pick([0, 0.001, 0.001, 0.5]), shared: g.chance(0.8) };
     const existing = Array.from({ length: g.int(0, 3) }, () => {
@@ -75,31 +64,29 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the processing tools’ geometry i
       const j = g.pick([0, 0, 0.0004, 0.3]);
       return v(p.x + g.num(-j, j), p.y + g.num(-j, j));
     });
-    const inputs = chosen.flatMap((id) => {
-      const e = byId.get(id);
-      const input = e && numberingInput(e);
-      return input ? [input] : [];
-    });
-    add(`köşeler ${i}`, 'numberCorners', [chosen, walk, existing], tsCoreCorners(inputs, walk, existing));
+    add(`köşeler ${i}`, 'numberCorners', [chosen, walk, existing]);
     const labelled = some();
     const height = g.pick([2, 0.5, 5]);
     const minLength = g.pick([0, 0, 5, 12]);
     const side = g.pick(['outside', 'inside'] as const);
     const shared = g.chance(0.8);
-    const objects = labelled.flatMap((id) => byId.get(id) ?? []);
-    add(`kenarlar ${i}`, 'edgeLengths', [labelled, height, minLength, side, shared], tsEdgeLengthLabels(objects, height, minLength, side, shared));
+    add(`kenarlar ${i}`, 'edgeLengths', [labelled, height, minLength, side, shared]);
   }
-  const file = {
-    format: 'kentos.geometry-store',
-    version: 1,
+  const head = {
+    format: 'kentos.geometry-store' as const,
+    version: 1 as const,
     tolerance: TOLERANCE,
-    crs: { kind: 'projected', unit: 'metre', note: 'Koordinatlar metre cinsinden bir projeksiyon düzlemindedir; tolerans bu birim içindir (fixtures/geometry/v1/cases.json ile aynı).' },
+    crs: { kind: 'projected' as const, unit: 'metre' as const, note: 'Koordinatlar metre cinsinden bir projeksiyon düzlemindedir; tolerans bu birim içindir (fixtures/geometry/v1/cases.json ile aynı).' },
     layers: layerTable(doc.layers),
     labelDefaults: Object.fromEntries(Object.entries(DEFAULT_LABELS).map(([kind, st]) => [kind, labelRule(st)])),
-    entities: ids.map((id) => byId.get(id)),
-    cases,
+    entities: all,
   };
-  const { entities, cases: cs, ...head } = file;
-  const text = `${JSON.stringify(head, null, 2).slice(0, -2)},\n  "entities": [\n${entities.map((e) => `    ${JSON.stringify(e)}`).join(',\n')}\n  ],\n  "cases": [\n${cs.map((c) => `    ${JSON.stringify(c)}`).join(',\n')}\n  ]\n}\n`;
-  writeFileSync(new URL('../../fixtures/geometry/v1/store-processing.json', import.meta.url), text);
+  // Asked of a run's own store built from the file itself, as the tests read it; a very large answer is not kept.
+  const scene = new StoreScene(JSON.parse(JSON.stringify(head)) as StoreFile);
+  const cases = asked.flatMap((c) => {
+    const expect = toJson(scene.answer(c.op, c.args));
+    return JSON.stringify(expect).length <= MAX_ANSWER ? [{ ...c, expect }] : [];
+  });
+  scene.dispose();
+  writeFileSync(new URL('../../fixtures/geometry/v1/store-processing.json', import.meta.url), storeFileText({ ...head, cases }));
 });

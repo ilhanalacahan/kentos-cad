@@ -79,7 +79,7 @@ export const dimensionOffsetAt = op<(d: DimensionGeom, p: Vec2) => number>('dime
 /** The text a dimension shows: its override, or prefix + value in project units. */
 export function dimensionLabel(text: string | undefined, l: Pick<DimensionLayout, 'prefix' | 'unit' | 'value'>, fmt: { length: (m: number) => string; angle: (rad: number) => string }): string {
   if (text) return text;
-  return l.prefix + (l.unit === 'angle' ? fmt.angle(l.value) : fmt.length(l.value));
+  return `${l.prefix}${l.unit === 'angle' ? fmt.angle(l.value) : fmt.length(l.value)}`;
 }
 
 /**

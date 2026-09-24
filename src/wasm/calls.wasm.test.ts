@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { callNamed, writeArgs } from './core';
-import { sameResult, toJson, type CallFile } from './parity/harness';
+import { sameResult, toJson, type CallFile } from './calls/harness';
 
 /**
  * The frozen call fixtures (fixtures/geometry/v1/calls-*.json) through the
  * app's own path into the WASM core; Rust runs the same files natively
- * (crates/geometry-core/tests/calls.rs). They stay after the TypeScript
- * reference is deleted (docs/adr/0008).
+ * (crates/geometry-core/tests/calls.rs). The answers were recorded from the
+ * TypeScript each operation was ported from, before it was deleted
+ * (docs/adr/0008, S3).
  */
 const files = import.meta.glob<string>('../../fixtures/geometry/v1/calls-*.json', { query: '?raw', import: 'default', eager: true });
 

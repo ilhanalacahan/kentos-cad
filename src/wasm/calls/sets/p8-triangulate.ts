@@ -76,7 +76,6 @@ export function fillPolygon(g: Gen): [Vec2[], Vec2[][]] {
 
 export const P8: CallSet = {
   file: 'calls-p8-triangulate.json',
-  fns: {},
   named: [
     { name: 'düz halka, saat yönünde', fn: 'triangulate', args: [[...square(0, 0, 10)].reverse(), [], O] },
     { name: 'kare delikli kare', fn: 'triangulate', args: [square(0, 0, 10), [square(4, 4, 2)], O] },

@@ -33,7 +33,6 @@ const anchorOf = (e: Entity): Vec2 => ('pts' in e && e.pts.length ? e.pts[0] : '
 
 export const P6: CallSet = {
   file: 'calls-p6-path-editing.json',
-  fns: {},
   named: [
     { name: 'eğri budanamaz', fn: 'trimEntity', args: [{ ...base, kind: 'spline', pts: [v(0, 0), v(5, 5), v(10, 0)], closed: false }, v(5, 5), []] },
     { name: 'kesişimsiz budama', fn: 'trimEntity', args: [{ ...base, kind: 'line', a: v(0, 0), b: v(10, 0) }, v(5, 0), []] },

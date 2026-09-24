@@ -10,9 +10,9 @@ import { entity } from './p5-entities';
  * Scenes and cursors for the geometry store (docs/adr/0008, S1): objects of
  * every kind on layers that are hidden, locked, edge-pick only or not in
  * the tree at all; parcels on a grid so edges are shared and hatches fill
- * some of them; and cursors near vertices, edges or anywhere. The parity
- * test (../store.test.ts) and the fixture recorder
- * (scripts/fixtures/record-store.test.ts) both use them.
+ * some of them; and cursors near vertices, edges or anywhere. The fixture
+ * recorders (scripts/fixtures/record-store*.test.ts) and the store's own
+ * tests (src/viewport/picking.test.ts, src/processing/runs.test.ts) use them.
  */
 
 export const SNAP_KINDS: SnapKind[] = ['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection', 'perpendicular', 'tangent', 'nearest'];

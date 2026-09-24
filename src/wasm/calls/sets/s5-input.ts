@@ -1,7 +1,6 @@
 import type { Vec2 } from '../../../model/geometry';
 import { repeat, type CallSet, type Gen } from '../harness';
-import { alongTrack, trackAngles, trackPoint, type TrackHit } from '../reference/objectTracking';
-import { alongRatio, calcPolar, constrainCursor, midpoint, nearestOf, polarOffset, relativePoint, towardPoint } from '../reference/pointInput';
+import { trackAngles, type TrackHit } from '../../../viewport/objectTracking';
 
 /** S5: typed point input, the ortho and polar cursor, object tracking, the point calculator's arithmetic (docs/adr/0008). */
 
@@ -60,7 +59,6 @@ function hit(g: Gen): TrackHit {
 
 export const S5_INPUT: CallSet = {
   file: 'calls-s5-input.json',
-  fns: { relativePoint, polarOffset, towardPoint, constrainCursor, midpoint, alongRatio, calcPolar, nearestOf, trackAngles, trackPoint, alongTrack },
   named: [
     { name: 'göreli, TM', fn: 'relativePoint', args: [v(E, N), 12.5, -3.25] },
     { name: 'göreli, sıfır', fn: 'relativePoint', args: [v(100, 200), 0, 0] },

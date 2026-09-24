@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../model/geometry';
 import { callNamed, triangulateMany } from './core';
-import { callsOf, Gen } from './parity/harness';
-import { fillPolygon, P8 } from './parity/sets/p8-triangulate';
+import { callsOf, Gen } from './calls/harness';
+import { fillPolygon, P8 } from './calls/sets/p8-triangulate';
 
 /**
  * The typed batch entry point (`triangulateMany`, a layer's fills in one
- * call) against the named operation (`triangulate`), which the parity test
- * holds to the TypeScript and the call fixtures freeze (docs/adr/0008).
+ * call) against the named operation (`triangulate`), which the call
+ * fixtures freeze (docs/adr/0008).
  * Triangles come back as indices into the packed points; the coordinates
  * they stand for must be exactly the named operation's.
  */

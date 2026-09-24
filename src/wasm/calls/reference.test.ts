@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import text from '../../../fixtures/geometry/v1/reference-calls.json?raw';
 import { callNamed } from '../core';
-import { SETS } from './sets';
 
 /**
  * Accuracy against the independent reference for named operations
  * (fixtures/geometry/v1/reference-calls.json: Python fractions and 60-digit
  * roots, scripts/fixtures/geometry_call_reference.py; CLAUDE.md §23.4):
- * the Rust core through WASM and, while it exists, the TypeScript it replaces.
- * Agreeing with each other is not accuracy; both must stay within the bound.
+ * the Rust core through WASM (natively: crates/geometry-core/tests/calls.rs).
+ * Agreeing with the TypeScript it replaced was not accuracy; the core must
+ * stay within each case's bound.
  */
 interface RefCase {
   name: string;
@@ -18,7 +18,6 @@ interface RefCase {
   bound: string;
 }
 const file = JSON.parse(text) as { format: string; version: number; cases: RefCase[] };
-const ts = Object.assign({}, ...SETS.map((s) => s.fns)) as Record<string, (...a: unknown[]) => unknown>;
 
 function within(actual: unknown, expected: unknown, bound: number, path: string): string | null {
   if (typeof expected === 'string' && typeof actual === 'number') {
@@ -46,6 +45,5 @@ describe('named operations against the independent reference', () => {
   it('reads a versioned reference file', () => expect([file.format, file.version]).toEqual(['kentos.geometry-call-reference', 1]));
   for (const c of file.cases) {
     it(`Rust (WASM) ${c.fn}: ${c.name}`, () => expect(within(callNamed(c.fn, c.args), c.expect, Number(c.bound), c.name)).toBeNull());
-    if (ts[c.fn]) it(`TypeScript ${c.fn}: ${c.name}`, () => expect(within(ts[c.fn](...c.args), c.expect, Number(c.bound), c.name)).toBeNull());
   }
 });

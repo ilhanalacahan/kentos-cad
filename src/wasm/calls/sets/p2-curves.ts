@@ -31,7 +31,6 @@ function edge(g: Gen): Edge {
 
 export const P2: CallSet = {
   file: 'calls-p2-curves.json',
-  fns: {},
   named: [
     { name: 'tam elips uzunluğu', fn: 'ellipseLength', args: [{ c: v(0, 0), major: v(10, 0), ratio: 0.5, t0: 0, t1: 0 }] },
     { name: 'daire olan elips', fn: 'ellipseArea', args: [{ c: v(0, 0), major: v(0, 3), ratio: 1, t0: 1, t1: 1 }] },

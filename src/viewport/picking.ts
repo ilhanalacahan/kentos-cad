@@ -150,7 +150,7 @@ export class PickIndex {
     return out;
   }
 
-  /** Ids in the store's order, which must be the document's (the parity test checks it). */
+  /** Ids in the store's order, which must be the document's (picking.test.ts checks it through edits). */
   ids(): number[] {
     this.sync();
     return Array.from(this.store.ids());

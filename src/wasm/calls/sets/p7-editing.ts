@@ -82,7 +82,6 @@ function chain(g: Gen): Entity[] {
 
 export const P7: CallSet = {
   file: 'calls-p7-editing.json',
-  fns: {},
   named: [
     { name: 'sıfır mesafe', fn: 'offsetEntity', args: [{ ...base, kind: 'line', a: v(0, 0), b: v(10, 0) }, 0, v(5, 5)] },
     { name: 'sıfır uzunluklu çizgi', fn: 'offsetEntity', args: [{ ...base, kind: 'line', a: v(3, 4), b: v(3, 4) }, 2, v(5, 5)] },

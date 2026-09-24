@@ -25,7 +25,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a'da `model/ops` ve üst düzey `model/geom` (bindirme, alan cebiri, paralel, ölçmecilik, şekiller, teğet daire, öteleme, tarama, ölçü) çekirdeğin ince cephelerine döndü, TS algoritmaları silindi. Kalan TS geometrisi ilkel modüllerdir (S3b). Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **Geçiş tamam (S1–S5, S3a–S3c):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a/S3b'de `model/ops`, `model/geom` ve ilkel modüller (`model/geometry.ts`'in ölçüleri, `entities.ts`, `render/triangulate.ts`) çekirdeğin ince cephelerine döndü; S3c'de son TS referansları silindi ve tek kaynak bekçisi geldi. Stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi dışında TS'te geometri algoritması yok. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
 - **S4 yapıldı:** işlem araçlarının geometrisi (köşe numaralama, köşe yazısının yeri, kenar ölçüleri, “görünen” kapsamının kutu testi, ifadelerin geometri değerleri) çekirdekten geliyor. Her çalıştırma okuduğu nesnelerden kendi deposunu kurar, sayfada da worker'da da aynı kodla (`processing/job.ts` `runJob`, `processing/geometry.ts`; ADR 0008 “İşlem araçları ve worker (S4)”).
 - **S5 yapıldı:** araçların ve nesne izlemenin satır içi hesapları (nokta girişi, orto/kutupsal imleç, nesne izleme, nokta hesabının kendi aritmetiği, araçların yapı hesapları; 39 işlem) `geometry-core::tools`'tan geliyor (`src/tools/constructions.ts`, ADR 0008 “Araç ve görünüm hesapları (S5)”).
 - **Aynı gün main'e girenler:**
@@ -49,9 +49,9 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - **S1a yapıldı:** `geometry-core::store` (nesnelerin kopyası, katman tablosu, sınır kutuları, Hilbert sıralı R-ağacı, belge sırası), `hit`/`hitEdge`/`snap`/`inRect`/`overlapping`/`enclosing`/`edgesIn`; `viewport/picking.ts` ince yüz oldu. Ayrıntılar ADR 0008 “Geometri deposu”nda.
   - Eşitleme `touched` ile; `load`/`replaceWith` yeni `reset` olayını yayar. `applyExternal` `touched` yaydığı için tam eşitleme gerekmedi.
   - Nesneler JSON değil paketli gider (`src/wasm/pack.ts`, `store/pack.rs`): 26 MB JSON WASM'da 5–7 s sürüyordu, paketli 0,1–0,3 s.
-  - Eski TS `PickIndex` `src/wasm/parity/reference/picking.ts`'te parity referansıdır; S3'te silinir. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
-- **S1b yapıldı:** etiket kararları (`labels`) ve tutamaçlar (`grips`) depodan; `drawLabels`, `drawGrips`, `gripAt` kayıtları kullanır (`viewport/storeRecords.ts`). Eski karar mantığı `src/wasm/parity/reference/overlay.ts`'te referanstır.
-- **S1c yapıldı:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; depo `trim_entity`/`extend_entity`'e yalnız hedefe ya da ucun ışınına/çemberine değebilecek kenarları verir), `transformOutlines` (hayalet yolları), `stretchOutlines`, `measure` (`PropertiesPanel` toplamları); `PasteTool` kendi deposunu kurar. Eski hesap `src/wasm/parity/reference/tools.ts`'te referanstır; donmuş dosyaya 400 durum eklendi. Aynı makinede `hat-1m` budama önizlemesi 1:1000'de 1,5 s → 10 ms (ADR 0008).
+  - Eski TS `PickIndex` parity referansıydı; S3c'de silindi. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
+- **S1b yapıldı:** etiket kararları (`labels`) ve tutamaçlar (`grips`) depodan; `drawLabels`, `drawGrips`, `gripAt` kayıtları kullanır (`viewport/storeRecords.ts`). Eski karar mantığı referanstı (S3c'de silindi).
+- **S1c yapıldı:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; depo `trim_entity`/`extend_entity`'e yalnız hedefe ya da ucun ışınına/çemberine değebilecek kenarları verir), `transformOutlines` (hayalet yolları), `stretchOutlines`, `measure` (`PropertiesPanel` toplamları); `PasteTool` kendi deposunu kurar. Eski hesap referanstı (S3c'de silindi); donmuş dosyaya 400 durum eklendi. Aynı makinede `hat-1m` budama önizlemesi 1:1000'de 1,5 s → 10 ms (ADR 0008).
 - **S1d yapıldı (bulut ölçümü):** P8 (`d8a7beb`) ve S1c (`21ac4c5`) aynı konteynerde SwiftShader ile ölçüldü (`docs/perf/interaction-s1-before.md`, `interaction-s1-after.md`, özet `docs/perf/README.md`, ADR 0008 “Uygulamada önce/sonra”). İmleç başına seçme ve kenet `parsel-50k`'da ~19 ms'den 0,1–3 ms'ye, `hat-1m` budama önizlemesi 972 ms'den 18 ms'ye indi. `hat-1m` genel görünümde kenet 32 ms (p95) ile hâlâ yüksek: sıradaki iyileştirme hedefi.
 - **Kabul ölçümü kullanıcıda:** `pnpm perf:interaction --label s1` (tabanla karşılaştırmalı, kullanıcının makinesinde). Kabul: tabana göre p95'te gerileme olmamalı. Sonuç gelince ADR 0008 ve `docs/perf/README.md`'ye yazılır.
 - **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur. “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır, bir koşu ~50 dk sürer. Makinede başka iş varken p95 güvenilmez.
@@ -61,7 +61,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - `render/styledLayer.ts` ve `render/sceneBuilder.ts` çizilecek geometriyi katman başına tek çağrıda alır (`PickIndex.drawn` → `store/draw.rs`; `style/geometry.ts` `DrawnReader` okur). Nesnenin kendi noktaları kopyalanmaz, kayıt onlara başvurur. Tek nesnelik `styledGeometry` (sembol önizlemeleri) aynı kaydı `drawnGeometry` işlemiyle alır.
 - `render/styledSink.ts` ve vurgu katmanı dolguları `render/fillQueue.ts` ile katman bitince tek `triangulateMany` çağrısında üçgenler.
 - Çizimdeki ifadelerin `$alan`, `$uzunluk`, `$y`, `$x` değerleri ilk istenince katman için bir kez `measures` ile gelir (`ExprScope.measured`). İşlem araçları ve sınıflama S4'te bunları da depodan alır (lejant ifade değerlendirmez).
-- Eski hesap `src/wasm/parity/reference/draw.ts`'te referanstır; derin koşu temiz, donmuş dosyada çizim ve değer durumları var. E2e'de WebGL2'nin piksel sayısı değişmedi. Katman kurma süresi S1c ile başa baş (ADR 0008 “Çizim hattı”).
+- Eski hesap referanstı (S3c'de silindi); derin koşu temiz, donmuş dosyada çizim ve değer durumları var. E2e'de WebGL2'nin piksel sayısı değişmedi. Katman kurma süresi S1c ile başa baş (ADR 0008 “Çizim hattı”).
 
 ### S3: cephe ve TypeScript'in silinmesi
 
@@ -75,7 +75,12 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `dist`, `angleDeg`, `bearingGrad`, `distToSegment` sayı alan girişlerden; halka ölçüleri çekirdeğin belleğindeki kazıma tamponundan (bellek ayırmadan) geçer.
   - Tümünü göster, pano taban noktası ve kutupsal dizinin seçim ortası depodaki `extent(ids)` sorgusundan gelir.
   - TS'te kalan kayıt işleri: tipler, kutu büyütme, `bulgeAt`, `entityGeometry`, sabitler.
-- **S3c (sıradaki):** tek kaynak bekçisi (bir vitest denetimi, silinen modüllerin yerindeki TS dosyalarında koordinat aritmetiği, `Math.`, olmadığını denetler), `src/wasm/parity/reference/*` ve `parity.test.ts`'in silinmesi (derin koşudan sonra), belgeler.
+- **S3c yapıldı:** son TS referansları silindi, tek kaynak bekçisi eklendi. Ayrıntılar ADR 0008 “Tek kaynak bekçisi ve TS referanslarının silinmesi (S3c)”.
+  - Son derin koşu (S3b'den sonra): S4/S5 çağrı kümeleri işlem başına 20 000, depo parity'si iki sahnede 5 000'er tur, işlem parity'si 2 000 tur; temiz. Depo turu ~75 ms sürdüğü için 20 000 tur 50 dakikayı ve testin süre sınırını aşardı.
+  - Silinenler: `src/wasm/parity/reference/*`, `parity.test.ts`, depo ve işlem parity testleri, kümelerin `fns`/`ties` alanları. Kalan `src/wasm/calls/` (kümeler, sahne, `storeCases.ts`, bağımsız referans testi).
+  - Referanssız yerine geçenler: `viewport/picking.test.ts` (eşitlenen depo = baştan kurulan depo, düzenlemeler boyunca), `processing/runs.test.ts` (sayfa = worker, kapsam ve önizleme iki yoldan aynı).
+  - Bekçi `src/model/singleSource.test.ts`: cephelerde aritmetik ve `Math.` yok (TypeScript sözdizimi ağacıyla; sayma/dizinleme serbest, tek istisna `extendBounds`).
+  - Kaydediciler çekirdekten kaydeder; mevcut dosyaları son bite kadar yeniden ürettiler (ADR'de), donmuş dosyalar TS'ten kaydedildiği gibi kaldı.
 - Kare başına binlerce çağrı yapan yerler toplu API alır; bölme noktaları ve tarama önizlemesi S3a'da yapıldı.
 
 ### S4: worker (yapıldı)
@@ -83,7 +88,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - Sayfadaki `clientExecutor` ve worker'ın `handleJob`'ı aynı `runJob`'ı çağırır: çalıştırma okuduğu nesneleri (features girdileri) kendi deposuna paketler (`ObjectStore`, `processing/geometry.ts`), araç `ctx.geometry` ile kimlikten sorar; depo çalıştırma bitince bırakılır.
 - Çekirdeğe geçenler (`crates/geometry-core/src/processing/`, `store/processing.rs`): köşe numaralama (halka sırası, ortak köşe ızgarası, dışa bakan yön; adlar ve sayaç TS'te `nameCorners`), köşe yazısının yeri (`cornerTexts`), kenar ölçüsü yazıları ve ortak kenar anahtarları (`edgeLengths`), “görünen” kapsamının kutu testi (`inBox`, pencerede görünümün deposu). İfadelerin geometri değerleri Öznitelik hesapla, İfadeyle seç, pencere önizlemesi, sınıflama ve kural süzgeçlerinde bütün nesneler için bir kez depodan gelir.
 - Taşırken TS'te üç kırılganlık bulundu ve iki tarafta düzeltildi (ADR 0008 “S4'te bulunanlar”): boş halkada `TypeError`, adsız noktanın numara yutması, 2^53'ün ötesinde bitmeyen ızgara döngüsü.
-- Eski hesap `src/wasm/parity/reference/processing.ts`'te referanstır (S3'te silinir). Çağrı kümesi S4 ve araç parity'si derin koşuda temiz; donmuş dosyalar `calls-s4-processing.json` ve `store-processing.json`.
+- Eski hesap referanstı (S3c'de silindi). Çağrı kümesi S4 ve araç parity'si derin koşuda temiz; donmuş dosyalar `calls-s4-processing.json` ve `store-processing.json`.
 - **Ölçüm (bulut, 50 000 parsel):** numaralama 871 → 289 ms, kenar uzunlukları 280 → 158 ms (ortanca); `$alan` yazan Öznitelik hesapla sayfada 53 → 136 ms (depo kurulumu; Otomatik 2 000 nesneden sonra worker'ı seçer).
 
 ### S5: araç ve görünümdeki satır içi hesaplar (yapıldı)
@@ -91,7 +96,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - **Yapıldı:** nokta girişi (`coordinateInput.ts`: göreli, kutupsal, imleç yönünde), orto ve kutupsal imleç (`tracking.ts` → `constrainCursor`), nesne izleme (`viewport/objectTracking.ts`), nokta hesabının kendi aritmetiği ve araçların yapı hesapları (yarıçapla düzgün çokgen, yay devamı, açıortay, çoklu çizgi yay parçaları, köşe yuvarla ve pah, döndür, ölçekle, kutupsal dizi, hizala, ölçü kolları, halka …) `geometry-core::tools`'ta; araçlar `src/tools/constructions.ts` ile çağırır. Derin koşu temiz, `calls-s5-*.json` donduruldu. Kutupsal dizide TM'deki bir kırılganlık iki tarafta düzeltildi. TS'te kalanların listesi ve gerekçesi ADR 0008'de.
 - **Doğrulama (S5 dalı):** `npx tsc --noEmit -p .` ve `pnpm test` temiz, `pnpm rust:test` (clippy dahil) temiz, `pnpm e2e`'de yalnız WebGPU'nun bilinen üç denetimi düştü.
 - **Kalan:**
-  - Araçların çağırdığı ilkel model işlevleri (`dist`, `angleDeg` …) S3b'de o modüllerle birlikte cepheye döner (`survey` S3a'da döndü); eski TS referansları (`src/wasm/parity/reference/{pointInput,objectTracking,drawing,editing}.ts`) S3c'de silinir.
+  - Araçların çağırdığı ilkel model işlevleri (`dist`, `angleDeg` …) S3b'de o modüllerle birlikte cepheye döndü (`survey` S3a'da); eski TS referansları S3c'de silindi.
   - Yazılan değerlerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`, uzat-kısalt farkı) ve dikdörtgen dizinin ötelemeleri (tek çarpım; büyük bir dizinin önizlemesi her karede binlerce ötelemeyi JSON'dan geçirirdi) bilerek TS'te kaldı; komutlar sunucuya gidince (CLAUDE.md §18) komut zarfıyla birlikte yeniden bakılır. Kullanıcı aksini isterse küçük işlemlerle taşınır.
 
 ### S6: belgeler ve ölçüm raporu
@@ -147,18 +152,18 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - TypeScript'in istisna fırlattığı yerde `Result<_, String>` döner, JS'te istisna olur.
   - Panik yok: `unwrap`/`expect` test dışı kodda yasaktır.
 - **Nesne alanları:** nesnenin kimlik, katman ve öznitelik gibi alanları `Entity.rest`'te olduğu gibi geri döner.
-- **Çağrı kümesi:** `src/wasm/parity/sets/pN-*.ts` dosyasına adlı sınır durumları ve tohumlu rastgele çağrılar (`repeat`, `Gen`) yazılır, küme `sets.ts`'e eklenir.
-  - Üreteçler TypeScript'in istisna fırlattığı girdileri üretmemeli; test donanımı istisna yakalamaz.
-- **Koşu:**
-  - normal: `npx vitest run src/wasm/parity/parity.test.ts -t "pN"` (işlem başına 200 durum);
-  - derin: `PARITY_CASES=20000` ile aynı komut.
-  - Tolerans 1e-9 + 1e-14 · büyüklüktür; gerekçeli istisnalar kümede `tolerance`, eşit ölçülü sıra değişimleri `ties` ile bildirilir.
+- **Çağrı kümesi:** `src/wasm/calls/sets/*.ts` dosyasına adlı sınır durumları ve tohumlu rastgele çağrılar (`repeat`, `Gen`) yazılır, küme `sets.ts`'e eklenir. Yeni bir çekirdek işlevi (TS karşılığı olmayan) kümeye yazılır ve kaydediciyle dondurulur; beklenen değerler çekirdekten gelir, fark okunarak doğrulanır, bağımsız referans eklenir.
+  - Üreteçler çekirdeğin hata döndürdüğü girdileri üretmemeli; test donanımı istisna yakalamaz.
+- **TS'ten taşıma (style-core gibi):** S3c'de TS ↔ Rust karşılaştırması (`parity.test.ts`, kümelerin `fns` ve `ties` alanları) son referanslarla birlikte silindi; `git show c7445e0:src/wasm/parity/parity.test.ts` ve `c7445e0:src/wasm/parity/harness.ts` yöntemin çalışan biçimidir. Taşınacak TS'i kümenin `fns` alanına koyup testi geri getirin:
+  - normal: işlem başına 200 durum; derin: `PARITY_CASES=20000`;
+  - tolerans 1e-9 + 1e-14 · büyüklüktür; gerekçeli istisnalar kümede `tolerance`, eşit ölçülü sıra değişimleri `ties` ile bildirilir;
+  - derin koşu temizse TS silinir, karşılaştırma yeniden kaldırılır ve tek kaynak bekçisi (`src/model/singleSource.test.ts`) yeni cephe dosyalarını listesine alır.
 - **Fark çıkarsa:** çoğu zaman TypeScript'te gizli bir kırılganlık ya da hatadır.
   - Önce hatayı yeniden üreten bir TS birim testi yazın.
   - Sonra TS ve Rust'ı aynı biçimde düzeltin ve ADR 0008'e yazın.
   - Örnekler ADR'dedir: halka izlemede ikiz parça, elipste en yakın nokta, ortak köşede en yakın kenar.
 - **Fixture:**
-  - `GOLDEN_WRITE=1 npx vitest run scripts/fixtures/record-calls.test.ts`;
+  - `GOLDEN_WRITE=1 npx vitest run scripts/fixtures/record-calls.test.ts` (depo için `record-store.test.ts`, `record-store-processing.test.ts`); kaydediciler S3c'den beri yanıtı çekirdekten alır, yeniden kayıt bilinçli bir golden değişikliğidir;
   - sonra `npx vitest run src/wasm` ve `cargo test -p kentos-geometry-core --test calls`.
   - Kaydedici işlem başına en çok 25 rastgele durum ve 48 KB tutar.
 - **Boyut:** `src/wasm/pkg/kentos_wasm_bg.wasm` ham ve `gzip -9` boyutu ADR 0008 tablosuna yeni satır olarak yazılır.

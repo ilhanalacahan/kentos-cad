@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../model/geometry';
 import { callNamed } from '../wasm/core';
-import { Gen } from '../wasm/parity/harness';
-import { fillPolygon } from '../wasm/parity/sets/p8-triangulate';
+import { Gen } from '../wasm/calls/harness';
+import { fillPolygon } from '../wasm/calls/sets/p8-triangulate';
 import { FillQueue } from './fillQueue';
 
 /**

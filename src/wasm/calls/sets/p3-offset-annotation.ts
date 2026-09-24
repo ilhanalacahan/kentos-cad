@@ -38,7 +38,6 @@ export const P3: CallSet = {
     // A few ulps of a TM coordinate (4.4·10⁶ m: 1 ulp ≈ 9.3·10⁻¹⁰ m) — nanometres on a drawn hatch line.
     hatchLines: { abs: 2e-8, rel: 1e-14, why: 'Tarama çizgileri dünya koordinatında sin/cos ile döndürülür; V8 ile libm son bitte ayrışır, TM büyüklüğünde bu birkaç ulp eder.' },
   },
-  fns: {},
   named: [
     { name: 'kapalı kare dışa', fn: 'offsetPath', args: [SQ, 1, true] },
     { name: 'kapalı kare içe', fn: 'offsetPath', args: [SQ, -1, true] },

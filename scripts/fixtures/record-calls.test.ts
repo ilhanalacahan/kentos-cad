@@ -1,23 +1,24 @@
-// Records the TypeScript reference results of every call set into
+// Records the core's answers to every call set into
 // fixtures/geometry/v1/calls-*.json (docs/adr/0008). Runs only on purpose:
 //   GOLDEN_WRITE=1 npx vitest run scripts/fixtures/record-calls.test.ts
-// An operation whose TypeScript is gone (S3) records the core's own result:
-// rewriting its cases is a deliberate change of the golden answers, to be
-// read in the diff (a changed rule, robust predicates).
+// The committed answers were recorded from the TypeScript each operation
+// was ported from; since that TypeScript is gone (S3), rewriting a case is
+// a deliberate change of the golden answers, to be read in the diff (a
+// changed rule, robust predicates).
 // Outside src/ so the app's type check does not need Node's types.
 import { writeFileSync } from 'node:fs';
 import { it } from 'vitest';
 import { callNamed } from '../../src/wasm/core';
-import { callsOf, sameResult, TOLERANCE, toJson, type CallFile } from '../../src/wasm/parity/harness';
-import { SETS } from '../../src/wasm/parity/sets';
+import { callsOf, TOLERANCE, toJson, type CallFile } from '../../src/wasm/calls/harness';
+import { SETS } from '../../src/wasm/calls/sets';
 
-/** Random calls kept per operation in the frozen file (the parity test runs more)… */
+/** Random calls kept per operation in the frozen file… */
 const KEEP = 25;
 /** …within this many bytes per operation, keeping at least MIN_KEPT (a 512-point offset alone is 25 KB). */
 const BUDGET = 48_000;
 const MIN_KEPT = 3;
 
-it.runIf(!!process.env.GOLDEN_WRITE)('records the reference answers into the call fixtures', () => {
+it.runIf(!!process.env.GOLDEN_WRITE)('records the core’s answers into the call fixtures', () => {
   for (const set of SETS) {
     const named = new Set(set.named);
     const used = new Map<string, { kept: number; bytes: number }>();
@@ -34,12 +35,8 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the reference answers into the cal
       tolerance: TOLERANCE,
       crs: { kind: 'projected', unit: 'metre', note: 'Koordinatlar metre cinsinden bir projeksiyon düzlemindedir; tolerans bu birim içindir (fixtures/geometry/v1/cases.json ile aynı).' },
       cases: callsOf(set, KEEP).flatMap((c) => {
-        const ts = set.fns[c.fn] as ((...a: unknown[]) => unknown) | undefined;
         const tol = set.tolerance?.[c.fn];
-        const expect = toJson(ts ? ts(...c.args) : callNamed(c.fn, c.args));
-        // A case the core matches only up to a reordering of ties is not frozen (the parity test accepts it).
-        if (sameResult(toJson(callNamed(c.fn, c.args)), expect, tol ?? TOLERANCE) !== null) return [];
-        const entry = { ...c, args: toJson(c.args) as unknown[], expect, ...(tol ? { tol } : {}) };
+        const entry = { ...c, args: toJson(c.args) as unknown[], expect: toJson(callNamed(c.fn, c.args)), ...(tol ? { tol } : {}) };
         return named.has(c) || fits(c.fn, JSON.stringify(entry).length) ? [entry] : [];
       }),
     };

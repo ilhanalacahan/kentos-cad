@@ -1,7 +1,7 @@
 import type { Vec2 } from '../../../model/geometry';
 import type { Edge } from '../../../model/geom/intersect';
 import type { Area, OverlayRule, Source } from '../../../model/geom/overlay';
-import { areaSource, netArea, ringEdges } from '../../../model/geom/region';
+import { areaSource, ringEdges } from '../../../model/geom/region';
 import { repeat, type CallSet, type Gen } from '../harness';
 
 /** P4: the planar overlay engine, area algebra, faces of line work, parallel lines (docs/adr/0008). */
@@ -43,12 +43,8 @@ function cutLines(g: Gen): Source {
   return { edges: Array.from({ length: n }, (): Edge => (g.chance(0.8) ? { kind: 'seg', a: g.gridPt(5, 5), b: g.gridPt(5, 5) } : { kind: 'arc', c: g.gridPt(5, 3), r: g.pick([5, 7.5]), a0: 0, sweep: 2 * Math.PI })) };
 }
 
-const byArea = (a: Area) => netArea(a);
-
 export const P4: CallSet = {
   file: 'calls-p4-overlay.json',
-  ties: { unionAreas: byArea, intersectAreas: byArea, subtractAreas: byArea, splitArea: byArea, allFaces: byArea, overlay: byArea },
-  fns: {},
   named: [
     { name: 'örtüşen kareler', fn: 'unionAreas', args: [[rect(0, 0, 10, 10), rect(5, 5, 15, 15)]] },
     { name: 'ortak kenarlı komşular', fn: 'unionAreas', args: [[rect(0, 0, 10, 10), rect(10, 0, 20, 10)]] },
