@@ -153,7 +153,7 @@ Kullanıcının kararları (2026-09-24):
   - **Numaralı köşenin yazısı:** yeri köşenin dışında, açıortayda; genişlik adın harf sayısından (`cornerTexts`, tipli toplu giriş; adıyla `cornerTextAt`). TS yalnız harf sayısını verir.
   - **Kenar ölçüsü yazıları** (`processing/edge_lengths.rs`): her nesnenin `edgeLabels`'ı ve ortak kenar anahtarı (iki uç ve uzunluk milimetre ızgarasında, kenarın yönü fark etmez; metinde olduğu gibi −0 ile 0 bir) tek çağrıda; depo sorgusu `edgeLengths(ids, …)`, adıyla `edgeLengthLabels`. TS uzunluğu yalnız `toFixed` ile yazar.
   - **“Görünen” kapsamının kutu testi:** `inBox(kutu)`: her katmanda, kutusu görünümle kesişen nesneler, belge sırasıyla (NaN kutu hiçbir zaman kesişmez; yardımcı çizginin kutusu taban noktasıdır). Katman görünürlüğü ve yardımcı çizgilerin dışarıda kalması belge bilgisidir, TS'te kalır. Görünümün deposu yanıtlar (`FeatureHost.geometry` → `ctx.view.inBox`); görünümü olmayan bir ev sahibinde nesneler kendi deposuna konur.
-  - **İfadelerin geometri değerleri:** Öznitelik hesapla, İfadeyle seç, penceredeki ifade önizlemesi, katman stili penceresinin sınıflaması (`style/classify.ts` `valuesOf`) ve kural süzgeçlerinin sayısı `$alan`, `$uzunluk`, `$y`, `$x`'i ilk istendiğinde bütün nesneler için bir kez depodan alır (`measuredOf`; `measuredAt` artık `model/expression/expressionLib.ts`'te, `style/geometry.ts` yeniden dışa aktarır). Araçlar çalıştırmanın deposundan, pencereler görünümün deposundan (`ctx.view.measures`) sorar.
+  - **İfadelerin geometri değerleri:** Öznitelik hesapla, İfadeyle seç, penceredeki ifade önizlemesi, katman stili penceresinin sınıflaması (`style/classify.ts` `valuesOf`) ve kural süzgeçlerinin sayısı `$alan`, `$uzunluk`, `$y`, `$x`'i ilk istendiğinde bütün nesneler için bir kez depodan alır (`measuredOf`; `measuredAt` artık `model/expression/expressionLib.ts`'te; ifade dili taşınınca ölçüler tablo olarak doğrudan çekirdeğe gider). Araçlar çalıştırmanın deposundan, pencereler görünümün deposundan (`ctx.view.measures`) sorar.
 - **TS'te kalanlar:** numara biçimi ve adlar (`formatNumber`, `parseNumber`), uzunluk metinleri, yazı yüksekliğinin kâğıt milimetresinden metreye çevrilmesi (bir parametre dönüşümü, koordinat değil), tür süzgeçleri, katman görünürlüğü, seçimin birleştirilmesi, özetler ve ifade dilinin kendisi (style-core'un işi).
 - **Doğrulama:** eski hesap `apps/web/src/wasm/parity/reference/processing.ts`'teydi (S3c'de silindi; numaralama, köşe yazısı, kenar ölçüleri, görünen kapsam ve dört aracın eski `run`'ı). S3a'dan sonra referansın çağırdığı `edgeLabels` çekirdeğin cephesidir; kenar ölçülerinde TS'e karşı sınanan, nesnelerin yolu, ortak kenar anahtarları ve atlanan sayısıdır, yazının yeri S3a'nın donmuş dosyalarıyla sınanır.
   - Çağrı kümesi S4 (`sets/s4-processing.ts`): adlı sınır durumları (boş halka, tek ve iki köşe, TM ızgarası, delik, açık yol, toleranssız uzak koordinat, eksi koordinatta ızgara sınırı, −0 çevresinde milimetre ızgarası, milimetre kaymış ters çizgi, yaylı parsel) ve rastgele çağrılar; derin koşu (işlem başına 20 000) temiz. `calls-s4-processing.json` 131 durum.
@@ -213,6 +213,52 @@ Kullanıcının kararları (2026-09-24):
 - **Ölçüm** (`TRANSFORM_BENCH=1 pnpm -C apps/web exec vitest run scripts/perf/transform.test.ts`; Node 22, WASM, iki yol aynı süreçte, 10 000 karışık TM nesnesi, 30 koşu, p50 / p95 ms): dönüşüm 294 / 348 → 18 / 20; taşı komutu (geri alma adımıyla) 317 / 389 → 45 / 52; kopya 304 / 342 → 37 / 63; yapıştır 308 / 357 → 34 / 50; özgün koordinata yapıştır 308 / 357 → 59 / 70. 18 ms'nin 3,9 ms'si çekirdek çağrısı ve sınır, 6,2 ms'si okuma, 4,7 ms'si birleştirme; komutun kalanı çoğunlukla belgenin geri alma adımıdır.
 - **Belgenin adımı tek değişiklik** (24 Eylül): araçlar sonucu nesne nesne `update`/`add` ile yazıyordu; işlem içinde bile her nesne ayrı bir değişiklikti (`changed`, `attrs`, `touched` olayları ve her dinleyicinin işi nesne başına). Artık `CadDocument.updateMany` ve `addMany` bütün nesneleri tek değişiklik olarak uygular: işlemler aynıdır (nesne başına geri alınabilir işlem, aynı kimlik iki kez verilirse ikincisi birincinin sonucunu değiştirir, alana dönüşmeyen nesne deliklerini bırakır), dinleyiciler her olayı bir kez duyar; `remove` de öyle. Taşı, kopyala, döndür, ölçekle, aynala, diziler, hizala, yapıştır, esnet, birleştir, patlat, işlem araçlarının sonucu ve seçime sembol, katman ya da renk verme bunu kullanır. Tarayıcıda (bütün dinleyiciler bağlı: katmanlar paneli, görünüm, geometri deposu) 10 000 nesnenin taşınmasında belgenin adımı 145 ms'den 14 ms'ye indi; sonraki kare (katmanın yeniden kurulması, bu konteynerde yazılım GPU'su) ikisinde de ~800 ms. Node ölçümünde (yalnız depo dinler) komut p50: taşı 41 → 35 ms, kopya 32 → 28, yapıştır 30 → 26 (aynı koşuda nesne nesne yolla).
 
+### İfade dili (style-core Y1)
+
+İşlem araçlarının ve stil motorunun ifade dili (`Nitelik = 'Arsa' ve $alan > 500`, `'P' || doldur($sıra, 5)`) TypeScript'ten Rust'a taşındı; stil motorunun geometrisi ve SVG düzenleyicisi sıradaki dilimlerdir (DEVIR).
+
+- **Yer:** yeni crate `crates/shared/style-core` (§14 `style-core`): `kentos-geometry-core`'a bağlıdır; DOM, WASM ve ağ bilmez; `clippy.toml` std aşkın işlevlerini yasaklar.
+  - `expr/`: sözcükler (konumlar UTF-16 birimi), sözdizimi (öncelik tırmanması; TS'le aynı Türkçe hata iletileri ve konumları), işlevler ve değişkenler (adlar, takma adlar, imzalar, açıklamalar), değer kuralları, toplu değerlendirme (`rows.rs`).
+  - `js/`: dilin dayandığı JavaScript anlamı: `number` (`String(x)`, `toPrecision`, `toFixed` birebir), `text` (`\s` ve `trim` kümesi, UTF-16 uzunluk ve dilim, `tr-TR` büyük/küçük harf, `foldTurkish`, V8'in en uzun metni), `collate` (Türkçe sıralama tablosuyla).
+- **Sınır:**
+  - Çağrı tablosunda `exprCompile` (alanlar, okunanlar, hata ve konumu) ve `exprCatalog` (arayüzün işlev ve değişken menüleri); `geometry-wasm`'ın tablosu önce `geometry-core`'a, sonra `style-core`'a bakar (numaraları öncekilerin ardından gelir).
+  - Toplu değerlendirme tipli bir giriştir: `exprEvaluate(kaynak, n, metinler, uzunluklar, sayılar, ölçüler, ölçek, biçim)`. Nesneler ifadenin okuduğu bir tablo olarak geçer: nesne başına metin yuvaları (alanlar ifadedeki sırayla, sonra etiket, katman adı ve tür adı; yalnız okunanlar; tek metinde UTF-16 uzunluklarıyla, −1 yok), sayı yuvaları (numara, köşe sayısı; NaN yok) ve bir geometri değeri okunuyorsa deponun `measures` yanıtı olduğu gibi (nesne başına altı sayı). Değerler sütun olarak döner: tür (0 boş, 1 sayı, 2 metin, 3 doğru/yanlış), sayılar ve UTF-16 uzunluklu metinler. İfade her çağrıda yeniden derlenir (mikrosaniyeler); çekirdekte derlenmiş ifade yaşamaz.
+  - Biçimler: değerin kendisi, sayı (sayı değilse boş), metin, doğru/yanlış (bu ikisinde boş boş kalır) ve metninin okunduğu sayı (stil penceresinin sınıfları, 12 anlamlı basamak). İfadeyle seç ve koşullar doğru/yanlış, öznitelik hesapla metin ister; stil motoru katman kurulumu başına ifade ve biçim başına bir sütun alır (`style/compile.ts` `ExprRun`; ölçüler bir kez).
+- **Birebir taşıma:**
+  - Kaynaklar ve nesneler tohumlu üreteçle (`apps/web/src/model/expression/cases.ts`): geçerli ve bozuk kaynaklar, Türkçe harfler, sayı gibi okunan metinler, eksik alanlar, ölçüsü olmayan nesneler. TS ile çekirdek 20 000 rastgele kaynakta beş biçimin hepsinde aynı değeri, aynı hatayı ve konumunu verdi. Mutasyon denetimi: eşitlikte yuvarlama yönü ya da sıralamanın harf büyüklüğü düzeyi değiştirilince test düşer.
+  - TS silindi (başvuru kopyası ve karşılaştırma testi). Dondurulmuş yanıtlar `fixtures/expression/v1/cases.json`'dadır (400 kaynak: 148 hata, 886 nesne değerlendirmesi; kaydedici `apps/web/scripts/fixtures/record-expression.test.ts`). Native `crates/shared/style-core/tests/cases.rs`, uygulamanın yolundan `apps/web/src/model/expression/fixture.test.ts` okur. `expression.test.ts` aynı adlarla çekirdeği sınar; Rust'taki karşılığı `expr/tests.rs`'tir.
+- **JavaScript'in sayıdan metne çevirisi:**
+  - Rust'ın en kısa biçimi (`{:e}`) JavaScript'inkiyle aynı basamaklardır. Yuvarlama burada yapılır, çünkü JavaScript eşitlikte yukarı, Rust çifte yuvarlar.
+  - Hızlı yollar tam sayılarladır: 2⁵³'ün altındaki tam sayı kendi basamaklarıdır; `toFixed` (en çok 17 ondalık) ve 12 anlamlı basamağa yuvarlama (1e-6 ≤ |x| < 1e12) x = m·2^q'dan x·10^f = m·5^f·2^(q+f) olarak 128 bitte kesin hesaplanır. Öbür durumlarda en kısa biçim karar verir; veremediğinde tam açılım (en çok 767 basamak) okunur, önce yalnız 20 fazla basamak.
+  - Birim testleri her yolu tam açılımla karşılaştırır. `NUMBER_ROUNDS=3000000` ile release'te denetim başına 3 milyon durum temiz.
+  - Taşırken bulunan: `toPrecision`, en kısa biçimi 10'un bir kuvveti olup kendisi ondan küçük olan sayılarda (1e23'e en yakın double 9,99…e22) 16 ve daha çok basamakta bir basamak kayıyordu. İlk basamağın üssü artık kesin karşılaştırmayla bulunur. İfade dili 12 basamak kullandığı için etkilenmiyordu.
+- **Metin ve sıralama:**
+  - UTF-16 uzunluk ve konumlar JavaScript'inkidir. Bir emojiyi bölen dilimin yarısı U+FFFD olur (JavaScript tek vekili tutar, Rust metni tutamaz).
+  - V8'in en uzun metnini ((1 << 29) − 24 birim) aşan birleştirme ve doldurma JavaScript'te fırlatırdı: ifade boş olur.
+  - TS `localeCompare(…, 'tr')` kullanıyordu (tarayıcının ICU'su). Çekirdek, Node 22.22.2 / ICU 78.2 / Unicode 17.0'dan üretilmiş sabit bir tablo kullanır: 1 009 karakter; harf, vurgu ve büyüklük düzeyleri. Kaydedici `apps/web/scripts/fixtures/record-collation.test.ts`'tir; son denetimi 300 000 çifttir. Genişleyen (Æ, ß, Ǉ …), birleşen (L·) ve yalnız vurgu taşıyan karakterler tabloda yoktur: bunlar ve tabloda olmayan her karakter bütün harflerden sonra, kod noktasına göre sıralanır. Sıra tarayıcının ICU sürümüne bağlı değildir.
+- **Bilinçli farklar:**
+  - Sözcük harfleri Unicode'un Alphabetic özelliğidir (`char::is_alphabetic`); TS `\p{L}` kullanıyordu. Harf sayılar (Ⅻ) ve ek alfabetik işaretler artık bir adın başında da geçer.
+  - Bölünmüş vekil U+FFFD olur (yukarıda).
+  - Alan adı yalnız nesnenin kendi özniteliklerinde aranır. TS `in` ile prototipi de okuyordu: `constructor` adlı bir alan nesnenin kurucusunu okurdu.
+  - Köşesiz bir yolun yer noktası yoktur: `$y` ve `$x` boştur, ifadenin kalanı hesaplanır. Depodan gelen ölçülerde S2'den beri böyleydi (“Bilinen fark”); depo olmadan nesne nesne ölçülen yolda TS'te okuma çöküp bütün ifadeyi boş bırakıyordu.
+- **Boyut:** başlangıç WASM'ı 898 018 → 1 008 667 bayt, gzip 303 940 → 349 550 (+45,6 KB).
+  - `.rodata` +20,7 KB: Unicode büyük/küçük harf ve Alphabetic tabloları, sıralama tablosu (satır başına 6 bayt), işlev açıklamaları ve iletiler.
+  - İşlev adları +9,3 KB.
+  - Kod: değerlendirici, sözdizimi ve sözcükler ~15 KB; `to_lowercase` ve `to_uppercase` 7 KB; sayı yazımı ~6 KB. Tam sayılı hızlı yollar 64 bitte kalır: 128 bitlik bölme kodu eklenmez.
+  - ADR 0005'in 350 KB sınırına 0,45 KB kaldı. Stil motorunun sıradaki dilimleri sınırı aşar; karar sahibinindir (DEVIR).
+- **Ölçüm** (`EXPRESSION_BENCH=1 pnpm -C apps/web exec vitest run scripts/perf/expression.test.ts --disable-console-intercept`; Node 22, 100 000 nesne, tablo kurma ve bütün değerlerin okunması dahil, p50 ms). Eski TS aynı makinede ve aynı süreçte ölçüldü (nesne başına `evaluate`, ölçüler depodan); iki koşunun ortancasıdır. Native, Rust release'te yalnız çekirdektir.
+
+  | İfade | Eski TS | Çekirdek (WASM yolu) | Native |
+  |---|---|---|---|
+  | `Nitelik = 'Arsa' ve $alan > 500` | 24 | 23–28 | 11 |
+  | `'P' \|\| doldur($sıra, 5)` | 21 | 28–30 | 16 |
+  | `metin($alan, 2) \|\| ' m²'` | 44 | 31–34 | 15 |
+  | `yuvarla($alan, 2)` | 25 | 9–11 | 7 |
+
+  - Alan okuyan koşullarda sürenin yarısı sınırdadır: sayfanın metin tablosunu kurması (100 000 metin ~5 ms) ve sonuç sütununun okunması.
+  - Metin üreten ifadelerde metinler WASM'ın bellek ayırıcısında kurulur. Değer bir kez, sayfada da taşınmadan okunur.
+  - Katman kurulumu bütçesi (§6.1, 100 000 segmentte < 50 ms) bu yolla aynı ölçüdedir.
+
 ### DXF yazıcısının eğrisi
 
 - `geom::spline::catmull_rom_beziers(pts, closed)`: `catmull_rom`'un çizdiği eğrinin her açıklığının tam kübik Bézier biçimi ve merkezcil düğüm aralığı. DXF yazıcısı (`crates/shared/formats`, ADR 0009 “DXF yazma”) açıklıkları üçlü iç düğümlü kübik B-spline'a dizer: dosyadaki eğri bir uydurma değil, KentOS'un çizdiği eğrinin kendisidir. Açıklık uçları noktaların kendisidir (bit bit).
@@ -231,7 +277,7 @@ Kullanıcının kararları (2026-09-24):
 ### Derleme
 
 - **Rust zorunlu:** `pnpm dev`, `test`, `test:watch`, `build`, `e2e`, `e2e:cloud` ve `pnpm wasm` önce `scripts/wasm/ensure.mjs`'i çalıştırır.
-  - Betik; `crates/shared/geometry-core`, `crates/wasm/geometry-wasm`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` ve `.cargo/config.toml` özetini `apps/web/src/wasm/pkg/.stamp` ile karşılaştırır.
+  - Betik; `crates/shared/geometry-core`, `crates/shared/style-core` (ifade dili), `crates/wasm/geometry-wasm`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` ve `.cargo/config.toml` özetini `apps/web/src/wasm/pkg/.stamp` ile karşılaştırır.
   - Özet değiştiyse `nice pnpm rust:wasm` çalıştırır. Rust araç zinciri artık `pnpm test` için de gereklidir; ADR 0001'in ilgili maddesi bu kararla değişti.
 - **`wasm` profili:** release'den türer; `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`. Paket `target/wasm32-unknown-unknown/wasm/`'dan `wasm-bindgen` ile `apps/web/src/wasm/pkg`'a yazılır; paket depoya girmez.
 - **Boyut:** her taşıma diliminde ADR 0005 taslağındaki başlangıç sınırıyla (300 KB gzip) karşılaştırılıp raporlanır.
@@ -261,6 +307,7 @@ Kullanıcının kararları (2026-09-24):
   | DXF yazıcısı (`catmull_rom_beziers`) | 895 KB | 302 KB | Çağrı tablosunda değil, yalnız biçim crate'i kullanır; çekirdek paketi değişmedi (894 506 bayt) |
   | Sağlam kararlar R3 (köşe çevresindeki sıra) | 896 KB | 303 KB | 894 506 → 896 139 bayt, gzip 302 106 → 302 678 (+572 bayt): kesin ve teğetli sıralama, eski kiriş açısı silindi |
   | Sağlam kararlar R4 (kesişim parametreleri) | 898 KB | 304 KB | 896 139 → 898 018 bayt, gzip 302 678 → 303 940 (+1,3 KB): `cross_accurate`, `compress`, dört noktaya genelleştirilmiş uyarlamalı aşamalar |
+  | İfade dili (style-core Y1) | 1 009 KB | 350 KB | 898 018 → 1 008 667 bayt, gzip 303 940 → 349 550 (+45,6 KB): Unicode harf tabloları, Türkçe sıralama tablosu, iletiler ve açıklamalar (`.rodata` +20,7 KB), değerlendirici, JavaScript'in sayı yazımı. 350 KB sınırına 0,45 KB kaldı |
 
 ### Doğrulama
 
