@@ -15,7 +15,7 @@ işler ve kurallar durur.
    Taşıma yöntemi, çağrı tablosu, JSON sınırı, geometri deposu, doğrulama,
    taşırken bulunan hatalar ve WASM boyut tablosu buradadır.
 3. `docs/perf/README.md`: ölçümlerin özeti (TS tabanı, S1 önce/sonra, S6).
-4. `docs/adr/0009-*.md`: dosya biçimleri (onay bekliyor, §6).
+4. `docs/adr/0009-*.md`: dosya biçimleri (kabul edildi, 24 Eylül).
 5. `DESIGN.md`: yalnız arayüze dokunulursa.
 
 ## 2. Nerede kaldık
@@ -41,8 +41,8 @@ işler ve kurallar durur.
   | Performans | `24d466e` | `CadDocument` katman dizini (`byLayer`), ızgaranın yeniden kullanımı, `JSON.stringify`'sız geometri karşılaştırması (CLAUDE.md §6.3) |
   | Kenet | `602bf5c` | Genel görünümde kesişim keneti ~7 kat hızlı, yanıtlar bit bit aynı (ADR 0008, geometri deposu) |
 
-- **Dosya biçimleri** (`wip/formats-dxf` dalından, `33f9981` … `96f4460`): koordinat listesi (Netcad NCN, TXT, CSV) içe/dışa aktarma ve DXF içe aktarma Rust'ta (`crates/shared/formats`, ayrı ve yalnız komutla yüklenen WASM paketi `apps/web/src/io/pkg`). ADR 0009 “önerildi”, onay bekliyor. DXF dışa aktarma yok (§3).
-- **WASM paketi:** 883 087 bayt, gzip 297 912 bayt. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; ~2 KB kaldı. Çekirdeğe eklenecek bir sonraki kod bu sınırı aşar: önce kullanıcının kararı gerekir (§6 madde 8).
+- **Dosya biçimleri** (`wip/formats-dxf` dalından, `33f9981` … `96f4460`): koordinat listesi (Netcad NCN, TXT, CSV) içe/dışa aktarma ve DXF içe aktarma Rust'ta (`crates/shared/formats`, ayrı ve yalnız komutla yüklenen WASM paketi `apps/web/src/io/pkg`). ADR 0009 kabul edildi (24 Eylül). DXF dışa aktarma yok (§3).
+- **WASM paketi:** 883 626 bayt, gzip 297 902 bayt. Başlangıç sınırı kullanıcı kararıyla 300'den 350 KB gzip'e yükseltildi (24 Eylül, ADR 0005 “Değişiklikler”); işlev adları pakette kalır. Her çekirdek diliminden sonra boyut ADR 0008'e yazılır.
 - **Son doğrulama** (`main`, şeridin çizime düşen gölgesinden sonra, 24 Eylül, bulut konteyneri): `pnpm typecheck` temiz; `pnpm test` 624 test geçti, 6 atlandı (fixture kaydedicileri); `pnpm build` başarılı; `pnpm e2e` 109–110 denetim geçti; düşenler bu konteynerde düşen WebGPU denetimleri (iki ya da üç, §5; şeritten önceki `6505a6e` de aynı piksel sayılarıyla düşüyor). Rust'a dokunulmadı; son Rust doğrulaması `602bf5c`'de: `cargo fmt --all -- --check` ve `pnpm rust:test` (cargo test ve clippy `-D warnings`) temiz, veritabanı testleri sır olmadığı için atlandı.
 - **Ölçüm:**
   - S1 önce/sonra (bulut, `docs/perf/interaction-s1-*.md`): imleç başına seçme ve kenet `parsel-50k`'da ~19 ms'den 0,1–3 ms'ye, `hat-1m` budama önizlemesi 972 ms'den 18 ms'ye indi.
@@ -56,16 +56,16 @@ işler ve kurallar durur.
 
 Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gerekirse ve tek tek çalıştırın; işi küçük, doğrulanmış dilimlerle ilerletin.
 
-1. **Açık kararları sorun (§6).** Özellikle madde 8 (WASM bütçesi): aşağıdaki çekirdek dilimlerinin hepsi pakete kod ekler.
+1. **Açık kararlar (§6)** çekirdek işlerini artık engellemiyor: WASM bütçesi ve ADR 0009 kararlaştırıldı (24 Eylül). Kalanlar bulut, veri modeli ve içe aktarma kurallarıdır; o işe gelince sorun.
 2. **Kabul ölçümü kullanıcının makinesinde.** Kullanıcı `pnpm perf:interaction --label s6` çalıştırır (tabanla karşılaştırmalı, `docs/perf/interaction-baseline.json`); sonuç `docs/perf/README.md`'ye ve ADR 0008 “Uygulamada önce/sonra”ya yazılır. Bulut ölçümleri yazılım GPU'suyladır; yalnız ana iş parçacığı süreleri ve aynı makinedeki önce/sonra çifti anlamlıdır.
-3. **§23.3 sağlam geometrik kararlar** (robust predicates), madde 8'den sonra. Yalnız Rust'ta; yeni bağımlılık eklemeden (Shewchuk'un uyarlamalı `orient2d` ve `incircle`'ı çekirdeğe yazılır, lisansı kamu malı). Yol:
+3. **§23.3 sağlam geometrik kararlar** (robust predicates; kullanıcı 24 Eylül'de başlattı). Yalnız Rust'ta; yeni bağımlılık eklemeden (Shewchuk'un uyarlamalı `orient2d` ve `incircle`'ı çekirdeğe yazılır, lisansı kamu malı). Yol:
    - `geometry-core`'a bir `predicates` modülü ve bağımsız referansa (Python kesirleri; `scripts/fixtures/geometry_call_reference.py` gibi) karşı testler;
    - kararlar tek tek değiştirilir: bindirmede yön ve sıralama (`geom/arrangement.rs`, `overlay.rs`), parça kesişimi ve çakışıklık (`geom/intersect.rs`), nokta-çokgen ve iç/dış;
    - her değişiklikte kaydediciyle yeniden kayıt (`GOLDEN_WRITE=1`, §4) ve farkın satır satır okunması; değişen her golden durum ADR 0008'e gerekçesiyle yazılır;
    - sabit toleransları (1e-9, `TOL = 1e-6`) sessizce büyütmek yasak (CLAUDE.md §23.4).
-4. **Taşıma ve kopyalamada JSON maliyeti:** 10 000 nesneyi taşımak ~0,15 s (TS'te ~0,01 s). Dönüşüm depoda yapılıp sonuç paketli (`wasm/pack.ts` biçiminde) döndürülür; `modifyTools.ts`, `editTools.ts` (yapıştır) çağırır. WASM'a kod ekler (madde 8).
+4. **Taşıma ve kopyalamada JSON maliyeti:** 10 000 nesneyi taşımak ~0,15 s (TS'te ~0,01 s). Dönüşüm depoda yapılıp sonuç paketli (`wasm/pack.ts` biçiminde) döndürülür; `modifyTools.ts`, `editTools.ts` (yapıştır) çağırır. WASM'a kod ekler (sınır 350 KB).
 5. **Katmanlar paneli:** `LayersPanel` her değişiklikte bütün ağacı yeniden çiziyor (300 katmanlı bir DXF'ten sonra nesne düzenlemesi başına ~15 ms). İlk adım sayı hücrelerini yerinde yazmak (~20 satır; geri alma ve yinelemede sayıların izlendiğini ve satırların aynı kaldığını denetleyen bir e2e denetimiyle). Sanallaştırma daha büyük bir `TreeView` işidir (katmanlar, işlemler, stil yöneticisi ortak; satır yüksekliği yazı ölçeğine bağlı, klavye, odak, yeniden adlandırma, satıra kaydırma).
-6. **DXF dışa aktarma** (ADR 0009 onaylanınca): uzak `wip/formats-dxf` dalındaki `0320b7f` başlangıcı (sözleşmede `DxfWriteLayer`/`DxfWriteInput`, `KENTOS` genişletilmiş verisinin okunması, `catmull_rom_beziers`) derlenmiyordu; yazıcı, `writeDxf`, pencere, komut ve testler yazılacak. Büyük dosyada içe aktarmanın ana iş parçacığındaki süresi de ölçülmedi.
+6. **DXF dışa aktarma** (ADR 0009 kabul edildi): uzak `wip/formats-dxf` dalındaki `0320b7f` başlangıcı (sözleşmede `DxfWriteLayer`/`DxfWriteInput`, `KENTOS` genişletilmiş verisinin okunması, `catmull_rom_beziers`) derlenmiyordu; yazıcı, `writeDxf`, pencere, komut ve testler yazılacak. Büyük dosyada içe aktarmanın ana iş parçacığındaki süresi de ölçülmedi.
 7. **style-core** (uzun vade): stil motoru, ifade dili ve SVG düzenleyicisinin geometrisi aynı yöntemle (§4) taşınır. Bekçinin (`singleSource.test.ts`) listesi o zaman genişler.
 8. **CLAUDE.md'nin öbür fazları** (Faz B kalanları, Faz C/D): çoğu veritabanı ister; bu bulut konteynerinde sır olmadığı için doğrulanamaz. Tipli öznitelik şeması kullanıcı kararını bekliyor (§6 madde 6).
 
@@ -147,18 +147,16 @@ Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gere
 5. ADR 0005 (performans hedefleri) hâlâ taslak; onay bekliyor.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
-8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına dayandı (S3a'da 267 KB, S5 ile 283 KB, S4 ile 297 KB, S3b'de kullanılmayan girişler silinince 298 KB; ~2 KB kaldı, bir sonraki dilim aşar). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
-9. Dosya biçimleri (ADR 0009) main'e alındı; ADR'nin onayı bekliyor.
-10. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
-11. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.
-12. Bilgi için (kullanıcı aksini isterse değişir; ayrıntı ADR 0008 S4, S5): hedef katmandaki adsız nokta artık numaralı sayılmaz (önce bir numarayı yutuyordu); köşesiz yolun `$y`/`$x`'i boştur (önce bütün ifadeyi boşaltan hata veriyordu); yazılan değerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`) ve dikdörtgen dizinin ötelemeleri TS'te kaldı, çünkü iki dilde bit bit aynıdır ve önizlemede her karede JSON'a değmez.
+8. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
+9. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.
+10. Bilgi için (kullanıcı aksini isterse değişir; ayrıntı ADR 0008 S4, S5): hedef katmandaki adsız nokta artık numaralı sayılmaz (önce bir numarayı yutuyordu); köşesiz yolun `$y`/`$x`'i boştur (önce bütün ifadeyi boşaltan hata veriyordu); yazılan değerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`) ve dikdörtgen dizinin ötelemeleri TS'te kaldı, çünkü iki dilde bit bit aynıdır ve önizlemede her karede JSON'a değmez.
 
 ## 7. Devralan ajan için ilk adımlar
 
 1. Bu dosyayı ve §1'deki belgeleri okuyun. CLAUDE.md §0 ve §13 sonrası kullanıcının metnidir: yalnız doğrulanmış durum notu eklenir.
 2. Ortamı kurun (§5): `pnpm install --frozen-lockfile`, `cargo install wasm-bindgen-cli --version 0.2.128 --locked`, bulutta Chromium sarmalayıcısı (`CHROME_BIN`).
 3. `main`'i doğrulayın: `pnpm typecheck`, `pnpm test`, `pnpm rust:test`, `pnpm e2e`. Beklenen sonuçlar §2 “Son doğrulama”dadır; bulutta iki ya da üç WebGPU denetimi bilinen biçimde düşer.
-4. Kullanıcıya §6'daki açık kararları sorun; özellikle 8 (WASM bütçesi) ve 9 (ADR 0009), çünkü §3'teki işlerin çoğu bunlara bağlı.
+4. §6'daki açık kararları ilgili işe gelince kullanıcıya sorun (WASM bütçesi ve ADR 0009 24 Eylül'de kararlaştırıldı).
 5. §3'ten sıradaki işi alın. Dilim başına bir commit, İngilizce ileti (“Shared core, …” ya da “File formats, …”), sonunda oturumun atıf satırları; `tsc`, `pnpm test`, Rust'a dokunulduysa `pnpm rust:test` ve arayüze ya da çekirdeğe dokunulduysa `pnpm e2e` geçince `main`'e ve oturum dalına push edilir.
 6. Yeni bir çekirdek işlevi: önce Rust'ta işlev ve birim testi, sonra çağrı tablosu (`op!`), çağrı kümesi ve donmuş fixture (§4), sonra TS cephesi (`op<Sig>('ad')`), en son çağıranlar. Cephede aritmetik yazmayın; bekçi test düşer. WASM boyutunu ADR 0008 tablosuna yazın.
 7. İş bitince bu dosyayı güncelleyin: biten maddeyi silin, yeni kararı ekleyin.
