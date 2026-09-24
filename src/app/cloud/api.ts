@@ -34,6 +34,11 @@ export class ApiFailure extends Error {
     this.requestId = body.requestId;
   }
 
+  /** The project was deleted (410): nothing more can be read from it or saved to it. */
+  get deleted(): boolean {
+    return this.code === 'project_deleted';
+  }
+
   /** Worth retrying unchanged: no answer, a timeout, or the server/database briefly away. */
   get transient(): boolean {
     return this.status === 0 || this.status === 408 || this.status === 502 || this.status === 503 || this.status === 504;
@@ -49,6 +54,8 @@ export interface CloudApi {
   projects(tenant: string): Promise<ProjectList>;
   createProject(tenant: string, input: ProjectCreate, idempotencyKey: string): Promise<ProjectInfo>;
   project(tenant: string, project: string): Promise<ProjectInfo>;
+  /** Deletes a project for everyone (soft: kept on the server, the operator can restore it). */
+  deleteProject(tenant: string, project: string): Promise<void>;
   features(tenant: string, project: string, after: string | null, limit: number, signal?: AbortSignal): Promise<FeaturePage>;
   featuresById(tenant: string, project: string, ids: readonly string[]): Promise<FeaturePage>;
   command(envelope: CommandEnvelope): Promise<CommitResult>;
@@ -121,6 +128,9 @@ export class HttpCloudApi implements CloudApi {
   }
   project(tenant: string, project: string) {
     return this.call<ProjectInfo>('GET', this.base(tenant, project));
+  }
+  deleteProject(tenant: string, project: string) {
+    return this.call<void>('DELETE', this.base(tenant, project));
   }
   features(tenant: string, project: string, after: string | null, limit: number, signal?: AbortSignal) {
     const q = new URLSearchParams({ limit: String(limit) });

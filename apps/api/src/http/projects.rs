@@ -1,12 +1,13 @@
 //! Projects, their objects, the edit command and the event log over HTTP.
 //! Every route resolves the caller's access to the tenant in the path first
-//! (membership, seat, active tenant); the use cases check the rights.
+//! (membership, seat, active tenant); the use cases check the rights. A
+//! deleted project answers 410 (`project_deleted`) to opening and writing.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kentos_application::tenancy::{self, Access};
-use kentos_application::{AppError, changes, events, projects};
+use kentos_application::{AppError, changes, events, lifecycle, projects};
 use kentos_contracts::{
     CommandEnvelope, CommitResult, EventPage, FeaturePage, ProjectCreate, ProjectInfo, ProjectList,
 };
@@ -15,7 +16,7 @@ use uuid::Uuid;
 
 use super::AppState;
 use super::auth::Caller;
-use super::error::{Body, Failure};
+use super::error::{Body, Failure, request_id};
 
 fn uuid(text: &str, what: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(text).map_err(|_| AppError::not_found(format!("{what} bulunamadı.")))
@@ -69,6 +70,28 @@ pub async fn info(
         projects::info(state.db()?, &a, uuid(&project, "Proje")?).await
     };
     run.await.map(Json).map_err(|e| Failure::with(e, &headers))
+}
+
+/// `DELETE …/projects/{project}`: 204 whether it was deleted now or before (a retry); its open editors are told live.
+pub async fn delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    caller: Caller,
+    Path((tenant, project)): Path<(String, String)>,
+) -> Result<StatusCode, Failure> {
+    let run = async {
+        let a = access(&state, &caller, &tenant).await?;
+        let project = uuid(&project, "Proje")?;
+        let rid = request_id(&headers);
+        if lifecycle::delete(state.db()?, &a, project, rid.as_deref())
+            .await?
+            .is_some()
+        {
+            state.hub.notify(a.tenant, project);
+        }
+        Ok(StatusCode::NO_CONTENT)
+    };
+    run.await.map_err(|e| Failure::with(e, &headers))
 }
 
 #[derive(Deserialize)]

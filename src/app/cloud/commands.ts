@@ -8,6 +8,9 @@ export interface CloudHooks {
   signIn(then?: () => void): void;
   projects(mode: 'open' | 'upload'): void;
   conflicts(): void;
+  /** Rename or delete the open cloud project (the projects list offers both for any project). */
+  rename(): void;
+  remove(): void;
 }
 
 export function registerCloudCommands(ctx: AppContext, hooks: CloudHooks): void {
@@ -17,6 +20,11 @@ export function registerCloudCommands(ctx: AppContext, hooks: CloudHooks): void 
   const reachable = () => ctx.server.state.value === 'online';
   const needAccount = (next: () => void) => () => (signedIn() ? next() : hooks.signIn(next));
   const watch = [cloud.auth, ctx.server.state];
+  // The open project, while it still exists, and whether this account may do `capability` in it.
+  const openMay = (capability: string) => {
+    const p = cloud.project.value;
+    return !!p && cloud.sync.value?.state.value !== 'deleted' && cloud.can(p.tenantId, capability) && reachable();
+  };
   ctx.commands.registerAll([
     {
       id: 'cloud.signIn',
@@ -62,6 +70,27 @@ export function registerCloudCommands(ctx: AppContext, hooks: CloudHooks): void 
       run: needAccount(() => hooks.projects('upload')),
       isEnabled: () => reachable(),
       watch,
+    },
+    {
+      id: 'cloud.rename',
+      title: 'Bulut projesini yeniden adlandır…',
+      category: C,
+      description: 'Açık bulut projesinin adını kurumdaki herkes için değiştirir (project.edit yetkisi gerekir). Başka bir projeyi Bulut projesi aç listesinden yeniden adlandırın.',
+      aliases: ['BULUTAD', 'RENAME'],
+      run: () => hooks.rename(),
+      isEnabled: () => openMay('project.edit'),
+      watch: [cloud.project, cloud.sync, cloud.me, ctx.server.state],
+    },
+    {
+      id: 'cloud.delete',
+      title: 'Bulut projesini sil…',
+      category: C,
+      description:
+        'Açık bulut projesini kurumdaki herkes için siler (project.delete yetkisi, yönetici). Nesneler sunucuda saklanır; yanlışlıkla silineni sunucu yöneticisi geri getirebilir.',
+      aliases: ['BULUTSIL'],
+      run: () => hooks.remove(),
+      isEnabled: () => openMay('project.delete'),
+      watch: [cloud.project, cloud.sync, cloud.me, ctx.server.state],
     },
     {
       id: 'cloud.conflicts',

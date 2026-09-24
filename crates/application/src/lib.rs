@@ -9,6 +9,7 @@ pub mod changes;
 pub mod error;
 pub mod events;
 pub mod identity;
+pub mod lifecycle;
 pub mod projects;
 pub mod tenancy;
 

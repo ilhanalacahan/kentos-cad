@@ -19,6 +19,7 @@ import type { AppContext } from './context';
 import { registerCloudCommands } from './cloud/commands';
 import { openConflictDialog } from '../ui/cloud/ConflictDialog';
 import { openLoginDialog } from '../ui/cloud/LoginDialog';
+import { openDeleteDialog, openRenameDialog } from '../ui/cloud/ProjectActions';
 import { openProjectsDialog } from '../ui/cloud/ProjectsDialog';
 import { CloudSession } from './cloud/session';
 import { DocumentFiles } from './fileIO';
@@ -112,10 +113,23 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     show: (tab) => shell?.showProcessing(tab),
   });
   registerStyleCommands(ctx);
+  // The open cloud project as the rename and delete dialogs name it.
+  const openTarget = () => {
+    const p = ctx.cloud.project.value;
+    return p && { tenantId: p.tenantId, tenantName: p.tenantName, projectId: p.projectId, name: p.name };
+  };
   registerCloudCommands(ctx, {
     signIn: (then) => openLoginDialog(ctx, then),
     projects: (mode) => openProjectsDialog(ctx, mode),
     conflicts: () => openConflictDialog(ctx),
+    rename: () => {
+      const t = openTarget();
+      if (t) openRenameDialog(ctx, t);
+    },
+    remove: () => {
+      const t = openTarget();
+      if (t) openDeleteDialog(ctx, t);
+    },
   });
   registerDefaultKeybindings(ctx);
   commands.events.on('missing', ({ id }) => ctx.log.error(`Komut bulunamadı: ${id}`));

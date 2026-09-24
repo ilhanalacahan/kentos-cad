@@ -20,6 +20,7 @@ const SAVE_TEXT: Record<SaveState, (n: number) => string> = {
   conflict: (n) => `Çakışma: ${n}`,
   error: () => 'Kayıt hatası',
   readonly: () => 'Salt okunur',
+  deleted: () => 'Proje silindi',
 };
 
 const LINK_TEXT = { none: '', connecting: 'bağlanıyor', online: 'canlı', reconnecting: 'yeniden bağlanıyor', offline: 'çevrimdışı', auth_required: 'oturum gerekli' } as const;
@@ -60,6 +61,7 @@ export function saveCell(ctx: AppContext, d: DisposableStore): HTMLElement {
   cell.addEventListener('click', () => {
     const state = ctx.cloud.sync.value?.state.value;
     if (state === 'conflict') ctx.commands.execute('cloud.conflicts');
+    // Deleted: Kaydet offers a local file, the one place the drawing can still go.
     else if (state !== 'readonly') ctx.commands.execute('file.save');
   });
   d.add(
@@ -70,6 +72,11 @@ export function saveCell(ctx: AppContext, d: DisposableStore): HTMLElement {
         const p = ctx.cloud.project.value;
         if (!sync || !p) return null;
         const link = LINK_TEXT[ctx.cloud.link.value];
+        if (sync.state.value === 'deleted')
+          return {
+            title: 'Bulut kaydı',
+            description: `${p.tenantName} › ${p.name} sunucuda silindi. Değişiklikler buluta gönderilmiyor; bu cihazda saklanıyor. Tıklayın ya da Ctrl+S: çizimi yerel bir dosyaya kaydedin.`,
+          };
         const lines = [
           `${p.tenantName} › ${p.name}. Değişiklikler kendiliğinden kaydedilir; Ctrl+S hemen gönderir.`,
           `Son kayıt: ${ago(sync.lastSaved.value)}. Canlı bağlantı: ${link}.`,
@@ -88,6 +95,12 @@ export function saveCell(ctx: AppContext, d: DisposableStore): HTMLElement {
 export function accountMenu(ctx: AppContext, anchor: HTMLElement): void {
   const me = ctx.cloud.me.value;
   const p = ctx.cloud.project.value;
+  // An action on the open project that this account may not take says which right it lacks.
+  const needs = (id: string, capability: string) => {
+    const item = commandItem(ctx, id);
+    if (p && item.disabled && !ctx.cloud.can(p.tenantId, capability)) item.detail = `Yetkiniz yok (${capability}); kurum yöneticinize başvurun.`;
+    return item;
+  };
   PopupMenu.open(
     [
       { kind: 'header', label: me ? `${me.user.displayName}${p ? ` · ${p.tenantName}` : ''}` : 'Oturum açılmadı' },
@@ -95,6 +108,8 @@ export function accountMenu(ctx: AppContext, anchor: HTMLElement): void {
       { kind: 'separator' },
       commandItem(ctx, 'cloud.open'),
       commandItem(ctx, 'cloud.upload'),
+      needs('cloud.rename', 'project.edit'),
+      needs('cloud.delete', 'project.delete'),
       { kind: 'separator' },
       commandItem(ctx, 'server.check'),
     ],

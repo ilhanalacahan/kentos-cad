@@ -1,6 +1,7 @@
-//! Administration from the command line (`kentosd tenant|user|member …`), as
-//! the owner role: tenants, local accounts, memberships and seats. There is
-//! no open sign-up (ADR 0007); inviting from the interface comes later.
+//! Administration from the command line (`kentosd tenant|user|member|project
+//! …`), as the owner role: tenants, local accounts, memberships and seats,
+//! and restoring a deleted project. There is no open sign-up (ADR 0007);
+//! inviting from the interface comes later.
 //! Passwords are hashed by PostgreSQL (`crypt` with a bcrypt salt, cost 12).
 
 use kentos_contracts::TenantRole;
@@ -277,6 +278,71 @@ pub async fn list_members(owner: &PgPool, tenant_slug: &str) -> AppResult<Vec<Me
             })
         })
         .collect())
+}
+
+/// A deleted project, for the operator (`kentosd project deleted`).
+#[derive(Debug)]
+pub struct DeletedProject {
+    pub id: Uuid,
+    pub name: String,
+    pub deleted_at: time::OffsetDateTime,
+    pub deleted_by: String,
+}
+
+pub async fn deleted_projects(owner: &PgPool, tenant_slug: &str) -> AppResult<Vec<DeletedProject>> {
+    let (tenant, _) = tenant_id(owner, tenant_slug).await?;
+    let rows: Vec<(Uuid, String, time::OffsetDateTime, String)> = sqlx::query_as(
+        "select p.id, p.name, p.deleted_at, u.display_name
+           from kentos.project p join kentos.app_user u on u.id = p.deleted_by
+          where p.tenant_id = $1 and p.deleted_at is not null order by p.deleted_at desc",
+    )
+    .bind(tenant)
+    .fetch_all(owner)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, deleted_at, deleted_by)| DeletedProject {
+            id,
+            name,
+            deleted_at,
+            deleted_by,
+        })
+        .collect())
+}
+
+/// Undoes a deletion (lifecycle.rs): the project is listed and opens again,
+/// with everything it had. Recorded in the audit log without an actor (the
+/// operator works from the command line). Returns the project's name.
+pub async fn restore_project(
+    owner: &PgPool,
+    tenant_slug: &str,
+    project: Uuid,
+) -> AppResult<String> {
+    let (tenant, _) = tenant_id(owner, tenant_slug).await?;
+    let mut tx = owner.begin().await?;
+    let name: Option<String> = sqlx::query_scalar(
+        "update kentos.project set deleted_at = null, deleted_by = null, updated_at = now()
+          where tenant_id = $1 and id = $2 and deleted_at is not null returning name",
+    )
+    .bind(tenant)
+    .bind(project)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(name) = name else {
+        return Err(AppError::not_found(format!(
+            "“{tenant_slug}” kurumunda silinmiş {project} projesi yok; silinmiş projeleri `kentosd project deleted --tenant {tenant_slug}` listeler."
+        )));
+    };
+    sqlx::query(
+        "insert into kentos.audit_event (tenant_id, project_id, action, detail) values ($1, $2, 'project.restore', $3)",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(serde_json::json!({ "name": name, "by": "kentosd" }))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(name)
 }
 
 #[cfg(test)]

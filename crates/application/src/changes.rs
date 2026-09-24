@@ -12,7 +12,9 @@
 //! 4. writes the changes, bumps versions and the project's data revision,
 //!    and records audit, an outbox event and the idempotent answer.
 //!
-//! Objects on a locked layer are refused (CLAUDE.md §7).
+//! Objects on a locked layer are refused (CLAUDE.md §7), and so is any
+//! change to a deleted project (410); a command it had already committed is
+//! still answered from the log.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -28,7 +30,7 @@ use uuid::Uuid;
 use crate::cad::{PROJECTION_VERSION, Stored, to_stored};
 use crate::error::{AppError, AppResult};
 use crate::projects::{
-    FEATURE_COLUMNS, FeatureRow, check_name, check_srid, check_tree, find_layer, record,
+    FEATURE_COLUMNS, FeatureRow, check_name, check_srid, check_tree, find_layer, gone, record,
 };
 use crate::tenancy::{Access, Capability};
 
@@ -149,14 +151,14 @@ pub async fn commit(
 
     let mut tx = db.scoped(access.scope()).await?;
     // 1. Lock the project: commits of one project happen one after another.
-    let row: Option<(i32, Value, i64)> = sqlx::query_as(
-        "select srid, layers, meta_version from kentos.project where tenant_id = $1 and id = $2 for update",
+    let row: Option<(i32, Value, i64, String, bool)> = sqlx::query_as(
+        "select srid, layers, meta_version, name, deleted_at is not null from kentos.project where tenant_id = $1 and id = $2 for update",
     )
     .bind(access.tenant)
     .bind(project)
     .fetch_optional(&mut *tx)
     .await?;
-    let (srid, layers, meta_version) =
+    let (srid, layers, meta_version, name, deleted) =
         row.ok_or_else(|| AppError::not_found("Proje bulunamadı."))?;
 
     // 2. The same key again: the stored answer, or a refusal if the request differs.
@@ -180,6 +182,9 @@ pub async fn commit(
             .map_err(|e| AppError::invalid(format!("Saklı yanıt okunamadı: {e}")))?;
         result.replayed = true;
         return Ok(result);
+    }
+    if deleted {
+        return Err(gone(&name));
     }
 
     // 3. Plan and check: layer tree after the patch, stored forms, versions.

@@ -5,11 +5,14 @@ import type { ProjectSummary } from '../../contracts/generated/ProjectSummary';
 import { crsBySrid } from '../../geo/crs';
 import { h, replaceChildren } from '../dom';
 import { Dialog } from '../widgets/Dialog';
+import { openDeleteDialog, openRenameDialog } from './ProjectActions';
 
 /**
  * Cloud projects of a tenant: open one, or upload the current drawing as a
  * new one. Opening shows its progress and can be cancelled; the drawing on
- * screen is replaced only when every object has arrived.
+ * screen is replaced only when every object has arrived. The selected
+ * project can also be renamed (project.edit) or deleted (project.delete);
+ * a button the account may not use says why.
  */
 export function openProjectsDialog(ctx: AppContext, mode: 'open' | 'upload'): void {
   const cloud = ctx.cloud;
@@ -34,6 +37,8 @@ export function openProjectsDialog(ctx: AppContext, mode: 'open' | 'upload'): vo
   const progress = h('div', { class: 'cloud-progress', hidden: true }, bar);
   const primary = h('button', { class: 'btn btn--primary', type: 'button' }, mode === 'open' ? 'Aç' : 'Buluta yükle');
   const cancel = h('button', { class: 'btn', type: 'button' }, 'Vazgeç');
+  const rename = h('button', { class: 'btn btn--ghost', type: 'button' }, 'Yeniden adlandır…');
+  const remove = h('button', { class: 'btn btn--ghost', type: 'button' }, 'Sil…');
 
   const body =
     mode === 'open'
@@ -50,7 +55,7 @@ export function openProjectsDialog(ctx: AppContext, mode: 'open' | 'upload'): vo
     width: 520,
     className: 'dialog--cloud',
     content: body,
-    footer: [h('div', { class: 'dialog__foot-spacer' }), cancel, primary],
+    footer: mode === 'open' ? [rename, remove, h('div', { class: 'dialog__foot-spacer' }), cancel, primary] : [h('div', { class: 'dialog__foot-spacer' }), cancel, primary],
     onClose: () => abort?.abort(),
   });
 
@@ -64,7 +69,15 @@ export function openProjectsDialog(ctx: AppContext, mode: 'open' | 'upload'): vo
     say(`${done} / ${total} nesne`);
   };
   const canCreate = () => tenant.capabilities.includes('project.create');
+  // A disabled button says why: nothing picked, or the right it needs.
+  const action = (b: HTMLButtonElement, capability: string, what: string) => {
+    const allowed = tenant.capabilities.includes(capability);
+    b.disabled = !picked || !allowed;
+    b.title = !allowed ? `“${tenant.tenantName}” kurumunda proje ${what} yetkiniz yok (${capability}); kurum yöneticinize başvurun.` : picked ? '' : 'Önce listeden bir proje seçin.';
+  };
   const refreshButton = () => {
+    action(rename, 'project.edit', 'adlandırma');
+    action(remove, 'project.delete', 'silme');
     primary.disabled = mode === 'open' ? !picked : !canCreate() || !nameField.value.trim();
     if (mode === 'upload' && !canCreate()) say(`“${tenant.tenantName}” kurumunda proje açma yetkiniz yok.`, 'error');
     else if (mode === 'upload') say('');
@@ -126,6 +139,15 @@ export function openProjectsDialog(ctx: AppContext, mode: 'open' | 'upload'): vo
     }
   };
 
+  const target = () => picked && { tenantId: tenant.tenantId, tenantName: tenant.tenantName, projectId: picked.id, name: picked.name };
+  rename.addEventListener('click', () => {
+    const t = target();
+    if (t) openRenameDialog(ctx, t, () => void load());
+  });
+  remove.addEventListener('click', () => {
+    const t = target();
+    if (t) openDeleteDialog(ctx, t, () => void load());
+  });
   tenantSelect.addEventListener('change', () => {
     tenant = tenants.find((t) => t.tenantId === tenantSelect.value) ?? tenant;
     if (mode === 'open') void load();

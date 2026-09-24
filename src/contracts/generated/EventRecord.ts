@@ -4,7 +4,11 @@ import type { EventFeature } from "./EventFeature";
 /**
  * One committed change of a project, in commit order (`seq` is the cursor).
  */
-export type EventRecord = { seq: string, dataRevision: string, kind: string, actor?: string, 
+export type EventRecord = { seq: string, dataRevision: string, 
+/**
+ * `project.changes`, or `project.deleted` (no objects; nothing is committed after it).
+ */
+kind: string, actor?: string, 
 /**
  * The request that made it: a client recognises its own commits.
  */

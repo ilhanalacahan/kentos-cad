@@ -30,6 +30,8 @@ export const MAIN_MENU: TopMenu[] = [
       'cloud.open',
       'cloud.upload',
       'cloud.conflicts',
+      'cloud.rename',
+      'cloud.delete',
       '-',
       { label: 'İçe aktar', icon: 'import', items: ['file.import.dxf', 'file.import.ncz', 'file.import.shp', 'file.import.geojson', '-', 'file.import.ncn'] },
       { label: 'Dışa aktar', icon: 'export', items: ['file.export.dxf', 'file.export.geojson', 'file.export.pdf'] },

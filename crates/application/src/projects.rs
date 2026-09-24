@@ -2,6 +2,9 @@
 //! project reads its metadata first (with the event cursor of that moment),
 //! then the objects page by page; events after the cursor fill in whatever
 //! changed while the pages were read.
+//!
+//! A deleted project (lifecycle.rs) is left out of the list and refuses
+//! opening (410, `project_deleted`); its rows stay for recovery.
 
 use kentos_contracts::{
     FeaturePage, FeatureRecord, LayerNode, LayerNodeType, ProjectCreate, ProjectInfo, ProjectList,
@@ -162,11 +165,18 @@ pub async fn create(
     info(db, access, id).await
 }
 
+/// The refusal for a deleted project, the same wherever it is asked for.
+pub(crate) fn gone(name: &str) -> AppError {
+    AppError::deleted(format!(
+        "“{name}” projesi silindi; açılamaz ve değiştirilemez. Yanlışlıkla silindiyse kurum yöneticinize başvurun."
+    ))
+}
+
 pub async fn list(db: &kentos_postgres::Db, access: &Access) -> AppResult<ProjectList> {
     access.require(Capability::ProjectRead)?;
     let mut tx = db.scoped(access.scope()).await?;
     let rows: Vec<(Uuid, String, i32, i64, time::OffsetDateTime)> =
-        sqlx::query_as("select id, name, srid, data_revision, updated_at from kentos.project where tenant_id = $1 order by updated_at desc")
+        sqlx::query_as("select id, name, srid, data_revision, updated_at from kentos.project where tenant_id = $1 and deleted_at is null order by updated_at desc")
             .bind(access.tenant)
             .fetch_all(&mut *tx)
             .await?;
@@ -198,6 +208,7 @@ type ProjectRow = (
     i64,
     i64,
     i64,
+    bool,
 );
 
 /// A project's metadata, object count and the event cursor of this moment.
@@ -211,7 +222,8 @@ pub async fn info(
     let row: Option<ProjectRow> = sqlx::query_as(
         "select p.name, p.settings, p.layers, p.active_layer, p.origin_x, p.origin_y, p.home_view, p.styles, p.meta_version, p.data_revision,
                 (select count(*) from kentos.feature f where f.tenant_id = p.tenant_id and f.project_id = p.id),
-                coalesce((select max(seq) from kentos.outbox_event o where o.tenant_id = p.tenant_id and o.project_id = p.id), 0)
+                coalesce((select max(seq) from kentos.outbox_event o where o.tenant_id = p.tenant_id and o.project_id = p.id), 0),
+                p.deleted_at is not null
            from kentos.project p where p.tenant_id = $1 and p.id = $2",
     )
     .bind(access.tenant)
@@ -219,8 +231,24 @@ pub async fn info(
     .fetch_optional(&mut *tx)
     .await?;
     tx.commit().await?;
-    let (name, settings, layers, active_layer, ox, oy, home, styles, meta, rev, count, cursor) =
-        row.ok_or_else(|| AppError::not_found("Proje bulunamadı."))?;
+    let (
+        name,
+        settings,
+        layers,
+        active_layer,
+        ox,
+        oy,
+        home,
+        styles,
+        meta,
+        rev,
+        count,
+        cursor,
+        deleted,
+    ) = row.ok_or_else(|| AppError::not_found("Proje bulunamadı."))?;
+    if deleted {
+        return Err(gone(&name));
+    }
     let bad = |e: serde_json::Error| AppError::invalid(format!("Proje kaydı okunamadı: {e}"));
     Ok(ProjectInfo {
         id: project.to_string(),
@@ -291,22 +319,23 @@ pub(crate) fn record(
     })
 }
 
-async fn project_exists(
+/// A project of this tenant that is not deleted: 404 when there is none, 410 when it was deleted.
+async fn live_project(
     tx: &mut Transaction<'static, Postgres>,
     access: &Access,
     project: Uuid,
 ) -> AppResult<()> {
-    let found: bool = sqlx::query_scalar(
-        "select exists (select 1 from kentos.project where tenant_id = $1 and id = $2)",
+    let row: Option<(String, bool)> = sqlx::query_as(
+        "select name, deleted_at is not null from kentos.project where tenant_id = $1 and id = $2",
     )
     .bind(access.tenant)
     .bind(project)
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    if found {
-        Ok(())
-    } else {
-        Err(AppError::not_found("Proje bulunamadı."))
+    match row {
+        None => Err(AppError::not_found("Proje bulunamadı.")),
+        Some((name, true)) => Err(gone(&name)),
+        Some(_) => Ok(()),
     }
 }
 
@@ -321,7 +350,7 @@ pub async fn features(
     access.require(Capability::ProjectRead)?;
     let limit = limit.clamp(1, PAGE_MAX);
     let mut tx = db.scoped(access.scope()).await?;
-    project_exists(&mut tx, access, project).await?;
+    live_project(&mut tx, access, project).await?;
     let rows: Vec<FeatureRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "select {FEATURE_COLUMNS} from kentos.feature where tenant_id = $1 and project_id = $2 and id > $3 order by id limit $4"
     )))
@@ -358,7 +387,7 @@ pub async fn features_by_id(
         )));
     }
     let mut tx = db.scoped(access.scope()).await?;
-    project_exists(&mut tx, access, project).await?;
+    live_project(&mut tx, access, project).await?;
     let rows: Vec<FeatureRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "select {FEATURE_COLUMNS} from kentos.feature where tenant_id = $1 and project_id = $2 and id = any($3) order by id"
     )))

@@ -18,15 +18,18 @@ pub enum Capability {
     /// Name, settings, layer tree and styles of a project.
     ProjectEdit,
     FeatureWrite,
+    /// Deleting a project for everyone (soft: the operator can restore it).
+    ProjectDelete,
     MemberManage,
 }
 
 impl Capability {
-    pub const ALL: [Capability; 5] = [
+    pub const ALL: [Capability; 6] = [
         Self::ProjectRead,
         Self::ProjectCreate,
         Self::ProjectEdit,
         Self::FeatureWrite,
+        Self::ProjectDelete,
         Self::MemberManage,
     ];
 
@@ -36,6 +39,7 @@ impl Capability {
             Self::ProjectCreate => "project.create",
             Self::ProjectEdit => "project.edit",
             Self::FeatureWrite => "feature.write",
+            Self::ProjectDelete => "project.delete",
             Self::MemberManage => "member.manage",
         }
     }
@@ -48,7 +52,8 @@ pub fn allows(role: TenantRole, cap: Capability) -> bool {
         ProjectRead => TenantRole::Viewer,
         FeatureWrite => TenantRole::Editor,
         ProjectCreate | ProjectEdit => TenantRole::ProjectManager,
-        MemberManage => TenantRole::Admin,
+        // Deleting hides the project from everyone in the tenant: above the one who manages projects.
+        ProjectDelete | MemberManage => TenantRole::Admin,
     };
     role >= needed
 }
@@ -209,6 +214,10 @@ mod tests {
         assert!(
             allows(TenantRole::ProjectManager, ProjectCreate)
                 && !allows(TenantRole::ProjectManager, MemberManage)
+        );
+        assert!(
+            allows(TenantRole::Admin, ProjectDelete)
+                && !allows(TenantRole::ProjectManager, ProjectDelete)
         );
         assert!(
             Capability::ALL

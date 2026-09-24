@@ -14,7 +14,11 @@ import { Tracker, entityJson, metaParts, type MetaParts, type Planned } from './
  * tracker; `dirty` holds the local objects that may differ from it.
  */
 
-export type SaveState = 'saved' | 'pending' | 'saving' | 'offline_pending' | 'conflict' | 'error' | 'readonly';
+/** `deleted`: the project was deleted on the server; nothing more is sent, edits stay in the device draft. */
+export type SaveState = 'saved' | 'pending' | 'saving' | 'offline_pending' | 'conflict' | 'error' | 'readonly' | 'deleted';
+
+/** Event kind of a deleted project (`PROJECT_DELETED` in crates/contracts). */
+export const PROJECT_DELETED = 'project.deleted';
 
 export interface SyncConflict {
   featureId: string;
@@ -43,6 +47,8 @@ export interface SyncOptions {
   /** What the server sent when the project was opened. */
   records: readonly { localId: number; featureId: string; version: string }[];
   warn: (text: string) => void;
+  /** The project was deleted on the server (an event or a refused command); called once. */
+  onDeleted?: () => void;
   newId?: () => string;
   debounceMs?: number;
   maxDelayMs?: number;

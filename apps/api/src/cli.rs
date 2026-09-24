@@ -26,6 +26,10 @@ impl Args {
         let mut options = Vec::new();
         let mut raw = raw.peekable();
         while let Some(a) = raw.next() {
+            // A bare `--` separates arguments, it is none itself: `pnpm kentosd -- migrate` passes it through.
+            if a == "--" {
+                continue;
+            }
             if let Some(name) = a.strip_prefix("--") {
                 if SWITCHES.contains(&a.as_str()) {
                     options.push((name.to_string(), None));
@@ -210,15 +214,40 @@ pub async fn run(config: &Config, args: &Args) -> Result<(), String> {
                 );
             }
         }
+        ["project", "deleted"] => {
+            for p in admin::deleted_projects(&owner_pool(config).await?, args.required("tenant")?)
+                .await
+                .map_err(fail)?
+            {
+                let at = p
+                    .deleted_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default();
+                println!("{}\t{}\t{at}\t{}", p.id, p.name, p.deleted_by);
+            }
+        }
+        ["project", "restore"] => {
+            let project = uuid::Uuid::parse_str(args.required("project")?)
+                .map_err(|_| "--project bir proje kimliği (UUID) olmalı".to_string())?;
+            let name = admin::restore_project(
+                &owner_pool(config).await?,
+                args.required("tenant")?,
+                project,
+            )
+            .await
+            .map_err(fail)?;
+            println!("“{name}” geri getirildi; listelerde görünür ve açılır");
+        }
         ["dev-seed"] => dev_seed(config).await?,
         _ => return Err(USAGE.into()),
     }
     Ok(())
 }
 
-/// Development data: tenant `ornek-buro` with two accounts (a project manager
-/// and an editor, for two-editor tests). Their shared password is random and
-/// kept in `.env.local` (`KENTOS_DEV_PASSWORD`). Safe to run again.
+/// Development data: tenant `ornek-buro` with three accounts: a project
+/// manager and an editor (two-editor tests) and an admin (who may delete
+/// projects). Their shared password is random and kept in `.env.local`
+/// (`KENTOS_DEV_PASSWORD`). Safe to run again.
 async fn dev_seed(config: &Config) -> Result<(), String> {
     let pool = owner_pool(config).await?;
     let tenants = admin::list_tenants(&pool)
@@ -237,6 +266,7 @@ async fn dev_seed(config: &Config) -> Result<(), String> {
     for (login, name, role) in [
         ("ayse", "Ayşe Yılmaz", TenantRole::ProjectManager),
         ("mehmet", "Mehmet Demir", TenantRole::Editor),
+        ("zeynep", "Zeynep Kaya", TenantRole::Admin),
     ] {
         match admin::create_local_user(&pool, login, name, None, &password).await {
             Ok(_) => {}
@@ -258,7 +288,9 @@ async fn dev_seed(config: &Config) -> Result<(), String> {
         "KentOS yerel ayarları (kentosd db-setup yazar). Depoya girmez; parolalar içerir.",
     )
     .map_err(|e| format!("{} yazılamadı: {e}", config.env_file.display()))?;
-    println!("kurum: ornek-buro; hesaplar: ayse (proje yöneticisi), mehmet (editör)");
+    println!(
+        "kurum: ornek-buro; hesaplar: ayse (proje yöneticisi), mehmet (editör), zeynep (yönetici)"
+    );
     println!(
         "parola: {} içinde KENTOS_DEV_PASSWORD",
         config.env_file.display()
@@ -276,4 +308,25 @@ pub const USAGE: &str = "kullanım:
   kentosd user password --login GİRİŞ (--password-stdin | --password-env DEĞİŞKEN)
   kentosd member add --tenant KISA --user GİRİŞ|KİMLİK --role owner|admin|project_manager|editor|viewer [--seat]
   kentosd member list --tenant KISA
-  kentosd dev-seed                            geliştirme kurumu ve iki hesap (ayse, mehmet)";
+  kentosd project deleted --tenant KISA       silinmiş projeler: kimlik, ad, silinme zamanı, silen
+  kentosd project restore --tenant KISA --project KİMLİK
+  kentosd dev-seed                            geliştirme kurumu ve üç hesap (ayse, mehmet, zeynep)";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Args {
+        Args::parse(list.iter().map(|s| s.to_string())).unwrap()
+    }
+
+    #[test]
+    fn a_bare_double_dash_is_not_a_command_or_an_option() {
+        let a = args(&["--", "migrate"]);
+        assert_eq!(a.words, ["migrate"]);
+        let a = args(&["project", "--", "restore", "--tenant", "buro", "--seat"]);
+        assert_eq!(a.words, ["project", "restore"]);
+        assert_eq!((a.value("tenant"), a.switch("seat")), (Some("buro"), true));
+        assert!(Args::parse(["--tenant".to_string()].into_iter()).is_err());
+    }
+}

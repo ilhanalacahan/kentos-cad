@@ -28,6 +28,7 @@ function setup(opts: { canEditMeta?: boolean; drafts?: MemoryDraftStore; doc?: C
   const warnings: string[] = [];
   const drafts = opts.drafts ?? new MemoryDraftStore();
   const records = opts.records ?? [];
+  const told = { deleted: 0 };
   const o: SyncOptions = {
     doc,
     api: server,
@@ -41,12 +42,13 @@ function setup(opts: { canEditMeta?: boolean; drafts?: MemoryDraftStore; doc?: C
     cursor: String(server.history.length),
     records,
     warn: (t) => warnings.push(t),
+    onDeleted: () => told.deleted++,
     debounceMs: 60_000,
     maxDelayMs: 60_000,
   };
   const sync = new ProjectSync(o);
   open.push(sync);
-  return { doc, server, sync, warnings, drafts };
+  return { doc, server, sync, warnings, drafts, told };
 }
 
 describe('cloud autosave', () => {
@@ -241,6 +243,36 @@ describe('cloud autosave', () => {
     expect([Object.keys(draft!.changes).length, !!draft!.inflight]).toEqual([2, true]);
     await sync.receive([server.commitAs('baska', [{ op: 'create', id: crypto.randomUUID(), entity: wire(other(0, 70)) }])]);
     expect(doc.size).toBe(2);
+  });
+
+  it('another editor deletes the project: nothing more is sent, edits stay on the device', async () => {
+    const { doc, server, sync, drafts, told } = setup();
+    doc.add(pt(1));
+    await sync.flush();
+    // Their last change and the deletion arrive together: the deletion ends it, nothing is fetched.
+    const theirs = server.commitAs('baska', [{ op: 'create', id: crypto.randomUUID(), entity: wire({ ...pt(7), id: 0 } as Entity) }]);
+    const gone = server.deleteAs('yonetici');
+    await sync.receive([theirs, gone]);
+    expect([sync.state.value, told.deleted, sync.cursor, doc.size]).toEqual(['deleted', 1, gone.seq, 1]);
+    const commits = server.commits;
+    doc.add(pt(2));
+    expect(await sync.flush()).toBe(false);
+    expect([server.commits, sync.state.value, sync.pending.value]).toEqual([commits, 'deleted', 1]);
+    await sync.keepDraft();
+    expect(Object.values((await drafts.get('u1/t/p'))!.changes)[0].entity).toMatchObject({ p: { x: 2 } });
+    // Hearing it again changes nothing.
+    await sync.receive([gone]);
+    expect(told.deleted).toBe(1);
+  });
+
+  it('a command refused because the project was deleted stops sending the same way', async () => {
+    const { doc, server, sync, drafts, told, warnings } = setup();
+    doc.add(pt(1));
+    server.deleted = true;
+    expect(await sync.flush()).toBe(false);
+    expect([sync.state.value, told.deleted, server.commits, warnings.length]).toEqual(['deleted', 1, 0, 0]);
+    const draft = await drafts.get('u1/t/p');
+    expect([Object.keys(draft!.changes).length, draft!.inflight]).toEqual([1, undefined]);
   });
 
   it('refuses objects from the server that break the drawing’s rules', async () => {

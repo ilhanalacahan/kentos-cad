@@ -17,6 +17,8 @@ pub const PROJECT_CHANGES: &str = "project.changes";
 pub const PROJECT_CHANGES_VERSION: u32 = 1;
 /// Key of the project's metadata (name, settings, layer tree, styles) in `expectedVersions`.
 pub const PROJECT_META_KEY: &str = "@project";
+/// Event kind of a deleted project (`EventRecord.kind`): its editors stop sending.
+pub const PROJECT_DELETED: &str = "project.deleted";
 
 // ── Sign-in ──────────────────────────────────────────────────────────────
 
@@ -332,6 +334,7 @@ pub struct EventFeature {
 pub struct EventRecord {
     pub seq: String,
     pub data_revision: String,
+    /// `project.changes`, or `project.deleted` (no objects; nothing is committed after it).
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

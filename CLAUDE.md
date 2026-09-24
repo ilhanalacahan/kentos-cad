@@ -96,10 +96,10 @@ pnpm rust:test            # Rust çalışma alanı: cargo test + clippy (-D warn
 pnpm wasm                 # WASM paketi kaynak değiştiyse derlenir (dev/test/build/e2e bunu kendileri çalıştırır)
 pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → src/wasm/pkg (depoya girmez)
 pnpm test:rust            # rust:test + rust:wasm + WASM golden testleri
-pnpm db:setup             # kentosd db-setup + migrate + dev-seed (yerel PostGIS'te kentos_cad, iki rol, örnek kurum)
+pnpm db:setup             # kentosd db-setup + migrate + dev-seed (yerel PostGIS'te kentos_cad, iki rol, örnek kurum ve üç hesap: ayse, mehmet, zeynep)
 pnpm api                  # kentosd serve: 127.0.0.1:8787 (veritabanı yoksa yalnızca /v1/health)
-pnpm kentosd -- <komut>   # yönetim: tenant add|list, user add|password, member add|list, migrate, dev-seed
-pnpm e2e:cloud            # gerçek sunucu ve veritabanıyla bulut akışı (giriş, yükleme, otomatik kayıt, çakışma, kopma)
+pnpm kentosd -- <komut>   # yönetim: tenant add|list, user add|password, member add|list, project deleted|restore, migrate, dev-seed
+pnpm e2e:cloud            # gerçek sunucu ve veritabanıyla bulut akışı (giriş, yükleme, otomatik kayıt, çakışma, kopma, yeniden adlandırma, silme)
 ```
 
 - **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini ve proje WebSocket'ini (`/v1/ws`) `vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; yerel çizim sunucuya hiç bağlı değildir.
@@ -207,7 +207,7 @@ Bütün özellik modüllerinin tek bağımlılığıdır (`app/context.ts`):
 | `styles`     | `StyleService`       | Stil kitaplığı: sistem (salt okunur), kullanıcı (`kentos.styles.v1`) ve proje (`doc.styles`) sembolleri, kategori ağacı (`app/styles.ts`) |
 | `files`      | `DocumentFiles`      | Yerel çizim dosyası (.kcad): kaydet, farklı kaydet, aç, yeni proje; kaydedilen dosyanın tutamacı (`app/fileIO.ts`)                         |
 | `server`     | `ServerStatus`       | API'nin yanıt verip vermediği (`/v1/health`, üretilen `Health` sözleşmesiyle doğrulanır; sözleşme sürümü farklıysa “uyumsuz”) (`app/server.ts`) |
-| `cloud`      | `CloudSession`       | Oturum, açık bulut projesi, otomatik kayıt (`ProjectSync`) ve canlı olaylar (`ProjectSocket`) (`app/cloud/`) |
+| `cloud`      | `CloudSession`       | Oturum, açık bulut projesi (yeniden adlandırma, silme, ayrılma), otomatik kayıt (`ProjectSync`) ve canlı olaylar (`ProjectSocket`) (`app/cloud/`) |
 
 İleride birden fazla belge açılacaksa, belgeye bağlı servisler (`format`,
 `view` içindeki önbellekler) belge değişince yeniden kurulmalıdır. Bunun için
@@ -350,6 +350,7 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - **Çakışma:** 409'da hiçbir şeyin üzerine yazılmaz; gönderim durur, kullanıcı “Sunucudakini al” (varsayılan) ya da “Benimkini kaydet” der (`ui/cloud/ConflictDialog.ts`).
   - **Başka editörler** (`cloud/socket.ts`, `syncRemote.ts`): WebSocket son uygulanan imleçten abone olur, kaçanlar önce gelir; 20 sn'de bir yoklama, 60 sn sessizlik ölü bağlantıdır, yeniden bağlanma 1–30 sn arası geri çekilir. Kendi komutlarımızın olayları istek kimliğiyle atlanır; gelen nesneler geri alma adımı yazmadan uygulanır; gönderilmemiş yerel değişikliği olan nesne üzerine yazılmaz, çakışma olur.
   - **Cihaz taslağı** (`syncRestore.ts`): proje yeniden açılınca gönderilmemiş değişiklikler geri konur; önce yoldaki komut kendi anahtarıyla gider. Tabanı sunucuda değişmiş olan çakışmadır. Yeniden açıldıktan sonra yapılmış bir düzenleme eski taslaktan önce gelir.
+  - **Yeniden adlandırma ve silme** (Bulut projesi aç listesinde seçili proje için “Yeniden adlandır…” ve “Sil…”; açık proje için Dosya ve hesap menüsünde `cloud.rename`, `cloud.delete`; `ui/cloud/ProjectActions.ts`): ad bir proje bilgisi değişikliğidir (`project.edit`; açık projede otomatik kayıtla, başkasında sürümüyle `project.changes`). Silme `DELETE …/projects/{id}` ve `project.delete` yetkisi (yönetici, sahip) ister, önce sorar (güvenli düğme “Vazgeç” odakta, “Projeyi sil” kırmızı çizgili). Silme yumuşaktır (ADR 0006): proje listeden kalkar, açma ve yazma 410 `project_deleted` alır, nesneler kalır; işletmeci `kentosd project restore` ile geri getirir. Projeyi açık tutan editör `project.deleted` olayını (ya da bir komutun 410'unu) alınca eşitleme `deleted` durumuna geçer: hiçbir şey gönderilmez, canlı bağlantı kapanır, düzenlemeler cihaz taslağında kalır, durum çubuğu “Proje silindi” der; Kaydet ve hücreye tıklama yerel dosyaya kaydettirir, dosyaya kaydedince çizim silinen projeden ayrılır. Projeyi kendisi silen kullanıcının çizimi ekranda kalır ve projeden ayrılır.
   - **Projeden ayrılma** (`detach`, `leave`): eşitleme kapanınca (`ProjectSync.dispose`, `SyncCore.closed`) yoldaki komutun geç gelen yanıtı, gelen olaylar ve taslak geri koyma çizime artık dokunmaz; çizim o anda başka bir projeyi tutuyor olabilir. Taslak son hâliyle kalır (yoldaki komut anahtarıyla içindedir); `leave` önce onu yazar.
 - **Olaylar:**
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
@@ -650,7 +651,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `contracts/contracts.test.ts` | Uygulama tiplerinin (`Entity`, `LayerNode`, `ProjectSettings`, `StyleFile`, `RunJob` …) Rust'tan üretilen sözleşmelere derleme anında uyması (`tsc` denetler) |
 | `geo/crs.test.ts` | CRS kaydı: Rust ile paylaşılan dosyayla birebir aynılık (kayıt değişince yeniden kaydedilir; Rust tarafı EPSG değerlerine göre denetler), tekil SRID, varsayılan, dilim önerisi (sınırda batı dilimi), SRID/ad/bölge araması, yeni projenin çalışma alanı ortası (TM, UTM, coğrafi, Pseudo-Mercator) |
 | `model/external.test.ts` | Dışarıdan gelen değişiklikler: `touched` olayları (geri alma ve başarısız işlem dahil), geri alma adımı ve kaydedilmemiş işareti yazmadan uygulama, başkasının dokunduğu nesnenin geri alma adımının silinmesi, dokunulmayanların korunması, proje bilgilerinin sessiz uygulanması, açık grupta reddetme |
-| `app/cloud/sync.test.ts` | Bulut otomatik kaydı, sunucunun bellek içi benzeriyle (`fakeServer.ts`): yanıttan sonra “kaydedildi”, geri almayla sıfır gönderim, silip geri alınca aynı kimlikle yeniden açma, ölü ağda ve kaybolan yanıtta iki kez yazmama, çakışmada durma ve iki çözüm yolu, başka editörün değişikliğinin geri alma adımsız gelmesi, yerel değişiklikli nesnede çakışma, yeniden açılışta cihaz taslağı ve kayıp komutun aynı anahtarla gönderilmesi, yeniden açıldıktan sonraki düzenlemenin taslaktan önce gelmesi, proje bilgisi yetkisi, kurala uymayan gelen nesnenin reddi, yolda komutu varken bırakılan projenin sonraki çizime dokunmaması (geç yanıt ve olaylar atlanır, taslak iki değişikliği ve komutu tutar) |
+| `app/cloud/sync.test.ts` | Bulut otomatik kaydı, sunucunun bellek içi benzeriyle (`fakeServer.ts`): yanıttan sonra “kaydedildi”, geri almayla sıfır gönderim, silip geri alınca aynı kimlikle yeniden açma, ölü ağda ve kaybolan yanıtta iki kez yazmama, çakışmada durma ve iki çözüm yolu, başka editörün değişikliğinin geri alma adımsız gelmesi, yerel değişiklikli nesnede çakışma, yeniden açılışta cihaz taslağı ve kayıp komutun aynı anahtarla gönderilmesi, yeniden açıldıktan sonraki düzenlemenin taslaktan önce gelmesi, proje bilgisi yetkisi, kurala uymayan gelen nesnenin reddi, yolda komutu varken bırakılan projenin sonraki çizime dokunmaması (geç yanıt ve olaylar atlanır, taslak iki değişikliği ve komutu tutar), başka editörün projeyi silmesi (olayla `deleted` durumu, önceki olayların nesnesi istenmez, sonraki düzenleme gönderilmez ve taslakta kalır, bir kez bildirilir) ve 410 alan komutun aynı duruma geçmesi |
 | `wasm/parity/parity.test.ts` | TypeScript ile Rust çekirdeğinin yan yana karşılaştırması: her çağrı kümesinin adlı sınır durumları ve işlem başına 200 tohumlu rastgele çağrı (`PARITY_CASES` artırır); sayılar golden toleransıyla, metin, uzunluk ve anahtarlar tam (ADR 0008) |
 | `wasm/calls.wasm.test.ts` | Dondurulmuş çağrı fixture'ları (`fixtures/geometry/v1/calls-*.json`) uygulamanın yolundan (`core.ts` → WASM) |
 | `wasm/parity/reference.test.ts` | Adıyla çağrılan işlemlerin bağımsız referansa (`reference-calls.json`, Python kesirleri ve 60 basamaklı kökler) göre doğruluğu: Rust (WASM) ve TS, her durumun hata sınırı içinde |
@@ -670,10 +671,11 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 - `crates/wasm`: halka bölücü.
 - `crates/postgres`: ortam dosyası, kurulum adı ve parola denetimi.
 - `crates/geometry-core` `tessellate`, `ewkb`: kiriş toleransı (daire, yaylı yol, elips, eğri), PostGIS'in EWKB baytlarıyla birebir aynılık ve bit bit gidiş-dönüş.
-- `crates/application/tests/identity.rs` (geçici veritabanı): tenant ayrımı (satır güvenliği, başka tenant adına yazma), sunucu rolünün yapamadıkları, yerel giriş, oturumlar, koltuk ve üyelik, OpenID kimliği.
+- `crates/application/tests/identity.rs` (geçici veritabanı): tenant ayrımı (satır güvenliği, başka tenant adına yazma), sunucu rolünün yapamadıkları (proje satırı silmek dahil), yerel giriş, oturumlar, koltuk ve üyelik, OpenID kimliği.
 - `crates/application/tests/changes.rs`: 13 türün PostGIS'ten bit bit dönmesi, sürümler, 409'da sunucu kopyası, idempotency, kilitli katman, yetkiler, tenant ayrımı, iki eşzamanlı yazar.
-- `apps/api` (`http/tests.rs`, `oidc/tests.rs`): istek kimliği, veritabanısız mod, çerezli giriş ve CSRF başlığı, proje/komut/olay yolları ve başka tenant'ın 404'ü; sahte sağlayıcıyla OpenID (kod + PKCE, tek kullanımlık state, nonce, audience, HS* reddi, anahtar yenileme sınırı, erişim belirteci).
-- **Bulut uçtan uca** `scripts/e2e/cloud.mjs` (`pnpm e2e:cloud`): gerçek `kentosd` ve geliştirme veritabanı, tarayıcıda `ayse`, HTTP üzerinden ikinci editör `mehmet`: giriş, yükleme, otomatik kayıt (tam koordinat), yeniden yüklemede kalıcılık, canlı değişiklik, çakışma ve çözüm, sunucu dururken bekleyen düzenlemenin geri gelince bir kez kaydı, yeniden bağlanma. Oluşturduğu “E2E …” projeleri geliştirme veritabanında kalır.
+- `crates/application/tests/lifecycle.rs`: yeniden adlandırma (proje bilgisi sürümü, olay, editöre ve boş ada ret, eski sürümde çakışma); silme (yalnız yönetici, başka tenant'a 404, listeden kalkma, açma/okuma/yazmada 410, silinmeden önceki komutun günlükten yanıtlanması, kim ve hangi istekle `project.deleted` olayı, ikinci silmenin bir şey değiştirmemesi, nesnelerin ve denetimin kalması), işletmecinin listelemesi ve geri getirmesi; silme ile yazma aynı anda.
+- `apps/api` (`http/tests.rs`, `oidc/tests.rs`, `cli.rs`): istek kimliği, veritabanısız mod, çerezli giriş ve CSRF başlığı, proje/komut/olay yolları ve başka tenant'ın 404'ü; proje silme (proje yöneticisine ve izleyiciye 403, başka tenant'a 404, başlıksız isteğe 403, tekrarı 204, sonrasında açma/okuma/yazmada 410, listede yok, olay günlüğünde var); komut satırında tek başına `--`; sahte sağlayıcıyla OpenID (kod + PKCE, tek kullanımlık state, nonce, audience, HS* reddi, anahtar yenileme sınırı, erişim belirteci).
+- **Bulut uçtan uca** `scripts/e2e/cloud.mjs` (`pnpm e2e:cloud`): gerçek `kentosd` ve geliştirme veritabanı, tarayıcıda `ayse`, HTTP üzerinden ikinci editör `mehmet`: giriş, yükleme, otomatik kayıt (tam koordinat), yeniden yüklemede kalıcılık, canlı değişiklik, çakışma ve çözüm, sunucu dururken bekleyen düzenlemenin geri gelince bir kez kaydı, yeniden bağlanma; açık projenin listeden yeniden adlandırılması (proje yöneticisinde Sil'in devre dışı ve nedenini söylemesi), yönetici `zeynep`'in açık projeyi HTTP'den silmesi (açık tutanda “Proje silindi”, çizim yerinde, sonraki düzenleme cihaz taslağında, 410 ve listede yok), tarayıcıda `zeynep` olarak listeden onaylı silme (Vazgeç odakta). Oluşturduğu “E2E …” projeleri geliştirme veritabanında kalır; sildikleri yalnız işaretlenir.
 
 Kurallar:
 
@@ -777,7 +779,8 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Bulut (Faz B) sınırları:
   - Tipli öznitelik şeması yok: öznitelikler sunucuda da metin (`properties jsonb`).
   - MVT/tile yayını yok; proje açılışı bütün nesneleri indirir (bbox'a göre kısmi açılış yok).
-  - Başarısız giriş sınırı süreç belleğinde ve giriş adına göre (ADR 0007); kurum/üye/koltuk yönetimi yalnız komut satırından; projeyi silme ve yeniden adlandırma arayüzü yok.
+  - Başarısız giriş sınırı süreç belleğinde ve giriş adına göre (ADR 0007); kurum/üye/koltuk yönetimi yalnız komut satırından.
+  - Proje silme yumuşaktır; silinen projeyi geri getirme yalnız komut satırından (`kentosd project restore`), belli bir süre sonra kalıcı silme yok. Silinmiş hâlde açık tutulan proje geri getirilirse editör onu listeden yeniden açmalıdır.
   - Katman görünürlüğü ve açık/kapalı durumu proje verisi (herkes için); etkin katman kişiye özel, eşitlenmez.
   - Çakışma çözümü bütün çakışmalar için tek seçim; nesne bazlı karşılaştırma yok.
   - Canlı olay sinyali tek sunucu sürecinde (çok süreçte 5 sn'lik denetim yakalar; PostgreSQL LISTEN/NOTIFY yok); outbox hiç budanmıyor.
@@ -875,7 +878,7 @@ src/
     style/                   Stil yöneticisi, sembol tasarımcısı (katman formları, alanlar), katman stili (kurallar, sembol yuvası), resimler, .kstil dosyaları
     svgedit/                 SVG çizim düzenleyicisi: SvgEditor (pencere). Dosya: svgFile (Dosya menüsü, aç/ekle, pano ve sürükle-bırak, kitaplıktan aç, farklı kaydet), svgImport, svgExport, svgDocProps, svgReference (izleme altlığı), svgTrace (bitmap izle), svgSource (XML kaynağı), readSvg. Düzenleme: svgView (ortak türler), svgCanvas (görünüm, seçim, çizim araçları), svgNodeTool, svgSnap, svgRulers (cetvel, kılavuz), svgMeasure, svgActions (menü/panel/tuş işlemleri, panel ayarları), svgMenus (Yol, Nesne, Seç, Kenet, Cetvel), svgProps (sekmeler, Özellikler), svgStyleProps (çizgi biçimi, kutu), svgNodeProps, svgAlign, svgTransform, svgArray, svgObjects (şekil listesi), svgIcons
     widgets/                 Genel parçalar (menü, açılır liste, ağaç, özellik ızgarası, pencere, kontroller)
-    cloud/                   Buluta giriş, bulut projeleri (aç, yükle), kayıt çakışması pencereleri
+    cloud/                   Buluta giriş, bulut projeleri (aç, yükle), yeniden adlandırma ve silme (ProjectActions), kayıt çakışması pencereleri
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
   styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları)
@@ -884,8 +887,8 @@ crates/
   contracts/                 Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları)
   geometry-core/             Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı) ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, bağımsız referans, sayısal)
   wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen): çağrı tablosu (opId/callOp, JSON) ve düz Float64Array girişleri
-  postgres/                  Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
-  application/               Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı), cad (Entity ↔ PostGIS satırı), projects, changes (`project.changes`), events; tests/ (geçici veritabanıyla)
+  postgres/                  Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`; `build.rs` yeni dosyada yeniden derletir), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
+  application/               Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı; silinen projeyi geri getirme dahil), cad (Entity ↔ PostGIS satırı), projects, lifecycle (proje silme), changes (`project.changes`), events; tests/ (geçici veritabanıyla)
 apps/api/                    kentosd: `serve` (Axum; http/ auth, projects, ws, error; oidc.rs; hub.rs), `db-setup`, `migrate`, yönetim komutları (cli.rs), config.rs
 fixtures/                    İki dilin paylaştığı sürümlü dosyalar: geometry/v1 (golden, bağımsız referans), numeric/v1, document/v1 (.kcad örneği), crs/v1 (CRS kaydı)
 Cargo.toml, rust-toolchain.toml, .cargo/config.toml   Rust çalışma alanı, sabit araç zinciri, 4 işlik derleme sınırı

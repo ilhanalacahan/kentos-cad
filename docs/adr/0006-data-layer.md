@@ -73,3 +73,14 @@ Faz B'nin ilk dikey dilimi: tek tenant'ta gerçek proje, izinli kayıt, iki edit
   - Tipli öznitelik şeması yok (`properties jsonb`, metin değerler).
   - PostGIS eğri türleri (CircularString …) denenmedi (§15 PoC); izdüşüm doğrusal.
 - **Testler:** her test kendi `kentos_cad_test_<zaman>_<rastgele>` veritabanını açar ve kapatır. Çöken bir çalıştırmanın artığı bir saat sonra silinir. Veritabanı yoksa testler görünür bir uyarıyla atlanır; `KENTOS_TEST_DB=required` bu durumda testi başarısız sayar.
+
+## 2026-09-24: Bulut projesini silme ve yeniden adlandırma (migration 0002)
+
+- **Silme yumuşaktır:** `project.deleted_at` ve `deleted_by` (ikisi birlikte dolu ya da boş). Silinen proje listeden çıkar; bilgisi, nesneleri ve yazma komutları 410 (`project_deleted`) ile reddedilir. Nesneler, komut günlüğü, denetim ve olaylar kalır. Silinmeden önce kaydedilmiş bir komutun tekrarı yine günlükten yanıtlanır.
+- **Kim siler:** `project.delete` yetkisi; yönetici (admin) ve sahip (owner). Proje yöneticisi projeyi açar, düzenler, yeniden adlandırır ama silemez: silme kurumdaki herkesi etkiler.
+- **Tek işlemde:** proje satırı kilitlenir (sürmekte olan commit önce biter, sonrakiler silindiğini görür), işaret, `project.delete` denetim kaydı ve nesnesiz `project.deleted` olayı (`outbox_event`). Projeyi açık tutan editörler bu olayla gönderimi durdurur; gönderilmemiş değişiklikleri cihaz taslağında kalır. Olay günlüğü silinmiş projede de okunur: bağlantısı kopmuş bir editör de nedenini öğrenir. Aynı projeyi yeniden silmek bir şey değiştirmez (kaybolan yanıttan sonraki tekrar).
+- **Sunucu rolü proje satırı silemez** (`delete` yetkisi yok); silme bir güncellemedir. Satır güvenliği kuralları değişmedi: tenant sınırı aynıdır, silinmişliği uygulama katmanı denetler.
+- **Geri getirme** işletmecinindir (sahip rolü, komut satırı): `kentosd project deleted --tenant KISA` listeler, `kentosd project restore --tenant KISA --project KİMLİK` geri getirir; denetime aktörsüz `project.restore` yazılır.
+- **Yeniden adlandırma** yeni bir yazma yolu değildir: `project.changes` içindeki proje bilgisi yamasıdır (`name`, `project.edit` yetkisi, `expectedVersions["@project"]`).
+- **Geliştirme:** `sqlx::migrate!` migration dosyalarını derlerken gömer ve klasöre yeni eklenen dosyayı kendiliğinden görmez; `crates/postgres/build.rs` klasör değişince yeniden derletir (yoksa test veritabanları yeni migration olmadan kurulur).
+- **Sınırlar:** belirli bir süre sonra kalıcı silme ve arayüzden geri getirme yok. Geri getirilen projeyi silinmiş hâlde açık tutan editör onu listeden yeniden açar; cihaz taslağı o zaman geri gelir.

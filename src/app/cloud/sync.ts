@@ -6,7 +6,7 @@ import type { ExternalMeta } from '../../model/document';
 import type { Entity } from '../../model/entities';
 import { ApiFailure } from './api';
 import type { Draft } from './drafts';
-import { BATCH, SyncCore, uuid, type Inflight, type SaveState, type SyncConflict, type SyncOptions } from './syncCore';
+import { BATCH, PROJECT_DELETED, SyncCore, uuid, type Inflight, type SaveState, type SyncConflict, type SyncOptions } from './syncCore';
 import { applyEvents } from './syncRemote';
 import { restoreDraft } from './syncRestore';
 import { changeOf, entityJson, metaParts, metaPatch, type Planned } from './tracker';
@@ -29,6 +29,9 @@ export type { SaveState, SyncConflict, SyncOptions } from './syncCore';
  *   object has unsent local changes, which makes it a conflict too.
  * - A device draft from an earlier session (syncRestore.ts) goes back in
  *   when the project is opened again.
+ * - The project deleted on the server (its event, or a 410): nothing more is
+ *   sent, and edits keep going to the device draft (a restored project
+ *   brings them back when opened).
  */
 
 const DRAFT_MS = 300;
@@ -54,6 +57,7 @@ export class ProjectSync {
   private readonly unsubscribe: (() => void)[] = [];
   private noticeShown = false;
   private disposed = false;
+  private deleted = false;
 
   constructor(o: SyncOptions) {
     this.o = o;
@@ -117,6 +121,12 @@ export class ProjectSync {
       return;
     }
     this.pending.set(this.core.pendingCount());
+    if (this.deleted) {
+      // Nothing goes out any more; the edit is kept on this device.
+      clearTimeout(this.draftTimer);
+      this.draftTimer = setTimeout(() => void this.saveDraft(), DRAFT_MS) as unknown as number;
+      return;
+    }
     if (this.core.metaDirty && !this.o.canEditMeta && !this.noticeShown) {
       this.noticeShown = true;
       this.o.warn('Katman ve proje bilgisi değişiklikleriniz yalnız bu cihazda kalıyor: projede bunları değiştirme yetkiniz yok.');
@@ -199,7 +209,7 @@ export class ProjectSync {
 
   private async run(): Promise<boolean> {
     const { core } = this;
-    if (this.disposed || this.conflicts.value.length || this.o.canWrite === false) return false;
+    if (this.disposed || this.deleted || this.conflicts.value.length || this.o.canWrite === false) return false;
     const doc = this.o.doc;
     if (doc.busy) {
       this.schedule(200);
@@ -274,6 +284,10 @@ export class ProjectSync {
       if (failure.code === 'conflict') {
         core.inflight = null;
         this.enterConflicts(failure.conflicts);
+      } else if (failure.deleted) {
+        // Refused, not committed: its changes stay dirty and so in the device draft.
+        core.inflight = null;
+        this.markDeleted();
       } else if (failure.transient) {
         // Same command, same key, a little later (1 s … 30 s).
         this.state.set('offline_pending');
@@ -374,13 +388,37 @@ export class ProjectSync {
     await this.flush();
   }
 
+  // ── Deletion ───────────────────────────────────────────────────────────
+
+  /**
+   * The project was deleted on the server: stop sending for good. What was
+   * not sent, and every edit from now on, stays in the device draft.
+   */
+  markDeleted(): void {
+    if (this.deleted || this.disposed) return;
+    this.deleted = true;
+    clearTimeout(this.timer);
+    this.state.set('deleted');
+    this.pending.set(this.core.pendingCount());
+    void this.saveDraft();
+    this.o.onDeleted?.();
+  }
+
   // ── Other editors and device drafts ────────────────────────────────────
 
-  /** Applies committed events (from the socket, in order). Our own commits are skipped. */
+  /**
+   * Applies committed events (from the socket, in order). Our own commits
+   * are skipped. A deletion ends it: the objects of the events before it
+   * cannot be read any more, and nothing after it is sent.
+   */
   receive(events: readonly EventRecord[]): Promise<void> {
     this.remoteQueue = this.remoteQueue
       .then(async () => {
-        if (this.disposed) return;
+        if (this.disposed || this.deleted) return;
+        if (events.some((e) => e.kind === PROJECT_DELETED)) {
+          this.core.cursor = events[events.length - 1].seq;
+          return this.markDeleted();
+        }
         const found = await applyEvents(this.core, events);
         if (!this.disposed) this.addConflicts(found);
       })

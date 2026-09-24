@@ -138,6 +138,17 @@
 .cloud-conflicts > li:last-child {
   border-bottom: 0;
 }
+/* What deleting a project does, before it is done. */
+.cloud-consequences {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--c-text-2);
+}
+.cloud-consequences > li + li {
+  margin-top: 4px;
+}
 
 /* Save cell: filled green only when the server has everything; amber while offline; red for a conflict or an error. */
 .status__save {
@@ -151,11 +162,13 @@
   color: var(--c-warn);
 }
 .status__save[data-state='conflict'],
-.status__save[data-state='error'] {
+.status__save[data-state='error'],
+.status__save[data-state='deleted'] {
   color: var(--c-danger);
 }
 .status__save[data-state='conflict'] .status__lamp,
-.status__save[data-state='error'] .status__lamp {
+.status__save[data-state='error'] .status__lamp,
+.status__save[data-state='deleted'] .status__lamp {
   background: currentColor;
 }
 .status__save[data-state='readonly'] {

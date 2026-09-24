@@ -402,13 +402,149 @@ async fn projects_commands_and_events_over_http() {
     db.close().await;
 }
 
+fn delete_req(uri: &str, cookie: &str, client_header: bool) -> Request<Body> {
+    let mut b = Request::delete(uri).header(header::COOKIE, cookie);
+    if client_header {
+        b = b.header("x-kentos-client", "web");
+    }
+    b.body(Body::empty()).unwrap()
+}
+
+#[tokio::test]
+async fn deleting_a_project_over_http() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let tenant = admin::create_tenant(&db.owner, "buro", "Harita Bürosu", 4)
+        .await
+        .unwrap();
+    let other = admin::create_tenant(&db.owner, "diger", "Diğer", 3)
+        .await
+        .unwrap();
+    for (login, t, role) in [
+        ("ayse", "buro", TenantRole::ProjectManager),
+        ("zeynep", "buro", TenantRole::Admin),
+        ("izzet", "buro", TenantRole::Viewer),
+        ("can", "diger", TenantRole::Owner),
+    ] {
+        admin::create_local_user(&db.owner, login, login, None, "dogru-parola-1")
+            .await
+            .unwrap();
+        admin::set_membership(&db.owner, t, login, role, true)
+            .await
+            .unwrap();
+    }
+    let app = app(Some(db.app.clone()));
+    let (ayse, zeynep, izzet, can) = (
+        signed_in(&app, "ayse").await,
+        signed_in(&app, "zeynep").await,
+        signed_in(&app, "izzet").await,
+        signed_in(&app, "can").await,
+    );
+    let layer = serde_json::json!({ "id": "cizim", "name": "Çizim", "type": "layer", "visible": true, "locked": false, "expanded": true,
+        "style": { "color": "ink", "lineType": "continuous", "lineWeight": 0.25 }, "children": [] });
+    let create = serde_json::json!({ "name": "Ada 101", "settings": { "srid": 5256, "lengthDecimals": 2, "areaDecimals": 2, "areaUnit": "m2", "angleUnit": "grad", "plotScale": 1000 },
+        "origin": { "x": 486500.0, "y": 4420200.0 }, "layers": [layer], "activeLayer": "cizim", "styles": { "items": [], "categories": [] } });
+    let base = format!("/v1/tenants/{tenant}/projects");
+    let (status, _, body) = send(&app, json_req("POST", &base, &ayse, create)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let project = serde_json::from_slice::<kentos_contracts::ProjectInfo>(&body)
+        .unwrap()
+        .id;
+    let uri = format!("{base}/{project}");
+    let command = serde_json::json!({
+        "commandName": "project.changes", "version": 1, "tenantId": tenant.to_string(), "projectId": project,
+        "requestId": "istek-1", "idempotencyKey": uuid::Uuid::new_v4().to_string(), "expectedVersions": {},
+        "input": { "features": [{ "op": "create", "id": uuid::Uuid::new_v4().to_string(),
+            "entity": { "kind": "point", "id": 1, "layerId": "cizim", "attrs": {}, "p": { "x": 1.0, "y": 2.0 } } }] } });
+
+    // A project manager and a viewer may not; another tenant's owner cannot find it; the app header is required.
+    for cookie in [&ayse, &izzet] {
+        let (status, _, body) = send(&app, delete_req(&uri, cookie, true)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(
+            serde_json::from_slice::<ApiError>(&body)
+                .unwrap()
+                .message
+                .contains("project.delete")
+        );
+    }
+    for path in [
+        uri.clone(),
+        format!("/v1/tenants/{other}/projects/{project}"),
+    ] {
+        let (status, _, _) = send(&app, delete_req(&path, &can, true)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+    }
+    let (status, _, _) = send(&app, delete_req(&uri, &zeynep, false)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // The admin deletes it; asking again is the same answer.
+    for _ in 0..2 {
+        let (status, _, _) = send(&app, delete_req(&uri, &zeynep, true)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    // Opening, reading and writing answer 410; the list leaves it out; the event log tells why.
+    for req in [
+        Request::get(&uri)
+            .header(header::COOKIE, &ayse)
+            .body(Body::empty())
+            .unwrap(),
+        Request::get(format!("{uri}/features"))
+            .header(header::COOKIE, &ayse)
+            .body(Body::empty())
+            .unwrap(),
+        json_req("POST", &format!("{uri}/commands"), &ayse, command),
+    ] {
+        let (status, _, body) = send(&app, req).await;
+        assert_eq!(status, StatusCode::GONE);
+        assert_eq!(
+            serde_json::from_slice::<ApiError>(&body).unwrap().error,
+            "project_deleted"
+        );
+    }
+    let (_, _, body) = send(
+        &app,
+        Request::get(&base)
+            .header(header::COOKIE, &izzet)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        serde_json::from_slice::<kentos_contracts::ProjectList>(&body)
+            .unwrap()
+            .projects
+            .is_empty()
+    );
+    let (status, _, body) = send(
+        &app,
+        Request::get(format!("{uri}/events?after=0"))
+            .header(header::COOKIE, &izzet)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let log: kentos_contracts::EventPage = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        log.events.last().unwrap().kind,
+        kentos_contracts::PROJECT_DELETED
+    );
+    db.close().await;
+}
+
 #[tokio::test]
 async fn repeated_wrong_passwords_lock_the_login_for_a_while() {
     let Some(db) = TestDb::create().await else {
         return;
     };
-    admin::create_local_user(&db.owner, "ayse", "Ayşe", None, "dogru-parola-1").await.unwrap();
-    admin::create_local_user(&db.owner, "bora", "Bora", None, "dogru-parola-1").await.unwrap();
+    admin::create_local_user(&db.owner, "ayse", "Ayşe", None, "dogru-parola-1")
+        .await
+        .unwrap();
+    admin::create_local_user(&db.owner, "bora", "Bora", None, "dogru-parola-1")
+        .await
+        .unwrap();
     let app = app(Some(db.app.clone()));
     for _ in 0..super::limit::MAX_FAILURES {
         let (status, _, _) = send(&app, login_request("ayse", "yanlis-parola", true)).await;
@@ -418,7 +554,10 @@ async fn repeated_wrong_passwords_lock_the_login_for_a_while() {
     let (status, headers, body) = send(&app, login_request("AYSE", "dogru-parola-1", true)).await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert!(headers.get(header::RETRY_AFTER).is_some());
-    assert_eq!(serde_json::from_slice::<ApiError>(&body).unwrap().error, "rate_limited");
+    assert_eq!(
+        serde_json::from_slice::<ApiError>(&body).unwrap().error,
+        "rate_limited"
+    );
     // Another login is not affected.
     let (status, _, _) = send(&app, login_request("bora", "dogru-parola-1", true)).await;
     assert_eq!(status, StatusCode::OK);

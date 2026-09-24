@@ -112,6 +112,11 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       aliases: ['KAYDET', 'SAVE'],
       run: () => {
         if (!ctx.cloud.project.value) return void ctx.files.save();
+        if (ctx.cloud.sync.value?.state.value === 'deleted') {
+          // Nothing can be saved to a deleted project: the next useful step is a local file.
+          ctx.log.warn('Bu bulut projesi silindi; çizim buluta kaydedilemez. Yerel bir dosyaya kaydedin.');
+          return void ctx.files.saveAs();
+        }
         void ctx.cloud.flush().then((ok) =>
           ok ? ctx.log.success('Buluta kaydedildi.') : ctx.log.warn('Bulut kaydı tamamlanamadı; durum çubuğundaki kayıt durumuna bakın.'),
         );

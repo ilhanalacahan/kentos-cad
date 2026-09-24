@@ -11,10 +11,11 @@ import { ApiFailure, type CloudApi } from './api';
 
 /**
  * An in-memory stand-in for the server's edit protocol, for the sync tests:
- * versions and 409s, idempotent replays, events with request ids, and
- * switches for a dead network and a lost answer. It follows
- * crates/application/src/changes.rs; the real thing is tested against
- * PostgreSQL in Rust and end to end in the browser.
+ * versions and 409s, idempotent replays, events with request ids, a
+ * deleted project (410), and switches for a dead network and a lost
+ * answer. It follows crates/application/src/changes.rs and lifecycle.rs;
+ * the real thing is tested against PostgreSQL in Rust and end to end in
+ * the browser.
  */
 export class FakeServer implements CloudApi {
   store = new Map<string, { version: number; entity: ContractEntity }>();
@@ -31,6 +32,8 @@ export class FakeServer implements CloudApi {
   gate: Promise<void> | null = null;
   /** Commands waiting at the gate. */
   waiting = 0;
+  /** Deleted: reading and writing answer 410; the command log still answers retries. */
+  deleted = false;
   commits = 0;
 
   constructor(meta: FakeServer['meta']) {
@@ -39,6 +42,24 @@ export class FakeServer implements CloudApi {
 
   private check(): void {
     if (this.offline) throw new ApiFailure(0, { error: 'network' }, 'Sunucuya ulaşılamadı.');
+  }
+
+  private gone(): void {
+    if (this.deleted) throw new ApiFailure(410, { error: 'project_deleted', message: `“${this.meta.name}” projesi silindi; açılamaz ve değiştirilemez.` }, 'Proje silindi.');
+  }
+
+  /** Someone deletes the project (returns its event). */
+  deleteAs(requestId: string): EventRecord {
+    this.deleted = true;
+    this.revision++;
+    const e: EventRecord = { seq: String(this.history.length + 1), dataRevision: String(this.revision), kind: 'project.deleted', requestId, features: [], meta: false };
+    this.history.push(e);
+    return e;
+  }
+
+  async deleteProject(): Promise<void> {
+    this.check();
+    if (!this.deleted) this.deleteAs(`web-${crypto.randomUUID()}`);
   }
 
   private record(id: string): FeatureRecord | undefined {
@@ -78,6 +99,7 @@ export class FakeServer implements CloudApi {
     }
     const earlier = this.log.get(envelope.idempotencyKey);
     if (earlier) return { ...earlier, replayed: true };
+    this.gone();
     const input = envelope.input as ProjectChanges;
     const conflicts: FeatureConflict[] = [];
     if (input.project && envelope.expectedVersions['@project'] !== String(this.metaVersion))
@@ -114,11 +136,13 @@ export class FakeServer implements CloudApi {
 
   async featuresById(_t: string, _p: string, ids: readonly string[]) {
     this.check();
+    this.gone();
     return { features: ids.map((id) => this.record(id)).filter((f): f is FeatureRecord => !!f) };
   }
 
   async project(): Promise<ProjectInfo> {
     this.check();
+    this.gone();
     return {
       id: 'p',
       tenantId: 't',
@@ -132,6 +156,7 @@ export class FakeServer implements CloudApi {
 
   async features(_t: string, _p: string, after: string | null, limit: number) {
     this.check();
+    this.gone();
     const ids = [...this.store.keys()].sort().filter((id) => !after || id > after);
     const page = ids.slice(0, limit).map((id) => this.record(id)!);
     return { features: page, next: ids.length > limit ? page[page.length - 1].id : undefined };

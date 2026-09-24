@@ -34,6 +34,7 @@ function memoryFile(name: string, opts: { text?: string; fail?: boolean; during?
 function fakeCloud(open: { name: string; canWrite: boolean; unsent: number } | null) {
   const cloud = {
     project: { value: open ? { name: open.name, canWrite: open.canWrite } : null },
+    sync: { value: null as { state: { value: string } } | null },
     left: 0,
     autosaves: () => !!cloud.project.value?.canWrite,
     leave: async () => {

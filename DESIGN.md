@@ -288,7 +288,7 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
   - dolu yeşil “Buluta kaydedildi”: yalnızca sunucu yanıtladıktan sonra ve bekleyen bir şey yokken;
   - boş lamba, ikincil metin “Kaydedilecek: n” / “Kaydediliyor…”;
   - amber “Çevrimdışı: n bekliyor”;
-  - kırmızı, dolu lamba “Çakışma: n” / “Kayıt hatası”;
+  - kırmızı, dolu lamba “Çakışma: n” / “Kayıt hatası” / “Proje silindi” (başkası sildi; tıklamak ve `Ctrl+S` yerel dosyaya kaydettirir);
   - üçüncül metin “Salt okunur”.
 
   Tıklamak işe yarayan sonraki adımı yapar: çakışmada çözüm penceresini açar, değilse hemen gönderir (`Ctrl+S` ile aynı). İpucu kurum › proje, son kayıt zamanı ve canlı bağlantının durumunu yazar. Sunucu hücresine tıklamak hesap menüsünü açar (giriş/çıkış, bulut projesi aç, buluta yükle, bağlantıyı denetle).
@@ -297,6 +297,8 @@ Bir komut çalışırken çizim alanının üst ortasında yüzen şerittir (`ui
   - Hata satırı kırmızı ve `role="alert"`, ilerleme çubuğu amber ve 4 px'tir.
   - Proje listesinde satır seçimi ve çift tıklamayla açma vardır; seçili satır amber vurguludur.
   - Çakışma penceresinde birincil (amber) düğme güvenli seçenektir: “Sunucudakini al”. “Benimkini kaydet” ikincildir.
+  - Proje listesinin alt çubuğunda solda hayalet düğmeler: “Yeniden adlandır…” ve “Sil…”. Seçili proje yoksa ya da yetki yoksa devre dışıdır ve nedenini ipucunda söyler (ör. “proje silme yetkiniz yok (project.delete)”). İkisi de listenin üstünde açılır ve bitince listeyi yeniler.
+  - Silme penceresi ne olacağını madde madde söyler (listeden kalkar, açık tutanların kaydı durur, nesneler saklanır ve geri getirilebilir). Amber birincil düğmesi yoktur: odak “Vazgeç”tedir, silen düğme “Projeyi sil” kırmızı yazılı, çizgili düğmedir (`btn--danger`).
 
 ### 7.8 İpucu
 

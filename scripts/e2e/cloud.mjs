@@ -2,11 +2,14 @@
 // database, the app in headless Chrome signed in as `ayse`, and `mehmet` as a
 // second editor over plain HTTP. Checks sign-in, upload, autosave, reload
 // persistence, another editor's change arriving live, a conflict resolved
-// from the dialog, and a server restart while an edit waits.
+// from the dialog, a server restart while an edit waits, renaming the open
+// project from the list, and deletion: by `zeynep` (an admin) while the
+// project is open, and from the list after a confirmation.
 //
 //   pnpm e2e:cloud     (needs `pnpm db:setup` once; builds kentosd first)
 //
-// Projects it creates stay in the development database, named "E2E …".
+// Projects it creates stay in the development database, named "E2E …"; the
+// ones this run deletes are only marked deleted (`kentosd project deleted`).
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
@@ -48,8 +51,8 @@ async function stopApi() {
   await new Promise((r) => p.once('exit', r));
 }
 
-/** mehmet: a second editor with his own session, straight against the API. */
-const mehmet = {
+/** Another member with their own session, straight against the API (mehmet: an editor; zeynep: an admin). */
+const client = () => ({
   cookie: '',
   async call(method, path, body) {
     const res = await fetch(`http://127.0.0.1:${apiPort}${path}`, {
@@ -63,11 +66,13 @@ const mehmet = {
   },
   commit(tenantId, projectId, features, expected) {
     return this.call('POST', `/v1/tenants/${tenantId}/projects/${projectId}/commands`, {
-      commandName: 'project.changes', version: 1, tenantId, projectId, requestId: `mehmet-${crypto.randomUUID()}`,
+      commandName: 'project.changes', version: 1, tenantId, projectId, requestId: `e2e-${crypto.randomUUID()}`,
       idempotencyKey: crypto.randomUUID(), expectedVersions: expected, input: { features },
     });
   },
-};
+});
+const mehmet = client();
+const zeynep = client();
 
 const failures = [];
 const check = (name, ok, detail = '') => {
@@ -210,6 +215,74 @@ try {
   await b.shot('cloud-projects-large');
   await b.key('Escape');
   await b.eval(`document.documentElement.style.setProperty('--ui-scale', '1')`);
+
+  // Renaming the open project from the list (ayse is a project manager: project.edit, but not project.delete).
+  await b.eval(`window.kentos.commands.execute('cloud.open')`);
+  await b.waitFor(`document.querySelector('.cloud-row')`, 5000);
+  await press('.cloud-row', name);
+  const del = await b.eval(`(() => { const e = [...document.querySelectorAll('.dialog__foot .btn')].find((x) => x.textContent === 'Sil…'); return e && { disabled: e.disabled, title: e.title }; })()`);
+  check('a project manager may not delete; the button says why', !!del?.disabled && /project\.delete/.test(del.title), del?.title);
+  await press('.dialog__foot .btn', 'Yeniden adlandır');
+  await b.waitFor(`document.querySelector('.dialog[aria-label="Bulut projesini yeniden adlandır"]')`, 3000);
+  const renamedTo = `${name} (revize)`;
+  // The field opens with the old name selected: typing replaces it.
+  await b.type(renamedTo);
+  await b.key('Enter');
+  await b.waitFor(`window.kentos.cloud.project.value?.name === ${JSON.stringify(renamedTo)} && window.kentos.cloud.sync.value.state.value === 'saved'`, 8000).catch(() => {});
+  await b.waitFor(`[...document.querySelectorAll('.cloud-row__name')].some((e) => e.textContent === ${JSON.stringify(renamedTo)})`, 5000).catch(() => {});
+  const named = await mehmet.call('GET', `/v1/tenants/${project.tenantId}/projects/${project.projectId}`);
+  check('renaming the open project saves the name for everyone and the list shows it', named.body.name === renamedTo && (await b.eval('window.kentos.doc.name.value')) === renamedTo, named.body.name);
+  await b.key('Escape');
+
+  // zeynep (an admin) deletes it while ayse has it open: her app stops saving, the drawing stays, edits stay on the device.
+  const signedZ = await zeynep.call('POST', '/v1/auth/login', { login: 'zeynep', password: env.KENTOS_DEV_PASSWORD });
+  if (signedZ.status !== 200) throw new Error('zeynep giriş yapamadı: geliştirme verisini yenileyin (`pnpm kentosd -- dev-seed`).');
+  const sizeBefore = await b.eval('window.kentos.doc.size');
+  const gone = await zeynep.call('DELETE', `/v1/tenants/${project.tenantId}/projects/${project.projectId}`);
+  check('an admin deletes the project', gone.status === 204, String(gone.status));
+  await b.waitFor(`window.kentos.cloud.sync.value?.state.value === 'deleted'`, 10000).catch(() => {});
+  const cell = await b.eval(`document.querySelector('.status__save')?.textContent`);
+  check('the open editor hears it: saving stops and the drawing stays', cell === 'Proje silindi' && (await b.eval('window.kentos.doc.size')) === sizeBefore, cell);
+  await b.eval(`window.kentos.doc.update(${localId}, { a: { x: ${X - 20}, y: ${N} } })`);
+  await sleep(700);
+  const drafted = await b.eval(`new Promise((resolve) => { const r = indexedDB.open('kentos.cloud'); r.onsuccess = () => { const q = r.result.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => resolve(q.result.filter((d) => Object.values(d.changes).some((c) => c.entity?.a?.x === ${X - 20})).length); }; })`);
+  check('an edit made after the deletion stays in the device draft', drafted === 1, String(drafted));
+  const refused = await mehmet.call('GET', `/v1/tenants/${project.tenantId}/projects/${project.projectId}`);
+  const remaining = await mehmet.call('GET', `/v1/tenants/${project.tenantId}/projects`);
+  check('the deleted project refuses opening and leaves the list', refused.status === 410 && refused.body.error === 'project_deleted' && !remaining.body.projects.some((p) => p.id === project.projectId), refused.body.message);
+  await b.shot('cloud-deleted');
+
+  // Signed in as zeynep, the browser deletes another project from the list, after asking.
+  const spareName = `E2E silinecek ${new Date().toISOString().slice(0, 19)}`;
+  const spare = await zeynep.call('POST', `/v1/tenants/${project.tenantId}/projects`, {
+    name: spareName,
+    settings: { srid: 5256, lengthDecimals: 3, areaDecimals: 2, areaUnit: 'm2', angleUnit: 'grad', plotScale: 1000 },
+    origin: { x: 486500, y: 4420200 },
+    layers: [{ id: 'cizim', name: 'Çizim', type: 'layer', visible: true, locked: false, expanded: true, style: { color: 'ink', lineType: 'continuous', lineWeight: 0.25 }, children: [] }],
+    activeLayer: 'cizim',
+    styles: { items: [], categories: [] },
+  });
+  await b.eval(`window.kentos.commands.execute('cloud.signOut')`);
+  await b.waitFor(`window.kentos.cloud.auth.value === 'signedOut'`, 5000);
+  await b.eval(`window.kentos.commands.execute('cloud.open')`);
+  await b.waitFor(`document.querySelector('.dialog--cloud input[name=login]')`, 3000);
+  await b.type('zeynep');
+  await b.key('Tab');
+  await b.type(env.KENTOS_DEV_PASSWORD);
+  await b.key('Enter');
+  await b.waitFor(`window.kentos.cloud.auth.value === 'signedIn' && !!document.querySelector('.cloud-row')`, 8000);
+  await press('.cloud-row', spareName);
+  await press('.dialog__foot .btn', 'Sil');
+  await b.waitFor(`document.querySelector('.dialog[aria-label="Bulut projesini sil"]')`, 3000);
+  const asked = await b.eval(`(() => { const d = document.querySelector('.dialog[aria-label="Bulut projesini sil"]'); return { safe: document.activeElement?.textContent, says: d.querySelectorAll('.cloud-consequences li').length }; })()`);
+  check('deleting asks first, with the safe button focused', asked.safe === 'Vazgeç' && asked.says >= 3, JSON.stringify(asked));
+  await b.shot('cloud-delete-confirm');
+  await press('.dialog[aria-label="Bulut projesini sil"] .dialog__foot .btn', 'Projeyi sil');
+  await b.waitFor(`!document.querySelector('.dialog[aria-label="Bulut projesini sil"]') && ![...document.querySelectorAll('.cloud-row__name')].some((e) => e.textContent === ${JSON.stringify(spareName)})`, 8000).catch(() => {});
+  const spareGone = await zeynep.call('GET', `/v1/tenants/${project.tenantId}/projects/${spare.body.id}`);
+  check('the confirmed delete removes it from the list for everyone', spare.status === 201 && spareGone.status === 410, `${spare.status} → ${spareGone.status}`);
+  await b.key('Escape');
+
   const errors = b.consoleLog.filter((l) => /^(error|EXCEPTION)/.test(l));
   check('no console errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

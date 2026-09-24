@@ -22,6 +22,9 @@ import { ProjectSync } from './sync';
  * thrown away (`generation`, CLAUDE.md §21.2). Uploading a local drawing
  * creates the project with every layer unlocked, sends the objects in
  * batches and then restores the drawing's own layer tree, locks included.
+ * A project can be renamed (a metadata change) and, by an admin, deleted;
+ * when someone else deletes the open one, its sync stops sending and the
+ * drawing stays on screen, its edits kept on this device.
  */
 
 export type AuthState = 'unknown' | 'signedOut' | 'signedIn';
@@ -131,7 +134,64 @@ export class CloudSession {
    * A viewer's edits are never sent: they are not kept.
    */
   autosaves(): boolean {
-    return !!this.project.value?.canWrite && !!this.sync.value;
+    const sync = this.sync.value;
+    return !!this.project.value?.canWrite && !!sync && sync.state.value !== 'deleted';
+  }
+
+  /** The open cloud project, if it is this one. */
+  private isOpen(tenantId: string, projectId: string): CloudProject | null {
+    const p = this.project.value;
+    return p && p.tenantId === tenantId && p.projectId === projectId ? p : null;
+  }
+
+  /**
+   * Renames a cloud project for everyone. The open one is renamed through
+   * its autosave (with whatever else waits, so it cannot conflict with
+   * itself); another one with a metadata change based on its current
+   * version. True when the server has the new name.
+   */
+  async rename(tenantId: string, projectId: string, name: string): Promise<boolean> {
+    const title = name.trim();
+    if (!title || title.length > 200) throw new Error('Proje adı boş olamaz ve en çok 200 karakter olabilir.');
+    if (this.isOpen(tenantId, projectId)) {
+      this.ctx.doc.name.set(title);
+      return this.flush();
+    }
+    const info = await this.api.project(tenantId, projectId);
+    await this.api.command({
+      commandName: 'project.changes',
+      version: 1,
+      tenantId,
+      projectId,
+      requestId: `web-${uuid()}`,
+      idempotencyKey: uuid(),
+      expectedVersions: { '@project': info.metaVersion },
+      input: { features: [], project: { name: title } },
+    });
+    return true;
+  }
+
+  /**
+   * Deletes a cloud project for everyone (an admin's right; the server keeps
+   * it, so the operator can restore it). The open one is left: the drawing
+   * stays on screen as an unsaved local drawing.
+   */
+  async deleteProject(tenantId: string, projectId: string): Promise<void> {
+    await this.api.deleteProject(tenantId, projectId);
+    const open = this.isOpen(tenantId, projectId);
+    if (!open) return;
+    this.detach();
+    this.ctx.log.info(`“${open.name}” bulut projesi silindi. Çizim ekranda kaldı; saklamak için Dosya → Farklı kaydet ile yerel bir dosyaya kaydedin.`);
+  }
+
+  /** Someone deleted the open project: nothing more is sent or heard; the drawing and its unsent edits stay here. */
+  private projectDeleted(project: CloudProject): void {
+    const open = this.project.value;
+    if (open?.projectId !== project.projectId) return;
+    this.socket?.stop();
+    this.ctx.log.warn(
+      `“${open.name}” bulut projesi silindi. Değişiklikleriniz artık buluta kaydedilmiyor; gönderilmemiş olanlar bu cihazda saklanıyor. Çizimi saklamak için Dosya → Farklı kaydet ile yerel bir dosyaya kaydedin.`,
+    );
   }
 
   /**
@@ -192,6 +252,7 @@ export class CloudSession {
       cursor,
       records,
       warn: (t) => this.ctx.log.warn(t),
+      onDeleted: () => this.projectDeleted(project),
     });
     const socket = new ProjectSocket({
       url: socketUrl(),
@@ -200,8 +261,12 @@ export class CloudSession {
       cursor: () => sync.cursor,
       onEvents: (events) => void sync.receive(events),
       onResync: () => {
-        this.ctx.log.warn('Proje sunucuda baştan kurulmuş; yeniden açılıyor.');
-        void this.open(info.tenantId, info.id);
+        this.ctx.log.warn('Canlı bağlantı kaçırılan değişiklikleri veremiyor; proje sunucudan yeniden açılıyor.');
+        this.open(info.tenantId, info.id).catch((e: unknown) => {
+          // Deleted meanwhile (its event was among the ones no longer kept): the same as hearing it.
+          if (e instanceof ApiFailure && e.deleted) sync.markDeleted();
+          else this.ctx.log.error(`Proje yeniden açılamadı: ${(e as Error).message}. Dosya → Bulut projesi aç ile yeniden deneyin.`);
+        });
       },
       onError: (m) => this.ctx.log.warn(`Canlı bağlantı: ${m}`),
     });

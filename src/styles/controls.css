@@ -500,6 +500,13 @@
   padding: 0 10px;
   font-size: var(--fs-xs);
 }
+/* A button that removes something: outlined, its text in the danger colour (never the amber primary). */
+.btn--danger {
+  color: var(--c-danger);
+}
+.btn--danger:hover:not(:disabled) {
+  border-color: var(--c-danger);
+}
 
 /* ── Segmented control ───────────────────────────────────────────── */
 .seg {

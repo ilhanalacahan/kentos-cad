@@ -46,6 +46,7 @@ pub fn status_of(error: &AppError) -> StatusCode {
         AppError::Forbidden(_) => StatusCode::FORBIDDEN,
         AppError::NotFound(_) => StatusCode::NOT_FOUND,
         AppError::Invalid(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        AppError::Deleted(_) => StatusCode::GONE,
         AppError::Conflict { .. } => StatusCode::CONFLICT,
         AppError::Limited { .. } => StatusCode::TOO_MANY_REQUESTS,
         AppError::Database(_) if error.code() == "unavailable" => StatusCode::SERVICE_UNAVAILABLE,

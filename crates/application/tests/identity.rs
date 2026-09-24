@@ -132,6 +132,12 @@ async fn the_server_role_cannot_read_hashes_or_administer() {
             .execute(pool)
             .await
     ));
+    // Deleting a project only marks it (lifecycle.rs): its rows can never be removed by the server.
+    assert!(denied(
+        sqlx::query("delete from kentos.project")
+            .execute(pool)
+            .await
+    ));
     // Its role is not the owner and cannot bypass row-level security.
     let (bypass, owner): (bool, bool) = sqlx::query_as(
         "select rolbypassrls, pg_has_role(current_user, 'kentos_cad_owner', 'member') from pg_roles where rolname = current_user",

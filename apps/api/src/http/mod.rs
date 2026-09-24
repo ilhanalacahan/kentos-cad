@@ -85,7 +85,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/v1/tenants/{tenant}/projects/{project}",
-            get(projects::info),
+            get(projects::info).delete(projects::delete),
         )
         .route(
             "/v1/tenants/{tenant}/projects/{project}/features",
