@@ -1,12 +1,11 @@
-import { entityOutline, isClosedOutline, polygonHoles, polygonRing, tessellateCircle, type Entity } from '../model/entities';
-import { tessellateArc } from '../model/geom/arc';
-import { layoutDimension } from '../model/geom/dimension';
+import type { Entity } from '../model/entities';
 import { hatchLines } from '../model/geom/hatch';
-import { catmullRom } from '../model/geom/spline';
 import type { Bounds, Vec2 } from '../model/geometry';
 import type { LayerStyle, LineType } from '../model/layers';
+import { DrawnReader } from '../style/geometry';
 import { parseHex, resolveColor, withAlpha, type CanvasPalette } from './color';
-import { triangulate } from './triangulate';
+import { FillQueue } from './fillQueue';
+import type { GeometrySource } from './styledLayer';
 import type { LineBatch, PointBatch, RGBA, SceneLayer } from './types';
 
 export const DASH_PATTERNS: Record<LineType, readonly number[] | null> = {
@@ -47,6 +46,8 @@ class LineAccumulator {
 export interface BuildOptions {
   origin: Vec2;
   palette: CanvasPalette;
+  /** What the objects draw (the geometry store; rings as the objects have them). */
+  geometry: GeometrySource;
   /** Force every batch into one colour (selection / hover highlight). */
   overrideColor?: RGBA;
   overrideFill?: RGBA | null;
@@ -60,30 +61,6 @@ export interface BuildOptions {
   clip?: Bounds;
 }
 
-/** Part of the line p + dir·t (t ≥ 0 for a ray) inside box r, or null. */
-function clipLine(p: Vec2, dir: Vec2, ray: boolean, r: Bounds): [Vec2, Vec2] | null {
-  let t0 = ray ? 0 : -Infinity;
-  let t1 = Infinity;
-  for (const [pp, d, min, max] of [
-    [p.x, dir.x, r.minX, r.maxX],
-    [p.y, dir.y, r.minY, r.maxY],
-  ]) {
-    if (Math.abs(d) < 1e-15) {
-      if (pp < min || pp > max) return null;
-      continue;
-    }
-    const a = (min - pp) / d;
-    const b = (max - pp) / d;
-    t0 = Math.max(t0, Math.min(a, b));
-    t1 = Math.min(t1, Math.max(a, b));
-  }
-  if (!(t1 > t0)) return null;
-  return [
-    { x: p.x + dir.x * t0, y: p.y + dir.y * t0 },
-    { x: p.x + dir.x * t1, y: p.y + dir.y * t1 },
-  ];
-}
-
 /** Converts entities of one layer (or a highlight set) into GPU-ready batches. */
 export function buildSceneLayer(id: string, entities: readonly Entity[], style: LayerStyle, opts: BuildOptions): SceneLayer {
   const layer: SceneLayer = { id, lines: [], fills: [], points: [] };
@@ -95,54 +72,26 @@ export function buildSceneLayer(id: string, entities: readonly Entity[], style: 
     return b;
   };
   const { origin } = opts;
+  // Curves tessellated by the geometry store, all objects in one call; fills triangulated together.
+  const drawn = new DrawnReader(opts.geometry.drawn(entities.map((e) => e.id), false, opts.clip));
+  const fills = new FillQueue();
 
   for (const e of entities) {
+    const g = drawn.read(e);
     const b = bucket(e.color ?? style.color);
     switch (e.kind) {
-      case 'line':
-        b.lines.path([e.a, e.b], origin, false);
+      case 'polygon':
+        if (g?.cls !== 'fill') break;
+        for (const r of g.rings) b.lines.path(r, origin, true);
+        if (style.fill || opts.overrideFill) fills.add(b.fill, g.rings);
         break;
-      case 'polyline':
-        b.lines.path(e.bulges ? entityOutline(e) : e.pts, origin, false);
-        break;
-      case 'polygon': {
-        const ring = polygonRing(e);
-        const holes = polygonHoles(e);
-        b.lines.path(ring, origin, true);
-        for (const h of holes) b.lines.path(h, origin, true);
-        if (style.fill || opts.overrideFill) triangulate(ring, holes, origin, b.fill);
-        break;
-      }
-      case 'circle':
-        b.lines.path(tessellateCircle(e.c, e.r), origin, true);
-        break;
-      case 'arc':
-        b.lines.path(tessellateArc(e), origin, false);
-        break;
-      case 'ellipse':
-        b.lines.path(entityOutline(e), origin, isClosedOutline(e));
-        break;
-      case 'xline':
-      case 'ray': {
-        const seg = opts.clip && clipLine(e.p, e.dir, e.kind === 'ray', opts.clip);
-        if (seg) b.lines.path(seg, origin, false);
-        break;
-      }
-      case 'spline':
-        b.lines.path(catmullRom(e.pts, e.closed), origin, false);
-        break;
-      case 'dimension': {
-        const l = layoutDimension(e);
-        if (l) for (const [p, q] of l.lines) b.lines.path([p, q], origin, false);
-        break;
-      }
       case 'hatch':
+        if (g?.cls !== 'fill') break;
         if (opts.overrideColor) {
           // Highlight: outline plus a light fill regardless of pattern.
-          b.lines.path(e.ring, origin, true);
-          for (const h of e.holes ?? []) b.lines.path(h, origin, true);
-          if (opts.overrideFill) triangulate(e.ring, e.holes ?? [], origin, b.fill);
-        } else if (e.pattern.type === 'solid') triangulate(e.ring, e.holes ?? [], origin, b.solid);
+          for (const r of g.rings) b.lines.path(r, origin, true);
+          if (opts.overrideFill) fills.add(b.fill, g.rings);
+        } else if (e.pattern.type === 'solid') fills.add(b.solid, g.rings);
         else {
           for (const [p, q] of hatchLines(e.ring, e.pattern.angle, e.pattern.spacing, e.holes).segments) b.lines.path([p, q], origin, false);
           if (e.pattern.type === 'cross')
@@ -154,8 +103,12 @@ export function buildSceneLayer(id: string, entities: readonly Entity[], style: 
         break;
       case 'text':
         break; // text is drawn by the overlay for now (SDF text is a later milestone)
+      default:
+        // Lines, paths, curves, construction lines (clipped) and dimensions (their layout lines).
+        if (g?.cls === 'line') for (const p of g.paths) b.lines.path(p.pts, origin, p.closed);
     }
   }
+  fills.run(origin);
 
   const dash = opts.overrideDash !== undefined ? opts.overrideDash : DASH_PATTERNS[style.lineType];
   for (const [color, b] of byColor) {

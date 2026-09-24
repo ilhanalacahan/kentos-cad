@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { Entity } from '../model/entities';
+import { DrawnReader, measuredAt } from '../style/geometry';
 import { CoreStore } from './core';
 import { sameResult, toJson, type Tolerance } from './parity/harness';
 
 /**
  * The frozen store fixture (fixtures/geometry/v1/store-v1.json: the
- * TypeScript PickIndex's answers on a fixed scene, and the tool previews
- * and totals it computed) through the app's path into the WASM geometry
+ * TypeScript PickIndex's answers on a fixed scene, the tool previews and
+ * totals, and the layer builders' geometry it computed) through the app's
+ * path into the WASM geometry
  * store; Rust runs the same file natively
  * (crates/geometry-core/tests/store.rs). It stays after the TypeScript
  * reference is deleted (docs/adr/0008, S1).
@@ -93,6 +96,15 @@ function answer(s: CoreStore, byId: Map<number, unknown>, op: string, a: unknown
     }
     case 'measure':
       return Array.from(s.measure(ids(0)));
+    case 'drawn': {
+      const list = (a[0] as number[]).map((id) => byId.get(id) as Entity);
+      const reader = new DrawnReader(s.drawn(ids(0), a[1] as boolean, a[2] as Rect | null));
+      return list.map((e) => reader.read(e));
+    }
+    case 'measures': {
+      const values = s.measures(ids(0));
+      return (a[0] as number[]).map((_, i) => measuredAt(values, i));
+    }
   }
   throw new Error(`bilinmeyen sorgu: ${op}`);
 }

@@ -3,14 +3,15 @@ import type { LibraryAsset } from '../model/style';
 import { MM_PER_PX } from '../style/compile';
 import type { FillPaint, MarkerStyle, PrimitiveSink, PrimUnit, ShapeMarkStyle, StrokeStyle, TileSource } from '../style/primitives';
 import { parseHex, resolveColor, type CanvasPalette } from './color';
-import { triangulate } from './triangulate';
+import { FillQueue } from './fillQueue';
 import { MARKER_STRIDE, STROKE_STRIDE, TEXT_BOX, type AtlasImage, type FillPaintBatch, type MarkerLook, type RGBA, type ScaleRange, type ShapeId, type StyledBatch, type TileMark } from './types';
 
 /**
  * Receives the style engine's primitives for one layer and packs them into
  * GPU batches: equal styles share a batch, geometry becomes origin-relative
  * float32 (never absolute coordinates on the GPU), colours are resolved
- * with the theme palette, and images get atlas keys. Batches come out in
+ * with the theme palette, and images get atlas keys. Fills are triangulated
+ * together when the layer is finished (one core call). Batches come out in
  * symbol-level order: by level, and within a level fills, lines, markers,
  * each with its box so a frame can skip what is out of view.
  */
@@ -90,6 +91,7 @@ export class StyledSink implements PrimitiveSink {
   private readonly keys = new WeakMap<object, string>();
   private scale: ScaleRange = {};
   private seq = 0;
+  private readonly fills = new FillQueue();
 
   constructor(opts: SinkOptions) {
     this.opts = opts;
@@ -163,7 +165,7 @@ export class StyledSink implements PrimitiveSink {
     const e = this.entry(`f|${JSON.stringify(paint)}`, paint.level, () => ({ kind: 'fill', positions: new Float32Array(0), paint: this.paint(paint), bounds: [0, 0, 0, 0], reach: 0, reachUnit: 'world' }));
     const { origin } = this.opts;
     for (const p of rings[0]) this.grow(e, p.x - origin.x, p.y - origin.y);
-    triangulate(rings[0], rings.slice(1), origin, e.data);
+    this.fills.add(e.data, rings);
   }
 
   marker(style: MarkerStyle, at: Vec2, angle: number): void {
@@ -288,6 +290,7 @@ export class StyledSink implements PrimitiveSink {
 
   /** The batches, in draw order. */
   finish(): StyledBatch[] {
+    this.fills.run(this.opts.origin);
     const list = [...this.entries.values()].sort((a, b) => a.level - b.level || KIND_ORDER[a.batch.kind] - KIND_ORDER[b.batch.kind] || a.order - b.order);
     return list.flatMap((e): StyledBatch[] => {
       const data = new Float32Array(e.data);

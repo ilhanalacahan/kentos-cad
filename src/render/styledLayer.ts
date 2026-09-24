@@ -1,11 +1,11 @@
 import type { Entity } from '../model/entities';
-import { layoutDimension } from '../model/geom/dimension';
+import type { Measured } from '../model/expression/expressionLib';
 import type { Bounds, Vec2 } from '../model/geometry';
 import type { LayerStyle } from '../model/layers';
 import type { LibraryAsset, Symbol, SymbolSet } from '../model/style';
 import { compileSymbol, type CompileEnv, type ExprCache } from '../style/compile';
 import { hatchSymbolOf, symbolsOfLayerStyle } from '../style/fromLayer';
-import { styledGeometry, type GeometryClass } from '../style/geometry';
+import { DrawnReader, measuredAt, type GeometryClass } from '../style/geometry';
 import { resolveRenderer, symbolOf, type ResolvedSet } from '../style/resolve';
 import type { CanvasPalette } from './color';
 import { StyledSink } from './styledSink';
@@ -18,12 +18,22 @@ import type { SceneLayer } from './types';
  * A symbol missing from the library (or no symbol for the object's kind of
  * geometry) falls back to the simple look, so an object never silently
  * disappears; an area without a fill symbol draws its edges with the line
- * symbol. Dimensions keep their hairlines.
+ * symbol. Dimensions keep their hairlines. What each object draws (curves
+ * tessellated, rings oriented) and the geometry values expressions ask for
+ * come from the geometry store, the whole layer in one call each.
  */
 
 export interface StyleSources {
   symbol(id: string): Symbol | undefined;
   asset(id: string): LibraryAsset | undefined;
+}
+
+/** The geometry store's answers for a layer build (viewport/picking.ts; docs/adr/0008, S2). */
+export interface GeometrySource {
+  /** What these objects draw, one record each (style/geometry.ts `DrawnReader`); `oriented`: rings turned for the style engine; `clip`: the box construction lines are clipped to. */
+  drawn(ids: readonly number[], oriented: boolean, clip?: Bounds): Float64Array;
+  /** Their geometry values for expressions (style/geometry.ts `measuredAt`). */
+  measures(ids: readonly number[]): Float64Array;
 }
 
 export interface StyledBuildOptions {
@@ -33,6 +43,7 @@ export interface StyledBuildOptions {
   library: StyleSources;
   exprs: ExprCache;
   layerName(id: string): string;
+  geometry: GeometrySource;
   /** Box construction lines are clipped to (see ViewportController). */
   clip?: Bounds;
 }
@@ -44,6 +55,9 @@ const SYMBOL_CLASS = { fill: 'fill', line: 'line', marker: 'marker' } as const;
 
 export function buildStyledLayer(id: string, entities: readonly Entity[], style: LayerStyle, opts: StyledBuildOptions): SceneLayer {
   const sink = new StyledSink({ origin: opts.origin, palette: opts.palette, plotScale: opts.plotScale, asset: (a) => opts.library.asset(a) });
+  const ids = entities.map((e) => e.id);
+  // The expressions' geometry values come for the whole layer the first time one is asked for.
+  let values: Float64Array | null = null;
   const env: CompileEnv = {
     plotScale: opts.plotScale,
     exprs: opts.exprs,
@@ -52,6 +66,7 @@ export function buildStyledLayer(id: string, entities: readonly Entity[], style:
       const asset = opts.library.asset(a);
       return asset ? asset.height / asset.width : 1;
     },
+    measured: (index: number): Measured => measuredAt((values ??= opts.geometry.measures(ids)), index - 1),
   };
   const simple = new Map<string, SymbolSet>();
   const simpleFor = (color: string) => {
@@ -60,19 +75,20 @@ export function buildStyledLayer(id: string, entities: readonly Entity[], style:
     return s;
   };
   const lookup = (ref: string) => opts.library.symbol(ref);
+  const drawn = new DrawnReader(opts.geometry.drawn(ids, true, opts.clip));
 
   entities.forEach((e, i) => {
+    // Every object has a record, also those drawn elsewhere (text).
+    const geom = drawn.read(e);
     if (e.kind === 'text') return;
     const color = e.color ?? style.color;
     if (e.kind === 'dimension') {
-      // Dimensions keep their own hairline look (the dimension style is a later step).
-      const l = layoutDimension(e);
-      if (!l) return;
+      // Dimensions keep their own hairline look (the dimension style is a later step): their layout lines.
+      if (geom?.cls !== 'line') return;
       const hair = { color, opacity: 1, width: 0, unit: 'px' as const, dash: null, dashOffset: 0, cap: 'butt' as const, join: 'miter' as const, blur: 0, level: LEVEL_BASE.line + 500 };
-      for (const [p, q] of l.lines) sink.stroke(hair, [p, q], false);
+      for (const p of geom.paths) sink.stroke(hair, p.pts, false);
       return;
     }
-    const geom = styledGeometry(e, opts.clip);
     if (!geom) return;
     const target = { entity: e, index: i + 1 };
     let sets: ResolvedSet[];

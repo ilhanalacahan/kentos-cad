@@ -3,8 +3,9 @@
 //! `scripts/fixtures/record-store.test.ts`; docs/adr/0008, S1): picking,
 //! edge picking, snapping, window and crossing selection, enclosing shapes,
 //! overlapping objects, boundary edges, labels and grips on a fixed scene,
-//! and the tool previews and totals (trim, extend, ghosts, stretch ghosts,
-//! selection totals). The WASM build runs the same file
+//! the tool previews and totals (trim, extend, ghosts, stretch ghosts,
+//! selection totals), and what the layer builders draw with the
+//! expressions' geometry values. The WASM build runs the same file
 //! (`src/wasm/store.wasm.test.ts`).
 
 // Test harness code, not the core: the std float methods are fine here.
@@ -113,6 +114,105 @@ fn ids(v: &Value) -> Vec<f64> {
     v.as_array().unwrap().iter().map(num).collect()
 }
 
+/// A number as the TypeScript's `toJson` writes it.
+fn num_json(x: f64) -> Value {
+    if x.is_nan() {
+        json!("#NaN")
+    } else if x == f64::INFINITY {
+        json!("#Inf")
+    } else if x == f64::NEG_INFINITY {
+        json!("#-Inf")
+    } else {
+        json!(x)
+    }
+}
+
+/// An object's own points of path or ring `k`, which a drawn record refers to.
+fn own_points(e: &Value, k: usize) -> Vec<Value> {
+    let arr = |v: &Value| v.as_array().cloned().unwrap_or_default();
+    match e["kind"].as_str().unwrap() {
+        "line" => vec![e["a"].clone(), e["b"].clone()],
+        "polyline" => arr(&e["pts"]),
+        "polygon" if k == 0 => arr(&e["pts"]),
+        "polygon" => arr(&e["holes"][k - 1]["pts"]),
+        "hatch" if k == 0 => arr(&e["ring"]),
+        "hatch" => arr(&e["holes"][k - 1]),
+        _ => Vec::new(),
+    }
+}
+
+/// Drawn records read back into the style engine's geometry, as `DrawnReader` reads them.
+struct Records<'a> {
+    buf: &'a [f64],
+    at: usize,
+}
+
+impl Records<'_> {
+    fn next(&mut self) -> f64 {
+        self.at += 1;
+        self.buf[self.at - 1]
+    }
+
+    fn points(&mut self, e: &Value, k: usize) -> Value {
+        let n = self.next();
+        if n == -1.0 {
+            return Value::Array(own_points(e, k));
+        }
+        if n == -2.0 {
+            let mut p = own_points(e, k);
+            p.reverse();
+            return Value::Array(p);
+        }
+        Value::Array(
+            (0..n as usize)
+                .map(|_| json!({ "x": num_json(self.next()), "y": num_json(self.next()) }))
+                .collect(),
+        )
+    }
+
+    fn read(&mut self, e: &Value) -> Value {
+        match self.next() as i64 {
+            1 => {
+                json!({ "cls": "marker", "point": { "x": num_json(self.next()), "y": num_json(self.next()) } })
+            }
+            2 => {
+                let count = self.next() as usize;
+                let paths: Vec<Value> = (0..count)
+                    .map(|k| {
+                        let closed = self.next() == 1.0;
+                        json!({ "pts": self.points(e, k), "closed": closed })
+                    })
+                    .collect();
+                json!({ "cls": "line", "paths": paths })
+            }
+            3 => {
+                let count = self.next() as usize;
+                let rings: Vec<Value> = (0..count).map(|k| self.points(e, k)).collect();
+                json!({ "cls": "fill", "rings": rings })
+            }
+            _ => Value::Null,
+        }
+    }
+}
+
+/// `measures` records as `measuredAt` reads them.
+fn read_measures(buf: &[f64], n: usize) -> Value {
+    let or_null = |has: bool, v: Value| if has { v } else { Value::Null };
+    Value::Array(
+        (0..n)
+            .map(|i| {
+                let k = i * 6;
+                let f = buf[k] as u32;
+                json!({
+                    "length": or_null(f & 1 != 0, num_json(buf[k + 1])),
+                    "area": or_null(f & 2 != 0, num_json(buf[k + 2])),
+                    "anchor": or_null(f & 4 != 0, json!({ "x": num_json(buf[k + 3]), "y": num_json(buf[k + 4]) })),
+                })
+            })
+            .collect(),
+    )
+}
+
 /// A core answer as the TypeScript's `toJson` writes it (NaN and ±∞ as `"#NaN"`, `"#Inf"`, `"#-Inf"`).
 fn core_json<T: ToJson + ?Sized>(v: &T) -> Value {
     let mut out = String::new();
@@ -138,6 +238,12 @@ fn the_store_gives_the_typescript_pick_index_answers() {
     store
         .set_label_defaults_json(&serde_json::to_string(&file["labelDefaults"]).unwrap())
         .expect("label defaults");
+    let entity_json: HashMap<u64, &Value> = file["entities"]
+        .as_array()
+        .expect("entities")
+        .iter()
+        .map(|e| (num(&e["id"]).to_bits(), e))
+        .collect();
     let entities: HashMap<u64, Entity> = file["entities"]
         .as_array()
         .expect("entities")
@@ -214,6 +320,21 @@ fn the_store_gives_the_typescript_pick_index_answers() {
             "measure" => {
                 let (length, area) = store.measure(&ids(&a[0]));
                 core_json(&[length, area])
+            }
+            "drawn" => {
+                let ids = ids(&a[0]);
+                let clip = (!a[2].is_null()).then(|| rect(&a[2]));
+                let buf = store.drawn(&ids, a[1].as_bool().unwrap(), clip.as_ref());
+                let mut records = Records { buf: &buf, at: 0 };
+                Value::Array(
+                    ids.iter()
+                        .map(|id| records.read(entity_json[&id.to_bits()]))
+                        .collect(),
+                )
+            }
+            "measures" => {
+                let ids = ids(&a[0]);
+                read_measures(&store.measures(&ids), ids.len())
             }
             op => panic!("unknown op {op}"),
         };

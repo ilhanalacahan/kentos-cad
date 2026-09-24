@@ -1,14 +1,16 @@
-import { entityOutline, isClosedOutline, polygonHoles, polygonRing, type Entity } from '../model/entities';
-import { tessellateArc } from '../model/geom/arc';
-import { catmullRom } from '../model/geom/spline';
-import { centroid, signedArea, type Bounds, type Vec2 } from '../model/geometry';
+import type { Entity } from '../model/entities';
+import type { Measured } from '../model/expression/expressionLib';
+import { centroid, type Bounds, type Vec2 } from '../model/geometry';
 import type { MarkerPlacement } from '../model/style';
+import { op } from '../wasm/core';
 
 /**
  * Geometry as the style engine sees it: every object is a point, a set of
  * lines or an area. Areas come with the outer ring counter-clockwise and
  * holes clockwise, so "left of the drawing direction" is always into the
- * area (the offset rule of edge layers). Curves are tessellated once here.
+ * area (the offset rule of edge layers). The geometry store tessellates
+ * the curves and orients the rings (docs/adr/0008, S2), a whole layer in
+ * one call; `DrawnReader` reads its records.
  */
 
 export type GeometryClass = 'marker' | 'line' | 'fill';
@@ -37,59 +39,107 @@ export function geometryClassOf(e: Entity): GeometryClass | null {
   }
 }
 
-const oriented = (ring: readonly Vec2[], ccw: boolean): Vec2[] => (signedArea(ring) > 0 === ccw ? [...ring] : [...ring].reverse());
+/** Record kinds and point references of the store's drawn geometry (crates/geometry-core/src/store/draw.rs). */
+const MARKER = 1;
+const LINE = 2;
+const FILL = 3;
+const SOURCE = -1;
+const REVERSED = -2;
 
-/** Part of an infinite line inside a box (construction lines are clipped to the view). */
-function clipLine(p: Vec2, dir: Vec2, ray: boolean, r: Bounds): Vec2[] | null {
-  let t0 = ray ? 0 : -Infinity;
-  let t1 = Infinity;
-  for (const [pp, d, min, max] of [
-    [p.x, dir.x, r.minX, r.maxX],
-    [p.y, dir.y, r.minY, r.maxY],
-  ]) {
-    if (Math.abs(d) < 1e-15) {
-      if (pp < min || pp > max) return null;
-      continue;
-    }
-    const a = (min - pp) / d;
-    const b = (max - pp) / d;
-    t0 = Math.max(t0, Math.min(a, b));
-    t1 = Math.min(t1, Math.max(a, b));
+/** The object's own points of path or ring `k`, which a record refers to instead of copying them. */
+function ownPoints(e: Entity, k: number): readonly Vec2[] {
+  switch (e.kind) {
+    case 'line':
+      return [e.a, e.b];
+    case 'polyline':
+      return e.pts;
+    case 'polygon':
+      return k === 0 ? e.pts : (e.holes?.[k - 1]?.pts ?? []);
+    case 'hatch':
+      return k === 0 ? e.ring : (e.holes?.[k - 1] ?? []);
+    default:
+      return [];
   }
-  if (!(t1 > t0)) return null;
-  return [
-    { x: p.x + dir.x * t0, y: p.y + dir.y * t0 },
-    { x: p.x + dir.x * t1, y: p.y + dir.y * t1 },
-  ];
 }
 
-export function styledGeometry(e: Entity, clip?: Bounds): StyledGeometry | null {
-  switch (e.kind) {
-    case 'point':
-      return { cls: 'marker', point: e.p };
-    case 'polygon':
-      return { cls: 'fill', rings: [oriented(polygonRing(e), true), ...polygonHoles(e).map((h) => oriented(h, false))] };
-    case 'hatch':
-      return { cls: 'fill', rings: [oriented(e.ring, true), ...(e.holes ?? []).map((h) => oriented(h, false))] };
-    case 'line':
-      return { cls: 'line', paths: [{ pts: [e.a, e.b], closed: false }] };
-    case 'polyline':
-      return { cls: 'line', paths: [{ pts: e.bulges ? entityOutline(e) : e.pts, closed: false }] };
-    case 'circle':
-    case 'ellipse':
-      return { cls: 'line', paths: [{ pts: entityOutline(e), closed: e.kind === 'circle' || isClosedOutline(e) }] };
-    case 'arc':
-      return { cls: 'line', paths: [{ pts: tessellateArc(e), closed: false }] };
-    case 'spline':
-      return { cls: 'line', paths: [{ pts: catmullRom(e.pts, e.closed), closed: false }] };
-    case 'xline':
-    case 'ray': {
-      const seg = clip && clipLine(e.p, e.dir, e.kind === 'ray', clip);
-      return seg ? { cls: 'line', paths: [{ pts: seg, closed: false }] } : null;
-    }
-    default:
-      return null;
+/**
+ * Reads the geometry store's drawn-geometry records (`CoreStore.drawn`), one
+ * per object in the order they were asked for. Each record must be read,
+ * also the objects that draw nothing (text: null).
+ */
+export class DrawnReader {
+  private readonly buf: Float64Array;
+  private at = 0;
+
+  constructor(buf: Float64Array) {
+    this.buf = buf;
   }
+
+  private points(e: Entity, k: number): readonly Vec2[] {
+    const b = this.buf;
+    const n = b[this.at++];
+    if (n === SOURCE) return ownPoints(e, k);
+    if (n === REVERSED) return [...ownPoints(e, k)].reverse();
+    const out: Vec2[] = new Array(n);
+    for (let i = 0; i < n; i++) out[i] = { x: b[this.at + 2 * i], y: b[this.at + 2 * i + 1] };
+    this.at += 2 * n;
+    return out;
+  }
+
+  /** The next record, for `e`: the object it was asked for. */
+  read(e: Entity): StyledGeometry | null {
+    const b = this.buf;
+    switch (b[this.at++]) {
+      case MARKER: {
+        const point = { x: b[this.at], y: b[this.at + 1] };
+        this.at += 2;
+        return { cls: 'marker', point };
+      }
+      case LINE: {
+        const count = b[this.at++];
+        const paths: { pts: readonly Vec2[]; closed: boolean }[] = [];
+        for (let k = 0; k < count; k++) {
+          const closed = b[this.at++] === 1;
+          paths.push({ pts: this.points(e, k), closed });
+        }
+        return { cls: 'line', paths };
+      }
+      case FILL: {
+        const count = b[this.at++];
+        const rings: (readonly Vec2[])[] = [];
+        for (let k = 0; k < count; k++) rings.push(this.points(e, k));
+        return { cls: 'fill', rings };
+      }
+      default:
+        return null;
+    }
+  }
+}
+
+/** Numbers per object in a `CoreStore.measures` answer: flags, length, area, anchor x and y, spare. */
+const MEASURE_STRIDE = 6;
+
+/** The expressions' geometry values of object `i` in a `CoreStore.measures` answer (crates/geometry-core/src/store/draw.rs). */
+export function measuredAt(values: Float64Array, i: number): Measured {
+  const k = i * MEASURE_STRIDE;
+  const flags = values[k];
+  return {
+    length: flags & 1 ? values[k + 1] : null,
+    area: flags & 2 ? values[k + 2] : null,
+    anchor: flags & 4 ? { x: values[k + 3], y: values[k + 4] } : null,
+  };
+}
+
+const drawnGeometry = op<(e: Entity, oriented: boolean, clip: Bounds | null) => number[]>('drawnGeometry');
+
+/**
+ * One object's geometry for the style engine (symbol previews and tests; a
+ * layer asks the store for all its objects at once). Text and dimensions
+ * have none; construction lines are drawn only clipped to `clip`.
+ */
+export function styledGeometry(e: Entity, clip?: Bounds): StyledGeometry | null {
+  if (e.kind === 'text' || e.kind === 'dimension') return null;
+  return new DrawnReader(Float64Array.from(drawnGeometry(e, true, clip ?? null))).read(e);
 }
 
 // ── Walking along a path ───────────────────────────────────────────────

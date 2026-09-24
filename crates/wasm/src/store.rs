@@ -341,6 +341,31 @@ impl GeometryStore {
         vec![length, area]
     }
 
+    /// What is drawn of these objects, one record each
+    /// (`geometry-core::store::draw`); `oriented`: rings turned for the style
+    /// engine. Construction lines are clipped to the box, or left out
+    /// without one.
+    #[allow(clippy::too_many_arguments)]
+    pub fn drawn(
+        &self,
+        ids: &[f64],
+        oriented: bool,
+        has_clip: bool,
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+    ) -> Vec<f64> {
+        let clip = has_clip.then(|| rect(min_x, min_y, max_x, max_y));
+        self.inner.drawn(ids, oriented, clip.as_ref())
+    }
+
+    /// Geometry values of these objects for expressions: `flags, length,
+    /// area, anchor x, anchor y, 0` each (`store::draw::measure_record`).
+    pub fn measures(&self, ids: &[f64]) -> Vec<f64> {
+        self.inner.measures(ids)
+    }
+
     /// Edges of visible objects overlapping the rectangle (see `pack_edges`).
     #[wasm_bindgen(js_name = edgesIn)]
     #[allow(clippy::too_many_arguments)]

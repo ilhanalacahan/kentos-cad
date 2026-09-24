@@ -36,4 +36,5 @@ pub(super) static TABLES: &[&[Op]] = &[
     crate::ops::explode::OPS,
     crate::ops::areas::OPS,
     crate::triangulate::OPS,
+    crate::store::draw::OPS,
 ];

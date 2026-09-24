@@ -1,7 +1,8 @@
 // Records the TypeScript PickIndex's answers on a fixed scene into
 // fixtures/geometry/v1/store-v1.json (docs/adr/0008, S1), and the tool
 // previews and totals as the TypeScript computed them (trim, extend,
-// ghosts, stretch ghosts, selection totals): the Rust geometry store must
+// ghosts, stretch ghosts, selection totals), and what the layer builders
+// drew with the expressions' geometry values (S2): the Rust geometry store must
 // give them natively (crates/geometry-core/tests/store.rs) and through the
 // WASM build (src/wasm/store.wasm.test.ts) after the TypeScript is gone.
 // Runs only on purpose, while the reference still exists:
@@ -14,6 +15,7 @@ import type { Vec2 } from '../../src/model/geometry';
 import { layerTable } from '../../src/viewport/picking';
 import { DEFAULT_LABELS, labelRule } from '../../src/viewport/storeRecords';
 import { Gen, TOLERANCE, toJson } from '../../src/wasm/parity/harness';
+import { tsMeasured, tsSceneGeometry, tsStyledGeometry } from '../../src/wasm/parity/reference/draw';
 import { tsGrips, tsLabels } from '../../src/wasm/parity/reference/overlay';
 import { TsPickIndex } from '../../src/wasm/parity/reference/picking';
 import { tsExtend, tsGhosts, tsMeasure, tsStretchGhosts, tsTrim } from '../../src/wasm/parity/reference/tools';
@@ -22,6 +24,7 @@ import { SCENE_SCALES, SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneKinds,
 /** Cursor positions and tool rounds recorded, and the largest answer kept (a window over the whole scene lists every edge). */
 const CURSORS = 160;
 const TOOL_ROUNDS = 80;
+const DRAW_ROUNDS = 80;
 const MAX_ANSWER = 6_000;
 
 it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript PickIndex into the store fixture', () => {
@@ -100,6 +103,15 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript PickIndex into the 
     add(`esnet ${i}`, 'stretchGhosts', [selected, w, dx, dy], tsStretchGhosts(doc, selected, w, dx, dy));
     const m = tsMeasure(doc, selected);
     add(`toplam ${i}`, 'measure', [selected], [m.length, m.area]);
+  }
+  // Drawn geometry and the expressions' geometry values (S2), last, so the cases above stay as recorded.
+  for (let i = 1; i <= DRAW_ROUNDS; i++) {
+    const list = Array.from({ length: g.int(1, 3) }, () => g.pick(all));
+    const oriented = g.chance(0.5);
+    const clip = g.chance(0.6) ? sceneRect(g, sceneCursor(g, doc), [20, 200, 5000]) : undefined;
+    const ids = list.map((e) => e.id);
+    add(`çizim ${i}`, 'drawn', [ids, oriented, clip ?? null], list.map((e) => (oriented ? tsStyledGeometry(e, clip) : tsSceneGeometry(e, clip))));
+    add(`değerler ${i}`, 'measures', [ids], list.map((e) => tsMeasured(e)));
   }
   const file = {
     format: 'kentos.geometry-store',

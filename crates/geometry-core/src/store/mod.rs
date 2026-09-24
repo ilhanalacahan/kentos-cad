@@ -12,6 +12,7 @@
 //! query then applies the exact test the TypeScript applied, in the
 //! document's order, so the tree only makes it faster.
 
+pub mod draw;
 pub mod labels;
 mod pack;
 pub mod pick;

@@ -201,6 +201,16 @@ export class CoreStore {
     return typed(() => this.raw.measure(ids));
   }
 
+  /** What is drawn of these objects, one record each (read by `style/geometry.ts` `readDrawn`); `clip`: the box construction lines are clipped to. */
+  drawn(ids: Float64Array, oriented: boolean, clip: { minX: number; minY: number; maxX: number; maxY: number } | null): Float64Array {
+    return typed(() => this.raw.drawn(ids, oriented, clip !== null, clip?.minX ?? 0, clip?.minY ?? 0, clip?.maxX ?? 0, clip?.maxY ?? 0));
+  }
+
+  /** Geometry values of these objects for expressions: `flags, length, area, anchor x, anchor y, 0` each. */
+  measures(ids: Float64Array): Float64Array {
+    return typed(() => this.raw.measures(ids));
+  }
+
   /** Ids in the document's order. */
   ids(): Float64Array {
     return typed(() => this.raw.ids());

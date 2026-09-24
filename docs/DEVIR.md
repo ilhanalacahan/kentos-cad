@@ -25,17 +25,17 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş başladı (S1a–S1c):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri ve seçim toplamları artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (çizim hattı, araçların ve işlemlerin hesapları) hâlâ TypeScript; geçiş S2–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (araçların ve işlemlerin hesapları) hâlâ TypeScript; geçiş S3–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
   - olay günlüğü budama (migration 0003);
   - etkileşim ölçüm düzeneği (`pnpm perf:interaction`) ve TypeScript tabanı.
-- **Son doğrulama (main, S1c commit'i, bulut konteyneri):**
+- **Son doğrulama (main, S2 commit'i, bulut konteyneri):**
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 760 KB, gzip ile 260 KB (S1a'da +32, S1b'de +5, S1c'de +8 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
+- **WASM paketi:** 770 KB, gzip ile 263 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -57,12 +57,12 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Ölçüm kullanıcının makinesinde yapılır (bkz. §5); bulutta alınan sayı tabanla karşılaştırılamaz.
   - Ayrıntıları ADR 0008'in “Geometri deposu” başlığına yazın.
 
-### S2: çizim hattı
+### S2: çizim hattı (yapıldı)
 
-- `render/sceneBuilder.ts` ve `style/geometry.ts` katman başına toplu `layerGeometry`/`styledGeometry` alır (paketlenmiş halka ve yollar).
-- `render/styledSink.ts` dolguları toplu üçgenler.
-- İfadelerdeki `$alan`/`$uzunluk` değerleri katman kurulurken `store.measure` ile önceden alınır.
-- İki motor aynı çizimi vermeli (e2e piksel karşılaştırması). Katman kurma süresi ölçülür.
+- `render/styledLayer.ts` ve `render/sceneBuilder.ts` çizilecek geometriyi katman başına tek çağrıda alır (`PickIndex.drawn` → `store/draw.rs`; `style/geometry.ts` `DrawnReader` okur). Nesnenin kendi noktaları kopyalanmaz, kayıt onlara başvurur. Tek nesnelik `styledGeometry` (sembol önizlemeleri) aynı kaydı `drawnGeometry` işlemiyle alır.
+- `render/styledSink.ts` ve vurgu katmanı dolguları `render/fillQueue.ts` ile katman bitince tek `triangulateMany` çağrısında üçgenler.
+- Çizimdeki ifadelerin `$alan`, `$uzunluk`, `$y`, `$x` değerleri ilk istenince katman için bir kez `measures` ile gelir (`ExprScope.measured`). İşlem araçları, lejant ve sınıflama bunları hâlâ TS'te nesneden hesaplıyor (S4).
+- Eski hesap `src/wasm/parity/reference/draw.ts`'te referanstır; derin koşu temiz, donmuş dosyada çizim ve değer durumları var. E2e'de WebGL2'nin piksel sayısı değişmedi. Katman kurma süresi S1c ile başa baş (ADR 0008 “Çizim hattı”).
 
 ### S3: cephe ve TypeScript'in silinmesi
 

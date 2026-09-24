@@ -74,7 +74,7 @@ Kullanıcının kararları (2026-09-24):
   - Dizin dönmesinin nedeni: köprü köşeleri yalnız yineler, yeni nokta kurmaz. Dolgunun koordinatları çağıranın kendi noktalarıdır; orijine göre fark (§4.9) çizim paketlemesidir ve TS'te kalır.
   - Tipli giriş adıyla çağrılan karşılığıyla (`triangulate`) sınanır (`src/wasm/triangulate.wasm.test.ts`); o da parity testiyle TS'e bağlıdır ve fixture'la dondurulur. Aynı test basit halkalarda üçgen alanlarının toplamının halkanın alanına eşit olduğunu denetler.
   - Aynı makinede (bulut, Node 22) 50 000 halka: TS döngüsü 160–350 ms, paketleme dahil toplu çağrı ısındıktan sonra 48–60 ms; Float32 çıktı bit bit aynı.
-- **Sıcak yollar (S1):** kenet, seçme, etiket, tutamaç, hayaletler, budama ve uzatma önizlemesi ve seçim toplamları JSON tablosundan geçmez. Belgenin kopyasını tutan bir geometri deposuna (`Store`) tipli, `Float64Array` giriş-çıkışlı toplu sorgular yapılır. Ayrıntısı aşağıda “Geometri deposu” başlığındadır.
+- **Sıcak yollar (S1, S2):** kenet, seçme, etiket, tutamaç, hayaletler, budama ve uzatma önizlemesi, seçim toplamları ve katman kurulurken çizilen geometri JSON tablosundan geçmez. Belgenin kopyasını tutan bir geometri deposuna (`Store`) tipli, `Float64Array` giriş-çıkışlı toplu sorgular yapılır. Ayrıntısı aşağıda “Geometri deposu” başlığındadır.
 
 ### Geometri deposu (S1)
 
@@ -95,6 +95,16 @@ Kullanıcının kararları (2026-09-24):
   - **Aynı makinede ölçüm** (bulut, Node 22, `hat-1m`, çağrı başına): budama önizlemesi 1:1000 görünümde (~340 × 210 m) TS 1 525 ms, S1b (kenarlar depodan, budama TS'te) 1 580 ms, S1c 9,8 ms; genel görünümde TS 43 s, S1c 6,9 ms. Uzatma 1:1000'de 13,6 → 1,2 ms, genel görünümde 286 → 1,1 ms (S1b → S1c).
 - **Çok adaylı sorgular:** adaylar belge sırasına dizilir. Aday nesnelerin sekizde birini aşınca sıralama yerine belge sırasındaki liste bir kez yürünür; sorgu kutusu ağacın tamamını kapsıyorsa (genel görünüm) ağaç araması da atlanır.
 - **Aynı makinede ölçüm (bulut, Node 22):** imleç başına `parsel-50k`'da seçme yakın görünümde 10,2 → 0,008 ms, genel görünümde 9,9 → 0,05 ms; kenet yakında 10,1 → 0,01 ms, genelde 17,4 → 1,2 ms. Kare başına etiket kararı (çizim hariç; TS referansı sınır kutularını her seferinde yeniden hesapladığı için uygulamadakinden yavaştır): `parsel-50k` yakında 29 → 0,04 ms, genel görünümde 32 → 1,8 ms; `hat-1m` 18 → 0,03 ms. Uygulamadaki etkileşim ölçümü S1'in sonunda alınır (`docs/perf`).
+
+### Çizim hattı (S2)
+
+- **Toplu kayıt:** katman kurucuları nesnelerin çizilecek geometrisini depodan katman başına tek çağrıda alır (`drawn(ids, oriented, clip)`, `store/draw.rs`; TS'te `PickIndex.drawn`, `render/styledLayer.ts` `GeometrySource`). Kayıt başına tür (hiç, işaret, çizgiler, alan), yol ya da halka sayısı ve noktalar gelir. Eğriler (daire, yay, elips, eğri, yaylı çoklu çizgi ve alan) Rust'ta parçalanır. Stil motoru için halkalar TS'teki `oriented` gibi işaretli alanla döndürülür (dış halka saat yönünün tersine, delikler saat yönünde); vurgu katmanlarında halkalar olduğu gibi kalır. Yardımcı çizgiler kırpma kutusuna kırpılır, kutu yoksa çizilmez. Ölçünün yerleşim çizgileri iki noktalı açık yollar olarak gelir.
+- **Kopyasız düz geometri:** nesnenin kendi noktaları olan bir yol ya da halka kopyalanmaz. Kayıtta `SOURCE` (−1), yönü dönmüşse `REVERSED` (−2) yazar; TS okuyucu (`style/geometry.ts` `DrawnReader`) nesnenin kendi dizisini kullanır: çizginin iki ucu, çoklu çizginin ve alanın köşeleri (k + 1. halka için k. deliğin köşeleri), taramanın halkası ve adaları. Bir milyon parçalık eşyükselti katmanı sınırı böylece hiç geçmez; eski `styledGeometry` de bu nesnelerde diziyi olduğu gibi veriyordu.
+- **Dolgular:** `StyledSink` ve vurgu katmanı dolguları bir kuyrukta toplar (`render/fillQueue.ts`) ve katman bitince tek bir `triangulateMany` çağrısıyla üçgenler. Üçgenler çokgen çokgen döner; her çokgenin noktaları ayrı bir aralıkta olduğu için üçgenin hangi diziye gideceği dizinden bulunur. Her dolgu, tek başına adıyla üçgenlense alacağı üçgenleri bit bit alır (`render/fillQueue.test.ts`).
+- **İfadelerin geometri değerleri:** `$alan`, `$uzunluk`, `$y` ve `$x` çizim sırasında depodan gelir (`measures(ids)`: bayrak, uzunluk, alan, yer noktası). Katmanın bir ifadesi ilk kez geometri değeri isteyince bütün katman için bir kez alınır, hiçbir ifade istemezse hiç hesaplanmaz. İfade kapsamına `measured` eklendi; işlem araçları, lejant ve sınıflama gibi depo dışı kullanımlar değerleri eskisi gibi nesneden hesaplar (S4). Köşesi olmayan bir yolun `$y`'si TS'te hata verirdi; depo boş değer döndürür.
+- **Tek nesne:** depo dışındaki çağıranlar (sembol önizlemeleri, testler) `styledGeometry(e)` ile aynı kaydı `drawnGeometry` işlemiyle alır; uygulama tektir ve Rust'tadır.
+- **Doğrulama:** eski hesap `src/wasm/parity/reference/draw.ts`'tedir (`styledGeometry`, vurgu katmanının anahatları, ifadelerin değerleri). Depo parity testi her turda rastgele nesnelerin kayıtlarını okuyucuyla geri kurar ve eskisiyle karşılaştırır: döndürülmüş ve döndürülmemiş, kırpmalı ve kırpmasız, ayrıca tek nesnelik yol ve bilinmeyen nesne. Derin koşu (20 000 tur) temiz geçti. Donmuş dosyaya 71 çizim ve 80 değer durumu eklendi; native okuyucu kayıtları aynı biçimde çözer. E2e'de WebGL2'nin çizdiği piksel sayısı S1c ile birebir aynı kaldı.
+- **Ölçüm** (bulut, Node 22, makine başka işlerle meşgulken iki sürüm art arda, büyük katmanı `buildStyledLayer` ile 9 kez kurma, ısınmış medyan): `parsel-50k` S1c 142,8/142,9 ms, S2 141,6/146,9 ms; `hat-1m` S1c 180/193 ms, S2 179/175 ms. Fark gürültü içindedir. Aynı süreçte parçalar: eski geometri ve TS üçgenleme 82–85 ms, yeni kayıt, okuma ve toplu üçgenleme 71–74 ms. Katmanın geri kalanı (stil motorunun vuruş paketleme işi) değişmedi. İlk kurulum, depo o ana kadar eşitlenmediyse ilk eşitlemeyi de öder (+130 ms); bu iş S1c'de ilk seçme sorgusundaydı.
 
 ### Başlatma, worker ve hata
 
@@ -127,6 +137,7 @@ Kullanıcının kararları (2026-09-24):
   | S1a (geometri deposu) | 727 KB | 247 KB | Depo, R-ağacı, seçme ve kenet kuralları, paketli okuyucu, `GeometryStore` sınıfı; std `HashMap` ve sıralama örnekleri de geldi |
   | S1b (etiket, tutamaç) | 741 KB | 252 KB | Etiket kararı ve kuralları, tutamaç listesi, belge sırası listesi |
   | S1c (araç önizlemeleri) | 760 KB | 260 KB | Buda ve uzat önizlemesi (kenar kutusu ağacı, ışın ve çember süzgeci), hayalet yolları, esnet, toplamlar; hesapların kendisi zaten tablodaydı |
+  | S2 (çizim hattı) | 770 KB | 263 KB | Çizilen geometrinin kayıtları, ifadelerin geometri değerleri, `drawnGeometry` işlemi |
 
 ### Doğrulama
 

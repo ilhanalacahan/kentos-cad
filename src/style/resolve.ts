@@ -1,5 +1,5 @@
 import type { Entity } from '../model/entities';
-import { toNumber, toText, truthy } from '../model/expression/expressionLib';
+import { toNumber, toText, truthy, type Measured } from '../model/expression/expressionLib';
 import type { ExprCache } from './compile';
 import type { LayerRenderer, Rule, Symbol, SymbolRef, SymbolSet } from '../model/style';
 
@@ -20,11 +20,14 @@ export interface ResolvedSet {
 export interface ResolveEnv {
   readonly exprs: ExprCache;
   layerName(id: string): string;
+  /** The geometry values of the object at 1-based `index` (the geometry store, while drawing a layer). */
+  readonly measured?: (index: number) => Measured;
 }
 
 function value(src: string, e: Entity, index: number, env: ResolveEnv) {
   const x = env.exprs.get(src);
-  return x ? x.evaluate({ entity: e, index, layerName: env.layerName }) : null;
+  const m = env.measured;
+  return x ? x.evaluate({ entity: e, index, layerName: env.layerName, measured: m && (() => m(index)) }) : null;
 }
 
 const narrow = (a: { minScale?: number; maxScale?: number }, r: Rule) => ({

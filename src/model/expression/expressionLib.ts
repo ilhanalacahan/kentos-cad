@@ -1,5 +1,6 @@
 import { foldTurkish } from '../../core/text';
 import { ENTITY_KIND_LABEL, entityAnchor, entityArea, entityLength, type Entity } from '../entities';
+import type { Vec2 } from '../geometry';
 
 /**
  * Values, variables and functions of the expression language
@@ -19,6 +20,16 @@ export interface ExprScope {
   layerName(id: string): string;
   /** Denominator of the plot scale while drawing a symbol ($ölçek); absent elsewhere. */
   readonly plotScale?: number;
+  /** The object's geometry values from the geometry store (drawing a layer, docs/adr/0008 S2); computed here when absent. */
+  readonly measured?: () => Measured;
+}
+
+/** An object's geometry values for expressions: `$uzunluk`, `$alan`, and the anchor behind `$y` and `$x`. */
+export interface Measured {
+  readonly length: number | null;
+  readonly area: number | null;
+  /** Null for a path without vertices. */
+  readonly anchor: Vec2 | null;
 }
 
 const NUMERIC = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
@@ -97,14 +108,14 @@ function vertexCount(e: Entity): number | null {
 }
 
 export const EXPR_VARIABLES: readonly ExprVariable[] = [
-  { name: 'alan', description: 'Alan (m²): kapalı alan (delikler düşülür), daire, tam elips, tarama', get: (s) => entityArea(s.entity) },
-  { name: 'uzunluk', aliases: ['çevre', 'length', 'perimeter'], description: 'Uzunluk ya da çevre (m)', get: (s) => entityLength(s.entity) },
+  { name: 'alan', description: 'Alan (m²): kapalı alan (delikler düşülür), daire, tam elips, tarama', get: (s) => (s.measured ? s.measured().area : entityArea(s.entity)) },
+  { name: 'uzunluk', aliases: ['çevre', 'length', 'perimeter'], description: 'Uzunluk ya da çevre (m)', get: (s) => (s.measured ? s.measured().length : entityLength(s.entity)) },
   { name: 'köşe', aliases: ['vertices'], description: 'Köşe sayısı (delikler dahil)', get: (s) => vertexCount(s.entity) },
   { name: 'tür', aliases: ['type'], description: 'Nesne türü: “Kapalı alan”, “Çizgi” …', get: (s) => ENTITY_KIND_LABEL[s.entity.kind] },
   { name: 'katman', aliases: ['layer'], description: 'Katman adı', get: (s) => s.layerName(s.entity.layerId) },
   { name: 'etiket', aliases: ['label'], description: 'Çizimde görünen etiket (parsel no, nokta adı)', get: (s) => s.entity.label ?? null },
-  { name: 'y', description: 'Y (sağa): nesnenin yer noktası', get: (s) => entityAnchor(s.entity).x },
-  { name: 'x', description: 'X (yukarı): nesnenin yer noktası', get: (s) => entityAnchor(s.entity).y },
+  { name: 'y', description: 'Y (sağa): nesnenin yer noktası', get: (s) => (s.measured ? (s.measured().anchor?.x ?? null) : entityAnchor(s.entity).x) },
+  { name: 'x', description: 'X (yukarı): nesnenin yer noktası', get: (s) => (s.measured ? (s.measured().anchor?.y ?? null) : entityAnchor(s.entity).y) },
   { name: 'sıra', aliases: ['row_number'], description: 'Bu çalıştırmadaki sırası: 1, 2, 3 …', get: (s) => s.index },
   { name: 'id', description: 'Nesne numarası', get: (s) => s.entity.id },
   { name: 'ölçek', aliases: ['scale'], description: 'Çizim ölçeğinin paydası (1/1000 için 1000); yalnızca sembol çizilirken. Metreyi kâğıt mm’sine çevirir: m × 1000 / $ölçek', get: (s) => s.plotScale ?? null },

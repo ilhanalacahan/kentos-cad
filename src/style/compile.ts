@@ -1,6 +1,6 @@
 import type { Entity } from '../model/entities';
 import { compileExpression, type CompiledExpression } from '../model/expression/expression';
-import { toNumber, toText, truthy, type ExprScope, type ExprValue } from '../model/expression/expressionLib';
+import { toNumber, toText, truthy, type ExprScope, type ExprValue, type Measured } from '../model/expression/expressionLib';
 import { offsetPath } from '../model/geom/offset';
 import type { Vec2 } from '../model/geometry';
 import { interiorPoint, placeAlong, wavePaths, type StyledGeometry } from './geometry';
@@ -43,6 +43,8 @@ export interface CompileEnv {
   layerName(id: string): string;
   /** Height/width of an image asset (tiles keep their proportions); 1 when unknown. */
   assetAspect?(id: string): number;
+  /** The geometry values of the object at 1-based `index` in the layer (the geometry store); computed per object when absent. */
+  readonly measured?: (index: number) => Measured;
 }
 
 /** The object and its position in the run, as expressions see it. */
@@ -54,7 +56,8 @@ export interface CompileTarget {
 function evaluate(v: { expr: string }, t: CompileTarget, env: CompileEnv): ExprValue {
   const e = env.exprs.get(v.expr);
   if (!e) return null;
-  const scope: ExprScope = { entity: t.entity, index: t.index, layerName: env.layerName, plotScale: env.plotScale };
+  const m = env.measured;
+  const scope: ExprScope = { entity: t.entity, index: t.index, layerName: env.layerName, plotScale: env.plotScale, measured: m && (() => m(t.index)) };
   return e.evaluate(scope);
 }
 

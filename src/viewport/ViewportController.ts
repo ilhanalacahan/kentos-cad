@@ -789,6 +789,7 @@ export class ViewportController {
       library: this.ctx.styles.library,
       exprs: new ExprCache(),
       layerName: (id: string) => doc.layers.get(id)?.name ?? id,
+      geometry: this.picker,
       clip: this.constructionClip(),
     };
     for (const id of ids) {
@@ -817,6 +818,7 @@ export class ViewportController {
       buildSceneLayer('__sel', sel, base, {
         origin: doc.origin,
         palette: this.palette,
+        geometry: this.picker,
         overrideColor: accent,
         overrideFill: withAlpha(accent, 0.13),
         overrideDash: [6, 3],
@@ -830,6 +832,7 @@ export class ViewportController {
       buildSceneLayer('__hover', hover ? [hover] : [], base, {
         origin: doc.origin,
         palette: this.palette,
+        geometry: this.picker,
         overrideColor: withAlpha(accent, 0.85),
         // Hover is outline-only: a fill flickers across large areas as the cursor moves.
         overrideFill: null,

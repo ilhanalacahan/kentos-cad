@@ -4,9 +4,11 @@ import type { Entity } from '../../model/entities';
 import { mirror, rotation, scaling, translation, type Affine } from '../../model/geom/affine';
 import { transformEntity } from '../../model/ops/transform';
 import { createSampleProject } from '../../model/sampleProject';
+import { DrawnReader, measuredAt, styledGeometry } from '../../style/geometry';
 import { PickIndex } from '../../viewport/picking';
 import { readGrips } from '../../viewport/storeRecords';
 import { Gen, sameResult, TOLERANCE, toJson } from './harness';
+import { tsMeasured, tsSceneGeometry, tsStyledGeometry } from './reference/draw';
 import { tsGrips, tsLabels } from './reference/overlay';
 import { tsExtend, tsGhosts, tsMeasure, tsStretchGhosts, tsTrim } from './reference/tools';
 import { TsPickIndex } from './reference/picking';
@@ -98,6 +100,31 @@ function compareTools(g: Gen, doc: CadDocument, ts: TsPickIndex, rs: PickIndex):
   );
 }
 
+/** What the layer builders draw of random objects (styled or highlight geometry, clipped or not) and the expressions' geometry values. */
+function compareDraw(g: Gen, doc: CadDocument, rs: PickIndex): string | null {
+  const all = [...doc.all()];
+  if (!all.length) return null;
+  const list = g.chance(0.2) ? all : all.filter(() => g.chance(0.1));
+  const oriented = g.chance(0.5);
+  const clip = g.chance(0.6) ? sceneRect(g, sceneCursor(g, doc), [20, 200, 5000]) : undefined;
+  const ids = list.map((e) => e.id);
+  const drawn = new DrawnReader(rs.drawn(ids, oriented, clip));
+  const values = rs.measures(ids);
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    const r =
+      sameResult(toJson(drawn.read(e)), toJson(oriented ? tsStyledGeometry(e, clip) : tsSceneGeometry(e, clip)), TOLERANCE, `drawn (${oriented ? 'stil' : 'vurgu'}) ${e.kind}`) ??
+      sameResult(toJson(measuredAt(values, i)), toJson(tsMeasured(e)), TOLERANCE, `measures ${e.kind}`);
+    if (r) return `${r}\n    nesne ${JSON.stringify(e).slice(0, 300)}${clip ? `, kutu ${JSON.stringify(clip)}` : ''}`;
+  }
+  // An object the store does not have draws nothing.
+  const none = rs.drawn([999_999], oriented, clip);
+  if (none.length !== 1 || none[0] !== 0) return `drawn: bilinmeyen nesne ${Array.from(none).join(', ')}`;
+  // One object by name (symbol previews): as a styled layer, but a dimension has no geometry.
+  const e = g.pick(all);
+  return sameResult(toJson(styledGeometry(e, clip)), toJson(e.kind === 'dimension' ? null : tsStyledGeometry(e, clip)), TOLERANCE, `styledGeometry ${e.kind}`);
+}
+
 /** A random edit through the document's API (or its layers). */
 function edit(g: Gen, doc: CadDocument): void {
   const ids = [...doc.all()].map((e) => e.id);
@@ -169,7 +196,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
     const g = new Gen(20260924);
     const failures: string[] = [];
     for (let i = 0; i < ROUNDS && failures.length < 5; i++) {
-      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs) ?? compareDraw(g, doc, rs);
       if (r) failures.push(r);
     }
     rs.dispose();
@@ -190,7 +217,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
         failures.push(`sıra ${i}. turda ayrıldı: ${got.length} / ${order.length} nesne`);
         break;
       }
-      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs) ?? compareTools(g, doc, ts, rs) ?? compareDraw(g, doc, rs);
       if (r) failures.push(r);
     }
     rs.dispose();

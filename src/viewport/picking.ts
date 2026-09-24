@@ -54,8 +54,8 @@ const LABEL_DEFAULTS = JSON.stringify(Object.fromEntries(Object.entries(DEFAULT_
 
 /**
  * Spatial queries: picking, object snap, window selection, boundaries,
- * what the overlay draws (labels, grips) and what tools preview (trim,
- * extend, ghosts) or total. The
+ * what the overlay draws (labels, grips), what tools preview (trim,
+ * extend, ghosts) or total, and what the layer builders draw. The
  * Rust geometry store answers them (docs/adr/0008, S1: an R-tree and the
  * rules that were here, in the document's order); this keeps its copy of
  * the objects in step. Removals go at once; puts wait for the next query
@@ -276,6 +276,18 @@ export class PickIndex {
     this.sync();
     const [length, area] = this.store.measure(Float64Array.from(ids));
     return { length, area };
+  }
+
+  /** What these objects draw, one record each (style/geometry.ts `DrawnReader`): the layer builders' geometry. */
+  drawn(ids: readonly number[], oriented: boolean, clip?: Bounds): Float64Array {
+    this.sync();
+    return this.store.drawn(Float64Array.from(ids), oriented, clip ?? null);
+  }
+
+  /** Their geometry values for expressions (style/geometry.ts `measuredAt`). */
+  measures(ids: readonly number[]): Float64Array {
+    this.sync();
+    return this.store.measures(Float64Array.from(ids));
   }
 
   /** Window (fully inside) or crossing (touching) selection. */
