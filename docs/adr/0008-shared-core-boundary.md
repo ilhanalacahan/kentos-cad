@@ -84,7 +84,12 @@ Kullanıcının kararları (2026-09-24):
   - Betik; `crates/geometry-core`, `crates/wasm`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` ve `.cargo/config.toml` özetini `src/wasm/pkg/.stamp` ile karşılaştırır.
   - Özet değiştiyse `nice pnpm rust:wasm` çalıştırır. Rust araç zinciri artık `pnpm test` için de gereklidir; ADR 0001'in ilgili maddesi bu kararla değişti.
 - **`wasm` profili:** release'den türer; `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`. Paket `target/wasm32-unknown-unknown/wasm/`'dan `wasm-bindgen` ile `src/wasm/pkg`'a yazılır; paket depoya girmez.
-- **Boyut:** altyapıdan sonra 183 KB ham, 76 KB gzip. Önceki 37 KB'lık pakete JSON ayrıştırma ve sayı yazma kodu eklendi. Her taşıma diliminde ADR 0005 taslağındaki başlangıç sınırıyla (300 KB gzip) karşılaştırılıp raporlanır.
+- **Boyut:** her taşıma diliminde ADR 0005 taslağındaki başlangıç sınırıyla (300 KB gzip) karşılaştırılıp raporlanır.
+
+  | Dilim | Ham | gzip | Not |
+  |---|---|---|---|
+  | 0 (altyapı) | 183 KB | 76 KB | JSON ayrıştırma ve sayı yazma kodu eklendi (önce 37 KB) |
+  | P1 (60 işlem) | 302 KB | 112 KB | İşlem başına ~0,6 KB gzip: her işlemin argüman ve sonuç tipleri için serde kodu. `opt-level = "s"` yalnız %10 kazandırır. Büyüme sürerse argümanlar tek bir `Value` yolundan okunacak (tip başına kod, işlem başına değil) |
 
 ### Doğrulama
 
@@ -96,7 +101,7 @@ Kullanıcının kararları (2026-09-24):
 - **Aynı dosyaları okuyanlar:**
   - native: `crates/geometry-core/tests/calls.rs`;
   - WASM, uygulamanın yolundan: `src/wasm/calls.wasm.test.ts`.
-- **Bağımsız referanslar** (`reference.json`, Python kesirleri) kapalı biçimli ölçülerde her dilimde genişletilir (§23.4).
+- **Bağımsız referanslar** her dilimde kapalı biçimli ölçülerle genişletilir (§23.4): `reference.json` (alanlar) ve `reference-calls.json` (adıyla çağrılan işlemler: TM doğru kesişimi, üç noktadan çember, yarım daire yayı, parçaya uzaklık, güzergâh uzunluğu, iki çember kesişimi, teğet noktaları, yay uzunluğu; `scripts/fixtures/geometry_call_reference.py`). Native (`tests/calls.rs`), WASM ve TS varken TS (`src/wasm/parity/reference.test.ts`) hata sınırı içinde kalmalıdır.
 - **Golden sahipliği:** TS silindikten sonra dosyalar donmuş davranış kilididir. Bilinçli bir davranış değişikliği (ör. §23.3 robust kararlar) dosyayı incelemeyle günceller.
 
 ## Sonuçlar

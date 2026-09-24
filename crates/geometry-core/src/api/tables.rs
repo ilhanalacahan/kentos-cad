@@ -2,4 +2,10 @@
 
 use super::Op;
 
-pub(super) static TABLES: &[&[Op]] = &[crate::vec2::OPS, crate::polygon::OPS];
+pub(super) static TABLES: &[&[Op]] = &[
+    crate::geometry::OPS,
+    crate::geom::affine::OPS,
+    crate::geom::arc::OPS,
+    crate::geom::intersect::OPS,
+    crate::geom::bulge::OPS,
+];

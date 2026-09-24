@@ -7,7 +7,7 @@
 use std::f64::consts::{PI, TAU};
 
 use crate::Vec2;
-use crate::bulge::{bulge_arc, bulge_at};
+use crate::geom::bulge::{bulge_arc, bulge_at};
 use crate::jsmath::{acos, cos, js_hypot, js_min, sin};
 
 /// Most chords one curve piece may get. Beyond it the tolerance is not met: at

@@ -117,3 +117,75 @@ fn every_call_fixture_matches_the_typescript_reference() {
             .join("\n")
     );
 }
+
+/// Every number within `bound` of the independent reference's decimal text.
+fn within(actual: &Value, expected: &Value, bound: f64, path: &str) -> Result<(), String> {
+    match (actual, expected) {
+        (Value::Number(a), Value::String(e)) => {
+            let (a, e) = (
+                a.as_f64().unwrap_or(f64::NAN),
+                e.parse::<f64>()
+                    .map_err(|_| format!("{path}: sayı değil"))?,
+            );
+            let err = (a - e).abs();
+            if err <= bound {
+                Ok(())
+            } else {
+                Err(format!("{path}: hata {err} > {bound}"))
+            }
+        }
+        (Value::Array(a), Value::Array(e)) if a.len() == e.len() => {
+            for (i, (x, y)) in a.iter().zip(e).enumerate() {
+                within(x, y, bound, &format!("{path}[{i}]"))?;
+            }
+            Ok(())
+        }
+        (Value::Object(a), Value::Object(e)) => {
+            for (k, y) in e {
+                within(
+                    a.get(k).unwrap_or(&Value::Null),
+                    y,
+                    bound,
+                    &format!("{path}.{k}"),
+                )?;
+            }
+            Ok(())
+        }
+        _ if actual == expected => Ok(()),
+        _ => Err(format!("{path}: {actual} ≠ {expected}")),
+    }
+}
+
+/// Accuracy against the independent reference (`reference-calls.json`,
+/// Python fractions and 60-digit roots; CLAUDE.md §23.4).
+#[test]
+fn operations_stay_within_the_independent_reference_bounds() {
+    let file: Value = serde_json::from_str(
+        &std::fs::read_to_string(dir().join("reference-calls.json")).expect("reference file"),
+    )
+    .expect("reference JSON");
+    assert_eq!(file["format"], "kentos.geometry-call-reference");
+    let mut failures = Vec::new();
+    for c in file["cases"].as_array().expect("cases") {
+        let label = format!(
+            "{}: {}",
+            c["fn"].as_str().unwrap(),
+            c["name"].as_str().unwrap()
+        );
+        let bound: f64 = c["bound"].as_str().unwrap().parse().unwrap();
+        let out = run_named(
+            c["fn"].as_str().unwrap(),
+            &serde_json::to_string(&c["args"]).unwrap(),
+        )
+        .and_then(|o| serde_json::from_str::<Value>(&o).map_err(|e| e.to_string()));
+        match out {
+            Ok(v) => {
+                if let Err(e) = within(&v, &c["expect"], bound, &label) {
+                    failures.push(e);
+                }
+            }
+            Err(e) => failures.push(format!("{label}: {e}")),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

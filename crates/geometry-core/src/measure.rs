@@ -4,7 +4,7 @@
 //! a tessellated outline in TypeScript; their exact bounds come with the
 //! Rust port of the outline (docs/adr/0002-contracts-fixtures.md).
 
-use crate::bulge::{bulge_path_length, bulge_ring_area};
+use crate::geom::bulge::{bulge_path_length, bulge_ring_area};
 use crate::jsmath::{js_max, js_min};
 use crate::vec2::Vec2;
 

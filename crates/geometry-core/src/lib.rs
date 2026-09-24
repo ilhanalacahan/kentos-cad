@@ -11,14 +11,17 @@
     not(test),
     deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
 )]
+// A faithful port keeps the TypeScript's comparisons and index loops: `t < lo
+// || t > hi` lets NaN through where `!(lo..=hi).contains(&t)` would not.
+#![allow(clippy::manual_range_contains, clippy::needless_range_loop)]
 
 pub mod api;
-pub mod bulge;
 pub mod ewkb;
+pub mod geom;
+pub mod geometry;
 pub mod jsmath;
 pub mod measure;
 pub mod numeric;
-pub mod polygon;
 pub mod tessellate;
 pub mod vec2;
 

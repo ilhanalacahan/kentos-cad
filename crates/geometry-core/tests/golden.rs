@@ -6,9 +6,9 @@
 #![allow(clippy::disallowed_methods)]
 
 use kentos_geometry_core::Vec2;
-use kentos_geometry_core::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
+use kentos_geometry_core::geom::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
+use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
-use kentos_geometry_core::polygon::{point_in_polygon, signed_area};
 use serde_json::{Value, json};
 
 const FILE: &str = concat!(
