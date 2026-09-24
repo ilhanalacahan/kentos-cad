@@ -116,6 +116,7 @@ export const MAIN_MENU: TopMenu[] = [
       'view.rightPanel',
       'view.bottomPanel',
       'view.coords',
+      'view.ribbon',
       sec('Görünüş'),
       { label: 'Tema', icon: 'appearance', items: ['view.theme.dark', 'view.theme.light'] },
       { label: 'Çizim motoru', icon: 'chip', items: ['view.renderer.webgl2', 'view.renderer.webgpu'] },
