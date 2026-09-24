@@ -22,6 +22,7 @@ import { openLoginDialog } from '../ui/cloud/LoginDialog';
 import { openDeleteDialog, openRenameDialog } from '../ui/cloud/ProjectActions';
 import { openProjectsDialog } from '../ui/cloud/ProjectsDialog';
 import { CloudSession } from './cloud/session';
+import { registerFileExchangeCommands } from './fileExchange';
 import { DocumentFiles } from './fileIO';
 import { ServerStatus } from './server';
 import { registerDefaultKeybindings } from './keybindings';
@@ -113,6 +114,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     show: (tab) => shell?.showProcessing(tab),
   });
   registerStyleCommands(ctx);
+  registerFileExchangeCommands(ctx);
   // The open cloud project as the rename and delete dialogs name it.
   const openTarget = () => {
     const p = ctx.cloud.project.value;
