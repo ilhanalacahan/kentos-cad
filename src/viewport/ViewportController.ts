@@ -47,6 +47,21 @@ const TRACK_PX = 8;
 /** Snaps that make sense as tracking origins. */
 const TRACKABLE = new Set<SnapKind>(['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection']);
 
+/**
+ * Main-thread timings (ms) the interaction harness collects in dev builds
+ * (scripts/perf/interaction.mjs, docs/perf). It sets `kentos.view.probe` to
+ * an empty probe and reads it back. Every use is behind import.meta.env.DEV,
+ * which a production build folds to false, so production code is unchanged.
+ */
+export interface ViewportProbe {
+  /** Per pointer move: object snap and tracking, the active tool's move handler, the whole handler. */
+  moves: { snap: number; tool: number; total: number }[];
+  /** Per frame: when it started (performance.now), the `stats` steps and, inside the overlay, labels and the active tool's preview. */
+  frames: { at: number; build: number; render: number; overlay: number; labels: number; tool: number }[];
+  /** The overlay being drawn writes its split here; the frame copies it into its entry. */
+  overlay: { labels: number; tool: number };
+}
+
 interface ViewportEvents {
   contextmenu: { clientX: number; clientY: number; world: Vec2; screen: Vec2; kind: ViewportMenuKind };
   /** A tool asks the UI to edit the text of an entity in place. */
@@ -93,6 +108,8 @@ export class ViewportController {
   private frameQueued = false;
   /** CPU time of the last frame's steps in ms: rebuilding dirty layers, GPU submit, the 2D overlay. */
   stats = { build: 0, render: 0, overlay: 0 };
+  /** Dev builds only, set by the interaction harness (see ViewportProbe); `declare` emits no field. */
+  declare probe?: ViewportProbe;
   private glQueued = false;
 
   private screenCursor: Vec2 | null = null;
@@ -568,17 +585,23 @@ export class ViewportController {
     );
     d.add(
       listen<PointerEvent>(el, 'pointermove', (e) => {
+        const t0 = import.meta.env.DEV ? performance.now() : 0;
         if (this.panFrom) {
           this.camera.panBy(e.clientX - this.panFrom.x, e.clientY - this.panFrom.y);
           this.panFrom = { x: e.clientX, y: e.clientY };
         }
         const r = el.getBoundingClientRect();
         this.screenCursor = { x: e.clientX - r.left, y: e.clientY - r.top };
+        const s0 = import.meta.env.DEV ? performance.now() : 0;
         this.updateSnap(this.screenCursor);
+        const s1 = import.meta.env.DEV ? performance.now() : 0;
         const p = this.pointer(e);
         this.cursorWorld.set(p.world);
+        const m0 = import.meta.env.DEV ? performance.now() : 0;
         if (!this.panFrom) this.ctx.tools.active.pointerMove?.(p);
+        const m1 = import.meta.env.DEV ? performance.now() : 0;
         this.requestOverlay();
+        if (import.meta.env.DEV && this.probe) this.probe.moves.push({ snap: s1 - s0, tool: m1 - m0, total: performance.now() - t0 });
       }),
     );
     d.add(
@@ -711,6 +734,7 @@ export class ViewportController {
     this.drawOverlay();
     const t3 = performance.now();
     this.stats = { build: t1 - t0, render: t2 - t1, overlay: t3 - t2 };
+    if (import.meta.env.DEV && this.probe) this.probe.frames.push({ at: t0, ...this.stats, ...this.probe.overlay });
   }
 
   /**
@@ -830,10 +854,14 @@ export class ViewportController {
     const pal = this.palette;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, cam.width, cam.height);
+    const l0 = import.meta.env.DEV ? performance.now() : 0;
     drawLabels(g, this.ctx.doc, cam, pal, (e) => this.picker.boundsOf(e), (l) => this.dimensionText(l), this.editingId);
+    const l1 = import.meta.env.DEV ? performance.now() : 0;
     const sel = [...this.ctx.selection.ids.value].map((id) => this.ctx.doc.get(id)).filter((e): e is Entity => !!e);
     drawGrips(g, sel, cam, pal, this.ctx.tools.active.activeGrip?.() ?? null);
+    const d0 = import.meta.env.DEV ? performance.now() : 0;
     this.ctx.tools.active.draw?.(g, cam);
+    if (import.meta.env.DEV && this.probe) this.probe.overlay = { labels: l1 - l0, tool: performance.now() - d0 };
     if (this.snap) drawSnap(g, this.snap, cam, pal);
     drawObjectTracking(g, this.acquired, this.snap ? null : this.track, cam, pal, (m) => this.ctx.format.length(m));
     drawNorthArrow(g, cam, pal);

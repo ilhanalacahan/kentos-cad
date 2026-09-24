@@ -78,6 +78,8 @@ export async function launch(url, { width = 1600, height = 900, args = [] } = {}
   const api = {
     send,
     consoleLog,
+    /** The browser process (scripts/perf/interaction.mjs sums its process tree's memory). */
+    pid: proc.pid,
     /** Subscribe to a DevTools event (e.g. Page.screencastFrame). */
     on(method, fn) {
       if (!listeners.has(method)) listeners.set(method, []);

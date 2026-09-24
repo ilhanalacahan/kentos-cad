@@ -100,6 +100,7 @@ pnpm db:setup             # kentosd db-setup + migrate + dev-seed (yerel PostGIS
 pnpm api                  # kentosd serve: 127.0.0.1:8787 (veritabanı yoksa yalnızca /v1/health)
 pnpm kentosd -- <komut>   # yönetim: tenant add|list, user add|password, member add|list, project deleted|restore, migrate, dev-seed
 pnpm e2e:cloud            # gerçek sunucu ve veritabanıyla bulut akışı (giriş, yükleme, otomatik kayıt, çakışma, kopma, yeniden adlandırma, silme)
+pnpm perf:interaction     # etkileşim ölçümü (parsel-50k, hat-1m): seçme, kenet, buda önizlemesi, kaydırma, katman kurma → docs/perf/ (§9.4)
 ```
 
 - **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini ve proje WebSocket'ini (`/v1/ws`) `vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; yerel çizim sunucuya hiç bağlı değildir.
@@ -448,6 +449,7 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
 - **Vurgu ayrı katmandır.** Seçim değişince yalnızca `__sel` ve `__hover` yeniden kurulur, belge katmanlarına dokunulmaz.
 - **`ViewportController`:**
   - `requestRender()` GPU'yu ve üst katmanı, `requestOverlay()` yalnızca 2B üst katmanı çizdirir. İkisi de `requestAnimationFrame` içinde birleştirilir.
+  - `stats` son karenin adım sürelerini tutar. `probe` (`ViewportProbe`) yalnız geliştirme derlemesindedir: etkileşim ölçümü (`scripts/perf/interaction.mjs`) `kentos.view.probe`'a boş bir kayıt koyar; her `pointermove` kenet, araç ve toplam süresini, her kare başlangıç anını, `stats` adımlarını ve üst katmandaki etiket ve araç önizlemesi sürelerini ekler. Bütün kullanımlar `import.meta.env.DEV` arkasındadır ve alan `declare` ile tanımlıdır: üretim derlemesi bayt bayt aynı kalır.
   - Olay işleyicisinde asla eşzamanlı çizim yapmayın.
   - **Tek istisna boyut değişimidir:** canvas'ın `width`/`height` değeri değişince tampon temizlenir ve WebGL bağlamı `alpha: false` olduğu için siyah görünür. Çizim bir sonraki kareye bırakılırsa tarayıcı arada bu siyah tamponu gösterir; panel ayırıcısı sürüklenirken ekran yanıp söner. Bu yüzden `resize()` (ResizeObserver içinde, düzenden sonra ve boyamadan önce çalışır) boyut gerçekten değiştiyse hemen `frame()` çağırır. Duman testi sürükleme sırasında ekran akışını kare kare inceleyerek bunu denetler.
 - **Üst katman** (`viewport/overlay.ts`, Canvas2D) şunları çizer: etiketler (`LabelStyle` ile), tutamaçlar, kenet işareti, artı imleç, ölçek çubuğu, "K" kuzey oku ve araç önizlemeleri. GPU metni (SDF) gelene kadar yazılar buradadır.
@@ -530,7 +532,7 @@ kurallar büyük veriye geçerken kodun yeniden yazılmasını önlemek içindir
 8. **Çizgi kalınlığı** için `gl.lineWidth` kullanılmaz (çoğu sürücüde 1 px). Kalın çizgiler örneklenmiş dörtgenlerle (instanced quads) çizilecek.
 9. **Etiketler ölçek eşikleriyle ayıklanır** (`LabelStyle.minScale`, `minFeaturePx`). Görünmeyecek etiket için metin ölçülmez.
 10. **DOM okuma ve yazma karışmaz.** Önce ölçün, sonra yazın; döngü içinde `getBoundingClientRect` ile stil yazmayı art arda yapmayın.
-11. **Ölçmeden optimizasyon yapılmaz.** `performance.mark/measure` kullanın. Planlanan `?debug=perf` bayrağı kare süresi, yüklenen segment sayısı ve seçme süresini gösterecek.
+11. **Ölçmeden optimizasyon yapılmaz.** `performance.mark/measure` kullanın. İmleç başına seçme ve kenet, kaydırma, buda önizlemesi ve katman kurma süreleri `pnpm perf:interaction` ile ölçülür (§9.4, `docs/perf/`); bir değişikliğin bunları geriletmediği tabanla karşılaştırılarak gösterilir. Planlanan `?debug=perf` bayrağı kare süresi, yüklenen segment sayısı ve seçme süresini gösterecek.
 
 ### 6.3 Bilinen darboğazlar (büyük veri öncesi çözülecek)
 
@@ -684,6 +686,7 @@ Kurallar:
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
 - **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi, yerleşik modelin tek geri alma adımıyla çalışması, tasarımcıda girdiye bağlı adımlı modelin kaydedilmesi), Yeni proje (`Ctrl+Alt+N`: ad, sistem, ölçek; kaydedilmemiş değişiklik sorusu ve Vazgeç'in pencereye dönmesi; boş çizimde yazılan çizgi ve ilk kayıtta yerin proje adıyla sorulması), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
+- **Etkileşim ölçümü** `scripts/perf/interaction.mjs` (`pnpm perf:interaction`; bir şeyi doğrulamaz, ölçer): kendi Vite sunucusunu ve tek başsız Chrome'u açar (WebGL2 makinenin GPU'sunda, `--use-angle=gl`; SwiftShader'da tek kare saniyeler sürdüğü için onu reddeder), ADR 0005'in `parsel-50k` ve `hat-1m` veri setlerini sayfada tohumlu üretip `doc.replaceWith` ile açar. Gerçek fare hareketleriyle seç (üzerine gelme), çizgi (ilk noktadan sonra kenet) ve buda araçlarında olay başına süreyi 1:1000 ve genel görünümde, orta tuşla kaydırmada kare süresini ve GPU dahil kare aralığını, buda önizlemesinde kare süresini, stil değişikliğinde büyük katmanın yeniden kurulmasını `view.probe` ile toplar. Her koşu sayfayı yeniden açar; 3 koşunun p50/p95/p99'u ve p95 aralığı `docs/perf/interaction-<etiket>.{json,md}`'ye yazılır (`--label baseline` tabanı yazar; başka etiket tabanla karşılaştırılır). Nesne izleme ve bilgi kartı ölçümde kapalıdır (beklemeye bağlıdırlar). Makinede başka ağır süreç çalışırken çalıştırılmaz.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme).
 
 ### 9.5 Çizim arka uçları (WebGL2 ve WebGPU)
@@ -897,7 +900,7 @@ vite.config.mjs              /v1 isteklerini yerel API'ye ileten eklenti (dev ve
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo) ve bulut senaryosu (cloud.mjs)
 scripts/wasm/ensure.mjs      WASM paketini kaynak özeti değiştiyse derler (dev/test/build/e2e öncesi)
 scripts/fixtures/            Fixture kaydedicileri (GOLDEN_WRITE=1; record-calls: çağrı kümeleri) ve bağımsız referans üreticileri (Python decimal/fractions)
-scripts/perf/                Build envanteri (bundle.mjs) ve başlangıç ölçümü (startup.mjs) → docs/perf/
+scripts/perf/                Build envanteri (bundle.mjs), başlangıç ölçümü (startup.mjs) ve etkileşim ölçümü (interaction.mjs: parsel-50k, hat-1m) → docs/perf/
 docs/adr/                    Mimari kararlar (0001 çalışma alanı, 0002 sözleşme ve fixture, 0003 işlem anlamı, 0004 sayısal politika, 0005 performans hedefleri (taslak), 0006 veri katmanı, 0007 kimlik doğrulama, 0008 ortak çekirdek sınırı)
 docs/perf/                   Ölçüm raporları ve özet (README.md)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
