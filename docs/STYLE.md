@@ -168,18 +168,22 @@ type LayerRenderer =
 ## 6. Çizim hattı
 
 ```
-LayerRenderer + Entity ─► resolve (hangi sembol takımı) ─► compile (sembol × geometri → çizim ilkelleri)
-   ─► StyledSink (GPU toplulukları, katman başına) ─► RenderBackend (WebGL2 / WebGPU)
-                                                  └► önizleme ve lejant (Canvas2D, aynı ilkeller)
+render/styledLayer.ts: katmanın programı (semboller, işleyici, kümeler, renkler) + nesne başına kip + ifade tablosu
+   ─► style-core (Rust, geometri deposunun yanında tek çağrı): resolve (hangi sembol takımı)
+        ─► compile (sembol × geometri → çizim ilkelleri) ─► batch (GPU toplulukları, katman başına)
+   ─► render/styledBatches.ts (renkler, atlas görüntüleri) ─► RenderBackend (WebGL2 / WebGPU)
+style/compile.ts compileSymbol (tek sembol, aynı çekirdek) ─► önizleme ve lejant (Canvas2D, aynı ilkeller)
 ```
 
-- **Sembol seçimi (`render/styledLayer.ts`):** nesnenin kendi sembolü (`entity.symbol`), yoksa katmanın işleyicisi (`style.renderer`), yoksa katmanın basit görünüşü (`symbolsOfLayerStyle`: renk, çizgi tipi, kalınlık, dolgu, nokta simgesi). Kurallar:
+Hesabın hepsi `crates/shared/style-core/src/style/`'dadır (ADR 0008 “Stil derleyicisi”): `resolve.rs`, `compile.rs`, `place.rs` (yerleşim), `batch.rs`, `build.rs` (katmanın çağrısı). TypeScript katmanın programını kurar ve çekirdeğin yanıtını gösterir.
+
+- **Sembol seçimi (`render/styledLayer.ts` sayfanın kipini verir, çekirdek çözer):** nesnenin kendi sembolü (`entity.symbol`), yoksa katmanın işleyicisi (`style.renderer`), yoksa katmanın basit görünüşü (`symbolsOfLayerStyle`: renk, çizgi tipi, kalınlık, dolgu, nokta simgesi). Kurallar:
   - Hiçbir kurala ya da kategoriye uymayan nesne çizilmez (QGIS gibi).
   - Uyan takımda nesnenin geometri türüne sembol yoksa ya da başvurulan sembol kitaplıkta yoksa basit görünüş çizilir; nesne sessizce kaybolmaz.
   - Dolgu sembolü olmayan alan, takımın çizgi sembolüyle kenarından çizilir.
   - Tarama nesneleri kendi desenini (`hatchSymbolOf`), ölçüler ince çizgilerini korur; yazılar üst katmandadır.
-- **Derleme (`style/compile.ts`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri CPU'da float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, döşeme), işaret (şekil, SVG, yazı, raster). İfadeler katman kurulumu başına bir kez derlenir (`ExprCache`); sembol ifadeleri çizim ölçeğinin paydasını `$ölçek` ile okur. Bir çizgi ya da alan katmanının içindeki işaret sembolünün katmanları kendi alt seviyelerini alır (seviye + j/256): çizici aynı görünüşlü işaretleri bir CAD katmanındaki bütün nesnelerde tek topluda birleştirdiği için, bir nesnenin kâğıt dolgulu çerçevesi başka bir nesnenin çerçevesinin üstündeki işareti örtmez.
-- **GPU toplulukları (`render/styledSink.ts`):** ilkeller stil ve ölçek aralığı anahtarıyla toplanır; sembol düzeyine, sonra türe (dolgu < vuruş < işaret) göre sıralanır.
+- **Derleme (`style-core` `compile.rs`, `place.rs`)** saf ve testlidir: kesik ve kaydırma, işaretlerin çizgi boyunca yerleşimi, alanın iç noktası, halka yönleri float64 ile hesaplanır. Çıktı arka uçtan bağımsız ilkellerdir: vuruş (stroke), dolgu (düz, tarama, döşeme), işaret (şekil, SVG, yazı, raster). İfadeler katman kurulumu başına bir kez derlenir (program); sembol ifadeleri çizim ölçeğinin paydasını `$ölçek` ile okur. Bir çizgi ya da alan katmanının içindeki işaret sembolünün katmanları kendi alt seviyelerini alır (seviye + j/256): çizici aynı görünüşlü işaretleri bir CAD katmanındaki bütün nesnelerde tek topluda birleştirdiği için, bir nesnenin kâğıt dolgulu çerçevesi başka bir nesnenin çerçevesinin üstündeki işareti örtmez.
+- **GPU toplulukları (`style-core` `batch.rs`; renk ve görüntüler `render/styledBatches.ts`):** ilkeller stil ve ölçek aralığı anahtarıyla toplanır; sembol düzeyine, sonra türe (dolgu < vuruş < işaret) göre sıralanır. Geometri orijine göre float32'dir; dolgular katman bitince tek çağrıda üçgenlenir.
   - **Vuruş:** her parça bir örnek (`ax, ay, bx, by, dist, uç bayrakları`); kapsül SDF'si, yuvarlak birleşim, uçta düz/yuvarlak/kare kapak. Kesik deseni (en çok 8 değer) gölgelendiricide yol boyu mesafeden hesaplanır; desen dönemi 4 px'in altına inince çizgi, desenin dolu oranıyla soluklaşan düz çizgiye döner (titreşim yok).
   - **Tarama:** üçgen başına ek geometri yok; çizgiler gölgelendiricide yerel orijine göre dünya koordinatından (ya da `px` biriminde ekrandan) üretilir, her yakınlıkta tam. Aralık 3 px'in altına inince taramanın ortalama rengine döner.
   - **Döşeme (desen ve görüntü dolgusu):** atlas hücresi `textureGrad` ile tekrarlanır, dünya ızgarasına hizalıdır.

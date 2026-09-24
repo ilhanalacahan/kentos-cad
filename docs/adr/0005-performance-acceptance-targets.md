@@ -26,7 +26,7 @@ Günlük 2D çizim, demo katalogu olmadan açılır.
 |---|---|
 | İlk sayfada istenen JS (gzip) | ≤ 350 KB |
 | İlk sayfada istenen CSS (gzip) | ≤ 40 KB |
-| Başlangıç WASM (gzip, eklendiğinde) | ≤ 350 KB (2026-09-24'e kadar 300 KB; aşağıda “Değişiklikler”) |
+| Başlangıç WASM (gzip, eklendiğinde) | ≤ 400 KB (2026-09-24'te önce 300'den 350'ye, sonra 400 KB'a; aşağıda “Değişiklikler”) |
 | Etkileşime hazır (`kentos:interactive`), soğuk | ≤ 1,5 s |
 | Etkileşime hazır, ılık | ≤ 0,8 s |
 | Ana iş parçacığında script süresi, soğuk | ≤ 600 ms |
@@ -84,6 +84,8 @@ Faz B–D yük testlerinde tek tenant'ta 25 eşzamanlı editör ve 200 görünt�
 - **2026-09-24, başlangıç WASM 300 → 350 KB gzip (sahibinin kararı).** Ortak çekirdek (ADR 0008) uygulamanın bütün CAD hesabını tek pakette topladı; paket 297,9 KB'a ulaştı ve sıradaki çekirdek işleri (§23.3 sağlam kararlar, depoda dönüşüm) kod ekleyecek. Değerlendirilen seçenekler: işlev adları bölümünü üretim paketinden atmak (gzip 297 → 276 KB; bedeli, bir tuzağın yığın izinde adlar yerine numaralar), ağır işlemleri ilk kullanımda yüklenen ayrı bir pakete bölmek (geometri deposu tek modülde kalmak zorunda) ve sınırı yükseltmek. Sahip sınırı yükseltmeyi seçti; adlar pakette kalır. Öbür hedefler değişmedi.
 
 - **2026-09-24, ifade dili Rust'a taşındı (ADR 0008 “İfade dili”):** başlangıç WASM'ı 303,9 → 349,6 KB gzip; 350 KB sınırına 0,45 KB kaldı. Sınır değişmedi. Stil motorunun geometrisi (sıradaki style-core dilimleri) sınırı aşacak; karar sahibinindir.
+
+- **2026-09-24, başlangıç WASM 350 → 400 KB gzip (sahibinin kararı).** Stil derleyicisi Rust'a taşınınca (ADR 0008 “Stil derleyicisi”) paket 350 KB'ı aşacaktı. Sahibe üç seçenek sunuldu: sınırı yükseltmek, işlev adları bölümünü üretim paketinden atmak (~24 KB gzip; bedeli, bir tuzağın yığın izinde adlar yerine numaralar), stil motorunu ayrı pakete koymak (çizim açılışta stil motorunu istediği için ilk yükü azaltmaz). Sahip sınırı 400 KB'a yükseltmeyi seçti; adlar pakette kalır. Stil derleyicisiyle paket 394,9 KB gzip oldu. Öbür hedefler değişmedi.
 
 ## Onay
 

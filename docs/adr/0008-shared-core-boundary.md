@@ -223,7 +223,7 @@ Kullanıcının kararları (2026-09-24):
 - **Sınır:**
   - Çağrı tablosunda `exprCompile` (alanlar, okunanlar, hata ve konumu) ve `exprCatalog` (arayüzün işlev ve değişken menüleri); `geometry-wasm`'ın tablosu önce `geometry-core`'a, sonra `style-core`'a bakar (numaraları öncekilerin ardından gelir).
   - Toplu değerlendirme tipli bir giriştir: `exprEvaluate(kaynak, n, metinler, uzunluklar, sayılar, ölçüler, ölçek, biçim)`. Nesneler ifadenin okuduğu bir tablo olarak geçer: nesne başına metin yuvaları (alanlar ifadedeki sırayla, sonra etiket, katman adı ve tür adı; yalnız okunanlar; tek metinde UTF-16 uzunluklarıyla, −1 yok), sayı yuvaları (numara, köşe sayısı; NaN yok) ve bir geometri değeri okunuyorsa deponun `measures` yanıtı olduğu gibi (nesne başına altı sayı). Değerler sütun olarak döner: tür (0 boş, 1 sayı, 2 metin, 3 doğru/yanlış), sayılar ve UTF-16 uzunluklu metinler. İfade her çağrıda yeniden derlenir (mikrosaniyeler); çekirdekte derlenmiş ifade yaşamaz.
-  - Biçimler: değerin kendisi, sayı (sayı değilse boş), metin, doğru/yanlış (bu ikisinde boş boş kalır) ve metninin okunduğu sayı (stil penceresinin sınıfları, 12 anlamlı basamak). İfadeyle seç ve koşullar doğru/yanlış, öznitelik hesapla metin ister; stil motoru katman kurulumu başına ifade ve biçim başına bir sütun alır (`style/compile.ts` `ExprRun`; ölçüler bir kez).
+  - Biçimler: değerin kendisi, sayı (sayı değilse boş), metin, doğru/yanlış (bu ikisinde boş boş kalır) ve metninin okunduğu sayı (stil penceresinin sınıfları, 12 anlamlı basamak). İfadeyle seç ve koşullar doğru/yanlış, öznitelik hesapla metin ister. Stil motoru önce katman kurulumu başına ifade ve biçim başına bir sütun alıyordu; Y2–Y3'ten beri katmanı çekirdekte kurar ve programın bütün ifadeleri tek tabloyu okur (“Stil derleyicisi”).
 - **Birebir taşıma:**
   - Kaynaklar ve nesneler tohumlu üreteçle (`apps/web/src/model/expression/cases.ts`): geçerli ve bozuk kaynaklar, Türkçe harfler, sayı gibi okunan metinler, eksik alanlar, ölçüsü olmayan nesneler. TS ile çekirdek 20 000 rastgele kaynakta beş biçimin hepsinde aynı değeri, aynı hatayı ve konumunu verdi. Mutasyon denetimi: eşitlikte yuvarlama yönü ya da sıralamanın harf büyüklüğü düzeyi değiştirilince test düşer.
   - TS silindi (başvuru kopyası ve karşılaştırma testi). Dondurulmuş yanıtlar `fixtures/expression/v1/cases.json`'dadır (400 kaynak: 148 hata, 886 nesne değerlendirmesi; kaydedici `apps/web/scripts/fixtures/record-expression.test.ts`). Native `crates/shared/style-core/tests/cases.rs`, uygulamanın yolundan `apps/web/src/model/expression/fixture.test.ts` okur. `expression.test.ts` aynı adlarla çekirdeği sınar; Rust'taki karşılığı `expr/tests.rs`'tir.
@@ -258,6 +258,60 @@ Kullanıcının kararları (2026-09-24):
   - Alan okuyan koşullarda sürenin yarısı sınırdadır: sayfanın metin tablosunu kurması (100 000 metin ~5 ms) ve sonuç sütununun okunması.
   - Metin üreten ifadelerde metinler WASM'ın bellek ayırıcısında kurulur. Değer bir kez, sayfada da taşınmadan okunur.
   - Katman kurulumu bütçesi (§6.1, 100 000 segmentte < 50 ms) bu yolla aynı ölçüdedir.
+
+### Stil derleyicisi (style-core Y2 + Y3)
+
+Stil motorunun geometrisi ve derleyicisi TypeScript'ten Rust'a taşındı: sembol × geometri → çizim ilkelleri, işleyicilerin çözümü ve GPU toplulukları. Bir katman çekirdekte, geometri deposunun yanında tek çağrıda kurulur. SVG düzenleyicisinin geometrisi sıradaki dilimdir (DEVIR).
+
+- **Yer:** `crates/shared/style-core/src/style/`:
+  - `model.rs`: semboller, katmanlar, işleyiciler ve kurallar JSON'dan okunur; ifadeler bir kez derlenir.
+  - `place.rs`: çizgi boyunca işaret yerleri, gruplar, keskin köşeden uzak durma, dalgalar, alanın iç noktası, ağırlık merkezi, çizginin ortası.
+  - `compile.rs`: birimler, veriye bağlı değerler, paralel kaydırma, işaret, çizgi ve dolgu katmanları.
+  - `resolve.rs`: tek, kategorili, aralıklı ve kural tabanlı işleyiciler; ölçek aralıkları.
+  - `prim.rs`: çizim ilkelleri ve JSON yazıcısı.
+  - `batch.rs`: toplama. Eşit stiller bir toplulukta birleşir, geometri orijine göre float32 olur, dolgular tek çağrıda üçgenlenir, sıra sembol düzeyinedir.
+  - `build.rs`: katmanın tek çağrısı ve tek sembol önizleme girişi.
+- **Sınır:**
+  - **Program:** sayfa katmanın programını kurar (`render/styledLayer.ts`). İçinde kullanılan kitaplık sembolleri, işleyici, kümeler (renk başına basit görünüş, taramaların kendi desenleri), nesnelerin kendi sembolleri, renkler ve döşenen görüntülerin boyları vardır. `StyleProgram` (WASM) onu bir kez okur, ifadelerini derler ve okunan alanlarla değişkenleri söyler.
+  - **Nesneler ve tablo:** nesne başına dört sayı gider (`Int32Array`): kip (atla, ölçü çizgileri, küme, kendi sembolü, işleyici), küme ya da sembol, basit görünüş kümesi, renk. İfade tablosu Y1'deki gibidir: programın bütün ifadelerinin alanları tek tablodadır, her ifade kendi yuvalarını okur.
+  - **Çağrı:** `GeometryStore.buildStyled(program, ids, nesneler, tablo, kırpma, orijin, ölçek)`. Depo nesnelerin çizilecek geometrisini kendisi okur; bir ifade `$alan`, `$uzunluk`, `$y` ya da `$x` isterse bunlar katman için bir kez hesaplanır. Yanıt iki parçadır: toplulukların tanımı (JSON: tür, ilk stil, ölçek aralığı, sayıların yeri, kutu, en büyük işaret) ve bütün sayılar tek bir `Float32Array`'de.
+  - **Sayfada kalan (gösterim, `render/styledBatches.ts`):** tema paletinden renkler, atlas görüntüleri (yazı, SVG, raster, desen döşemeleri), bir topluluğun geometrisinin ötesine ne kadar taştığı (görüntü boylarından), GPU'ya yükleme.
+  - **Tek sembol:** önizleme, lejant ve testler bir sembolü bir nesnede çizer: `styleCompile` işlemi (`style/compile.ts` `compileSymbol`) çizim ilkellerini JSON olarak döndürür. Yazı ve ölçü nesnesinde çizim yoktur.
+- **Birebir taşıma:**
+  - **Üreteç** (`apps/web/src/style/cases.ts`):
+    - Her katman türünden rastgele semboller: sabit, veriye bağlı, derlenmeyen ve tuhaf ifadeler; birimler, kesikler, dalgalar, gruplar, bütün yerleşimler, iç içe işaret sembolleri.
+    - Dört işleyici türü: iç içe kurallar, ölçek aralıkları, “diğer” kuralları, kapalı kategoriler.
+    - Görüntüler (eksik olan dahil) ve her türden nesne (başlangıç yakını ve TM).
+  - **Karşılaştırma:** TS ile çekirdek üç kümede karşılaştırıldı:
+    - Sistem kitaplığının 695 sembolü, her biri beş nesne türünde.
+    - 20 000 rastgele sembol, her biri bir nesnede.
+    - 20 000 rastgele katman: 89 095 topluluk, 235 787 995 float32 sayı.
+
+    Katman yolunda bütün sayılar bit bit aynı çıktı. Tek sembol yolunda 23 475 durumun 94'ü son birkaç ulp'te ayrıştı (dalga noktaları ve işaret açıları: V8'in ve libm'in sin, cos, atan2'si), geometri toleransı içinde.
+  - **Dondurma:** TS silindi. Dondurulmuş yanıtlar `fixtures/style/v1/cases.json`'dadır (160 sembol, 48 katman; kaydedici `apps/web/scripts/fixtures/record-style.test.ts`). Katman durumlarında sayfanın çekirdeğe verdikleri de dondurulur: program, nesne sayıları, ifade tablosu.
+    - Native: `crates/shared/style-core/tests/style.rs`.
+    - Uygulamanın yolundan: `apps/web/src/style/fixture.test.ts`.
+    - Birim testleri: `style/tests.rs` (birimler, yerleşim, gruplar, köşeden uzak durma, dalgalar, iç nokta, işleyiciler, topluluklar, ölçü çizgileri).
+  - **Bekçi:** `singleSource.test.ts` artık `style/compile.ts`, `style/geometry.ts`, `style/primitives.ts` ve `render/styledLayer.ts`'i de denetler. Görüntü oranı (yükseklik/genişlik) çekirdekte bölünür; sayfa görüntünün genişlik ve yüksekliğini verir.
+- **Taşırken bulunan (TS'te de böyleydi):**
+  - Ölçü çizgileri bir önceki nesnenin kural ölçek aralığını alıyordu: ölçek aralıklı bir kuraldan sonra gelen ölçü o aralığın dışında görünmüyordu. Artık her ölçekte çizilir.
+  - TS toplulukların içine kuralın sembol kümesini de kopyalıyordu (hiçbir şeyin okumadığı bir alan).
+- **Bilinçli fark:** çizim ilkellerinin JSON'u NaN ve ±∞'u null, −0'ı 0 yazar. TS'in stil anahtarları da `JSON.stringify` ile böyleydi. Tek fark önizlemededir: aynalanmış bir işaretin kaydırması −0 yerine 0 döner.
+- **Hız:** stil anahtarı (JSON) her ilkelde yazılmaz. Her tür için son 16 stil, topluluklarıyla birlikte tutulur; eşit stil aynı topluluğa gider, sonuç değişmez. İlk sürümde 50 000 çizgi native 69 ms sürüyordu, bununla 17 ms oldu. Kategorileri sırayla değişen 20 000 nokta 68 ms'den 11 ms'ye indi.
+- **Boyut:** 1 008 667 → 1 128 063 bayt, gzip 349 550 → 394 938 (+45,4 KB). Stil derleyicisinin kodu ~90 KB ham.
+  - İki std `sort_by` yerine geometri çekirdeğinin `stable_sort`'u kullanıldı (her karşılaştırıcı için yeniden üretilmez): −6,4 KB gzip. Stil crate'ini `opt-level = "s"` ile derlemek yalnız 1,8 KB kazandırıyor ve %10–15 yavaşlatıyordu; kullanılmadı.
+  - Başlangıç sınırı kullanıcı kararıyla 350'den 400 KB gzip'e yükseltildi (24 Eylül, ADR 0005 “Değişiklikler”). Sınıra 5 KB kaldı.
+- **Ölçüm** (`STYLE_BENCH=1 pnpm -C apps/web exec vitest run scripts/perf/style.test.ts --disable-console-intercept`; Node 22, bulut makinesi, 20 koşunun p50'si, ms). Eski TS aynı makinede ve aynı WASM paketiyle, Y1 işlemesinin çalışma kopyasından ölçüldü; iki tur sırayla koşuldu. Native, Rust release'te yalnız çekirdektir. İki yol aynı toplulukları ve sayıları verdi.
+
+  | Katman | Eski TS | Çekirdek (WASM yolu) | Native |
+  |---|---|---|---|
+  | Parsel ×10 000 (kural tabanlı, dolgu, kenar, iki alan yazısı) | 108–109 | 51–53 | 25 |
+  | Köy sınırı ×2 000 (MPYY işaretli çizgi, 36 000 işaret) | 51–52 | 8,0–8,4 | 4 |
+  | Çizgi ×50 000 (yalın görünüş, kesikli) | 129–131 | 31–33 | 17 |
+  | Yapı noktası ×20 000 (kategorili, şekil ve yazı) | 194–196 | 21,5–22,4 | 11 |
+
+  - Parsellerde sürenin çoğu, her parsel numarası için ayrı bir topluluktur: yazının kendisi atlas görüntüsüdür. 3 339 topluluğun tanımı ~1 MB JSON tutar; TS'te de topluluklar böyleydi.
+  - Katman kurulumu bütçesi (§6.1, 100 000 segmentte < 50 ms): 50 000 segment 31–33 ms sürüyor. Kabul ölçümü kullanıcının makinesinde yapılacak.
 
 ### DXF yazıcısının eğrisi
 
@@ -308,6 +362,7 @@ Kullanıcının kararları (2026-09-24):
   | Sağlam kararlar R3 (köşe çevresindeki sıra) | 896 KB | 303 KB | 894 506 → 896 139 bayt, gzip 302 106 → 302 678 (+572 bayt): kesin ve teğetli sıralama, eski kiriş açısı silindi |
   | Sağlam kararlar R4 (kesişim parametreleri) | 898 KB | 304 KB | 896 139 → 898 018 bayt, gzip 302 678 → 303 940 (+1,3 KB): `cross_accurate`, `compress`, dört noktaya genelleştirilmiş uyarlamalı aşamalar |
   | İfade dili (style-core Y1) | 1 009 KB | 350 KB | 898 018 → 1 008 667 bayt, gzip 303 940 → 349 550 (+45,6 KB): Unicode harf tabloları, Türkçe sıralama tablosu, iletiler ve açıklamalar (`.rodata` +20,7 KB), değerlendirici, JavaScript'in sayı yazımı. 350 KB sınırına 0,45 KB kaldı |
+  | Stil derleyicisi (style-core Y2 + Y3) | 1 128 KB | 395 KB | 1 008 667 → 1 128 063 bayt, gzip 349 550 → 394 938 (+45,4 KB): yerleşim, derleme, işleyiciler, toplama, JSON okuyucu ve yazıcıları (~90 KB kod), son stillerin önbelleği; iki std sıralaması yerine `stable_sort` (−6,4 KB gzip). Sınır 400 KB'a yükseltildi, 5 KB kaldı |
 
 ### Doğrulama
 
