@@ -1,139 +1,73 @@
-# Devir notları: ortak Rust çekirdeğini tamamlamak
+# Devir notları
 
 Tarih: 24 Eylül 2026. Bu notlar işi sürdürecek yapay zekâ ajanı içindir.
 Önce bu dosyayı, sonra aşağıdaki belgeleri okuyun. İş ilerledikçe bu dosyayı
-güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
+güncel tutun; biten maddeyi silin, yeni kararı ekleyin. Dilimlerin ayrıntılı
+geçmişi ADR 0008'de ve commit iletilerindedir; burada yalnız durum, sıradaki
+işler ve kurallar durur.
 
 ## 1. Önce okunacaklar
 
 1. `CLAUDE.md`: bağlayıcı proje kuralları. Özellikle §3 (kısıtlar), §4.1
-   (katmanlar), §8 (kod kuralları), §9.4 (testler) ve §14 (“Tek hesaplama
-   kaynağı kapısı”).
+   (katmanlar), §4.8.1 (geometri çekirdeği), §8 (kod kuralları), §9.4
+   (testler), §11 (teknik borç) ve §14 (“Tek hesaplama kaynağı kapısı”).
 2. `docs/adr/0008-shared-core-boundary.md`: ortak çekirdeğin bütün kararları.
-   Taşıma yöntemi, çağrı tablosu, JSON sınırı, doğrulama, taşırken bulunan
-   hatalar ve WASM boyut tablosu buradadır.
-3. `docs/perf/interaction-baseline.md`: TypeScript geometrisinin etkileşim
-   ölçüm tabanı. S1 buna göre karşılaştırılır.
-4. `DESIGN.md`: yalnız arayüze dokunulursa.
+   Taşıma yöntemi, çağrı tablosu, JSON sınırı, geometri deposu, doğrulama,
+   taşırken bulunan hatalar ve WASM boyut tablosu buradadır.
+3. `docs/perf/README.md`: ölçümlerin özeti (TS tabanı, S1 önce/sonra, S6).
+4. `docs/adr/0009-*.md`: dosya biçimleri (onay bekliyor, §6).
+5. `DESIGN.md`: yalnız arayüze dokunulursa.
 
-## 2. Bugünkü durum
+## 2. Nerede kaldık
 
-- **Kullanıcının hedefi:** “Öncelikle ortak çekirdeği tamamlayalım.”
-  - CLAUDE.md §14 der ki: CAD hesabı `crates/geometry-core` içinde bir kez yazılır, native ve wasm32 olarak derlenir.
-  - Eşdeğerlik kanıtlanınca TypeScript algoritması silinir.
-- **Yapıldı (P0–P8):** `src/model/geom`, `src/model/ops` ve `src/render/triangulate.ts` içindeki bütün işlemler Rust'ta.
-  - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
-  - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
-  - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş tamam (S1–S5, S3a–S3c):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a/S3b'de `model/ops`, `model/geom` ve ilkel modüller (`model/geometry.ts`'in ölçüleri, `entities.ts`, `render/triangulate.ts`) çekirdeğin ince cephelerine döndü; S3c'de son TS referansları silindi ve tek kaynak bekçisi geldi. Stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi dışında TS'te geometri algoritması yok. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
-- **S4 yapıldı:** işlem araçlarının geometrisi (köşe numaralama, köşe yazısının yeri, kenar ölçüleri, “görünen” kapsamının kutu testi, ifadelerin geometri değerleri) çekirdekten geliyor. Her çalıştırma okuduğu nesnelerden kendi deposunu kurar, sayfada da worker'da da aynı kodla (`processing/job.ts` `runJob`, `processing/geometry.ts`; ADR 0008 “İşlem araçları ve worker (S4)”).
-- **S5 yapıldı:** araçların ve nesne izlemenin satır içi hesapları (nokta girişi, orto/kutupsal imleç, nesne izleme, nokta hesabının kendi aritmetiği, araçların yapı hesapları; 39 işlem) `geometry-core::tools`'tan geliyor (`src/tools/constructions.ts`, ADR 0008 “Araç ve görünüm hesapları (S5)”).
-- **Aynı gün main'e girenler:**
-  - Yeni proje (`file.new`);
-  - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
-  - olay günlüğü budama (migration 0003);
-  - etkileşim ölçüm düzeneği (`pnpm perf:interaction`) ve TypeScript tabanı.
-- **Son doğrulama (main, S2 commit'i, bulut konteyneri):**
-  - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
-  - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
-  - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 882 KB, gzip ile 298 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16, S4'te +14, S3b'de +0,3 KB gzip; S3b'de kullanılmayan eski girişler silindi). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; ~2 KB kaldı (§6 madde 8).
-- **Ölçüm tabanı** (kullanıcının makinesi):
-  - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
-  - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
+- **Kullanıcının hedefi “öncelikle ortak çekirdeği tamamlayalım” tamamlandı** (P0–P8, S1–S6; `main`, 24 Eylül). CLAUDE.md §14: CAD hesabı `crates/geometry-core` içinde bir kez yazılır, native ve wasm32 olarak derlenir; TS algoritmaları eşdeğerlik kanıtlanınca silindi.
+- **Kapsam: yalnız hesap Rust'ta, arayüz TypeScript'te kalır.** Kullanıcı bunu açıkça sordu ve doğruladı; bu ayrımı koruyun.
+  - Rust'ta (`crates/geometry-core`, tarayıcıda WASM): geometri işlemleri (kesişim, budama, uzatma, öteleme, köşe yuvarlama, alan cebiri ve bindirme, yay/elips/eğri, ölçü yerleşimi, tarama çizgileri, üçgenleme), nesne ölçüleri, geometri deposu (seçme, kenet, pencere seçimi, etiket ve tutamaç kararları, araç önizlemeleri, çizilecek geometri, ifadelerin geometri değerleri), işlem araçlarının geometrisi (köşe numaralama, kenar ölçüleri), araçların yapı hesapları (nokta girişi, orto/kutupsal, nesne izleme), dosya biçimleri (`crates/formats`), sunucunun PostGIS geometrisi (tessellate, EWKB), §23 sayısal politika.
+  - TypeScript'te: bütün arayüz (DOM, paneller, pencereler, menüler, komutlar, kısayollar), araçların akışı (tıklama, istem, önizlemenin çizimi), belge modeli ve geri alma, çizim motorları (WebGL2/WebGPU), kamera ve ekran pikseli hesapları, bulut eşitleme, stil motoru, ifade dili ve SVG düzenleyicisi. Son üçünün kendi geometrisi ileride ayrı bir `style-core` dilimidir (§3); acelesi yok.
+  - Cepheler (`src/model/geom`, `src/model/ops`, `model/geometry.ts`, `entities.ts`, `render/triangulate.ts`, `tools/constructions.ts` …) yalnız çağırır: `op('ad')` ile çağrı tablosuna, sıcak yollarda tipli girişlere. `src/model/singleSource.test.ts` bu dosyalarda aritmetik ya da `Math.` görürse düşer.
+- **Dilimler** (her biri tek commit; ayrıntı ADR 0008'in aynı adlı başlığında):
 
-## 3. Sıradaki işler (bu sırayla)
+  | Dilim | Commit | Ne yapıldı |
+  |---|---|---|
+  | 0, P1–P8 | `7ace476` … `d8a7beb` | `model/geom`, `model/ops`, `render/triangulate` işlemlerinin hepsi Rust'ta; TS ile işlem başına 20 000 rastgele durumda aynı sonuç; donmuş çağrı fixture'ları `fixtures/geometry/v1/calls-*.json` |
+  | S1a–S1c | `c6e8a4c`, `1f82a59`, `d109f25` | Geometri deposu (`geometry-core::store`, `viewport/picking.ts` ince yüz): seçme, kenet, kutular, etiketler, tutamaçlar, buda/uzat önizlemesi, hayaletler, toplamlar |
+  | S1d | `b6812b0` | Bulutta önce/sonra ölçümü (`docs/perf/interaction-s1-*.md`) |
+  | S2 | `0d27941` | Katman kurulurken çizilen geometri ve dolgu üçgenlemesi depodan (`PickIndex.drawn`, `fillQueue.ts`) |
+  | S3a, S3b | `c63da07`, `c7445e0` | Modüller cepheye döndü, TS algoritmaları silindi; sayı alan girişler ve kazıma tamponu; depoda `extent` |
+  | S4 | `d8f9c45` | İşlem araçlarının geometrisi, sayfada ve worker'da aynı `runJob` ve çalıştırmanın kendi deposu |
+  | S5 | `af83ccd` | Nokta girişi, orto/kutupsal, nesne izleme, araç yapıları (`geometry-core::tools`) |
+  | S3c | `65ed097` | Son TS referansları silindi (son derin koşular temiz), tek kaynak bekçisi, referanssız yerine geçen testler, kaydediciler çekirdekten |
+  | S6 | `dcca64c` | CLAUDE.md güncellendi (bulut ölçümü durduruldu, §2 “Ölçüm”) |
+  | Performans | `24d466e` | `CadDocument` katman dizini (`byLayer`), ızgaranın yeniden kullanımı, `JSON.stringify`'sız geometri karşılaştırması (CLAUDE.md §6.3) |
+  | Kenet | `602bf5c` | Genel görünümde kesişim keneti ~7 kat hızlı, yanıtlar bit bit aynı (ADR 0008, geometri deposu) |
 
-### S1: WASM geometri deposu (en büyük kazanç)
+- **Dosya biçimleri** (`wip/formats-dxf` dalından, `33f9981` … `96f4460`): koordinat listesi (Netcad NCN, TXT, CSV) içe/dışa aktarma ve DXF içe aktarma Rust'ta (`crates/formats`, ayrı ve yalnız komutla yüklenen WASM paketi `src/io/pkg`). ADR 0009 “önerildi”, onay bekliyor. DXF dışa aktarma yok (§3).
+- **WASM paketi:** 883 087 bayt, gzip 297 912 bayt. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; ~2 KB kaldı. Çekirdeğe eklenecek bir sonraki kod bu sınırı aşar: önce kullanıcının kararı gerekir (§6 madde 8).
+- **Son doğrulama** (`main` `602bf5c`, 24 Eylül, bulut konteyneri): `npx tsc --noEmit -p .` temiz; `pnpm test` 612 test geçti, 6 atlandı (fixture kaydedicileri); `cargo fmt --all -- --check` temiz; `pnpm rust:test` (cargo test ve clippy `-D warnings`) temiz, veritabanı testleri sır olmadığı için atlandı; `pnpm e2e` 100 denetim geçti, düşen üçü bu konteynerde hep düşen WebGPU denetimleri (§5).
+- **Ölçüm:**
+  - S1 önce/sonra (bulut, `docs/perf/interaction-s1-*.md`): imleç başına seçme ve kenet `parsel-50k`'da ~19 ms'den 0,1–3 ms'ye, `hat-1m` budama önizlemesi 972 ms'den 18 ms'ye indi.
+  - Genel görünümde kenet `602bf5c`'de ~7 kat hızlandı (`hat-1m`, WASM, Node'da mikro ölçüm: p50 11,5 → 1,6 ms, p95 16,4 → 2,4 ms). Kalan ~1,1 ms aday çizgilerin köşe ve kenar geçişidir.
+  - Son bulut ölçümü (S6) makine alt ajanlarla aşırı yüklü olduğu için (4 çekirdekte yük ~8) 16 senaryonun 4'ünde durduruldu. S2–S5'in etkileşime etkisi kullanıcının makinesindeki kabul ölçümüyle görülecek (§3 madde 2).
+- **Açık alt ajan yok.** Kullanıcı yenisini istemiyor (kredi); son ikisinin işi main'de (`24d466e`, `602bf5c`).
 
-- **S1a yapıldı:** `geometry-core::store` (nesnelerin kopyası, katman tablosu, sınır kutuları, Hilbert sıralı R-ağacı, belge sırası), `hit`/`hitEdge`/`snap`/`inRect`/`overlapping`/`enclosing`/`edgesIn`; `viewport/picking.ts` ince yüz oldu. Ayrıntılar ADR 0008 “Geometri deposu”nda.
-  - Eşitleme `touched` ile; `load`/`replaceWith` yeni `reset` olayını yayar. `applyExternal` `touched` yaydığı için tam eşitleme gerekmedi.
-  - Nesneler JSON değil paketli gider (`src/wasm/pack.ts`, `store/pack.rs`): 26 MB JSON WASM'da 5–7 s sürüyordu, paketli 0,1–0,3 s.
-  - Eski TS `PickIndex` parity referansıydı; S3c'de silindi. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
-- **S1b yapıldı:** etiket kararları (`labels`) ve tutamaçlar (`grips`) depodan; `drawLabels`, `drawGrips`, `gripAt` kayıtları kullanır (`viewport/storeRecords.ts`). Eski karar mantığı referanstı (S3c'de silindi).
-- **S1c yapıldı:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; depo `trim_entity`/`extend_entity`'e yalnız hedefe ya da ucun ışınına/çemberine değebilecek kenarları verir), `transformOutlines` (hayalet yolları), `stretchOutlines`, `measure` (`PropertiesPanel` toplamları); `PasteTool` kendi deposunu kurar. Eski hesap referanstı (S3c'de silindi); donmuş dosyaya 400 durum eklendi. Aynı makinede `hat-1m` budama önizlemesi 1:1000'de 1,5 s → 10 ms (ADR 0008).
-- **S1d yapıldı (bulut ölçümü):** P8 (`d8a7beb`) ve S1c (`21ac4c5`) aynı konteynerde SwiftShader ile ölçüldü (`docs/perf/interaction-s1-before.md`, `interaction-s1-after.md`, özet `docs/perf/README.md`, ADR 0008 “Uygulamada önce/sonra”). İmleç başına seçme ve kenet `parsel-50k`'da ~19 ms'den 0,1–3 ms'ye, `hat-1m` budama önizlemesi 972 ms'den 18 ms'ye indi. `hat-1m` genel görünümde kenet 32 ms (p95) ile hâlâ yüksek: sıradaki iyileştirme hedefi.
-- **Kabul ölçümü kullanıcıda:** `pnpm perf:interaction --label s1` (tabanla karşılaştırmalı, kullanıcının makinesinde). Kabul: tabana göre p95'te gerileme olmamalı. Sonuç gelince ADR 0008 ve `docs/perf/README.md`'ye yazılır.
-- **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur. “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır, bir koşu ~50 dk sürer. Makinede başka iş varken p95 güvenilmez.
+## 3. Sıradaki işler (öncelik sırasıyla)
 
-### S2: çizim hattı (yapıldı)
+Kullanıcı kredinin azaldığını söyledi: alt ajanı yalnız gerçekten gerekirse ve tek tek çalıştırın; işi küçük, doğrulanmış dilimlerle ilerletin.
 
-- `render/styledLayer.ts` ve `render/sceneBuilder.ts` çizilecek geometriyi katman başına tek çağrıda alır (`PickIndex.drawn` → `store/draw.rs`; `style/geometry.ts` `DrawnReader` okur). Nesnenin kendi noktaları kopyalanmaz, kayıt onlara başvurur. Tek nesnelik `styledGeometry` (sembol önizlemeleri) aynı kaydı `drawnGeometry` işlemiyle alır.
-- `render/styledSink.ts` ve vurgu katmanı dolguları `render/fillQueue.ts` ile katman bitince tek `triangulateMany` çağrısında üçgenler.
-- Çizimdeki ifadelerin `$alan`, `$uzunluk`, `$y`, `$x` değerleri ilk istenince katman için bir kez `measures` ile gelir (`ExprScope.measured`). İşlem araçları ve sınıflama S4'te bunları da depodan alır (lejant ifade değerlendirmez).
-- Eski hesap referanstı (S3c'de silindi); derin koşu temiz, donmuş dosyada çizim ve değer durumları var. E2e'de WebGL2'nin piksel sayısı değişmedi. Katman kurma süresi S1c ile başa baş (ADR 0008 “Çizim hattı”).
+1. **Açık kararları sorun (§6).** Özellikle madde 8 (WASM bütçesi): aşağıdaki çekirdek dilimlerinin hepsi pakete kod ekler.
+2. **Kabul ölçümü kullanıcının makinesinde.** Kullanıcı `pnpm perf:interaction --label s6` çalıştırır (tabanla karşılaştırmalı, `docs/perf/interaction-baseline.json`); sonuç `docs/perf/README.md`'ye ve ADR 0008 “Uygulamada önce/sonra”ya yazılır. Bulut ölçümleri yazılım GPU'suyladır; yalnız ana iş parçacığı süreleri ve aynı makinedeki önce/sonra çifti anlamlıdır.
+3. **§23.3 sağlam geometrik kararlar** (robust predicates), madde 8'den sonra. Yalnız Rust'ta; yeni bağımlılık eklemeden (Shewchuk'un uyarlamalı `orient2d` ve `incircle`'ı çekirdeğe yazılır, lisansı kamu malı). Yol:
+   - `geometry-core`'a bir `predicates` modülü ve bağımsız referansa (Python kesirleri; `scripts/fixtures/geometry_call_reference.py` gibi) karşı testler;
+   - kararlar tek tek değiştirilir: bindirmede yön ve sıralama (`geom/arrangement.rs`, `overlay.rs`), parça kesişimi ve çakışıklık (`geom/intersect.rs`), nokta-çokgen ve iç/dış;
+   - her değişiklikte kaydediciyle yeniden kayıt (`GOLDEN_WRITE=1`, §4) ve farkın satır satır okunması; değişen her golden durum ADR 0008'e gerekçesiyle yazılır;
+   - sabit toleransları (1e-9, `TOL = 1e-6`) sessizce büyütmek yasak (CLAUDE.md §23.4).
+4. **Taşıma ve kopyalamada JSON maliyeti:** 10 000 nesneyi taşımak ~0,15 s (TS'te ~0,01 s). Dönüşüm depoda yapılıp sonuç paketli (`wasm/pack.ts` biçiminde) döndürülür; `modifyTools.ts`, `editTools.ts` (yapıştır) çağırır. WASM'a kod ekler (madde 8).
+5. **Katmanlar paneli:** `LayersPanel` her değişiklikte bütün ağacı yeniden çiziyor (300 katmanlı bir DXF'ten sonra nesne düzenlemesi başına ~15 ms). İlk adım sayı hücrelerini yerinde yazmak (~20 satır; geri alma ve yinelemede sayıların izlendiğini ve satırların aynı kaldığını denetleyen bir e2e denetimiyle). Sanallaştırma daha büyük bir `TreeView` işidir (katmanlar, işlemler, stil yöneticisi ortak; satır yüksekliği yazı ölçeğine bağlı, klavye, odak, yeniden adlandırma, satıra kaydırma).
+6. **DXF dışa aktarma** (ADR 0009 onaylanınca): uzak `wip/formats-dxf` dalındaki `0320b7f` başlangıcı (sözleşmede `DxfWriteLayer`/`DxfWriteInput`, `KENTOS` genişletilmiş verisinin okunması, `catmull_rom_beziers`) derlenmiyordu; yazıcı, `writeDxf`, pencere, komut ve testler yazılacak. Büyük dosyada içe aktarmanın ana iş parçacığındaki süresi de ölçülmedi.
+7. **style-core** (uzun vade): stil motoru, ifade dili ve SVG düzenleyicisinin geometrisi aynı yöntemle (§4) taşınır. Bekçinin (`singleSource.test.ts`) listesi o zaman genişler.
+8. **CLAUDE.md'nin öbür fazları** (Faz B kalanları, Faz C/D): çoğu veritabanı ister; bu bulut konteynerinde sır olmadığı için doğrulanamaz. Tipli öznitelik şeması kullanıcı kararını bekliyor (§6 madde 6).
 
-### S3: cephe ve TypeScript'in silinmesi
-
-- **S3a yapıldı:** `model/ops`'un 16 dosyası ve üst düzey `model/geom` modülleri ince cephe (`op('ad')`); `geom/arrangement.ts` silindi. Ayrıntılar ADR 0008 “Cephe ve TypeScript'in silinmesi (S3a)”.
-  - Silmeden önce 192 işlemin derin koşusu (20 000'er durum) P8 worktree'sinde temiz geçti.
-  - Nesne döndüren işlemler `model/ops/entityOp.ts` ile sarılır: çekirdek `None` alanı yazmaz, `doc.update` birleştirdiği için eksik `bulges`/`holes` `undefined` olarak eklenir.
-  - Parity kümelerinin `fns` alanı yalnız TS'i duran işlemleri tutar; çevrilenler donmuş fixture'larla sınanır. Kaydedici TS'i olmayan işlemde çekirdeğin sonucunu yazar.
-  - Yeni sınır girişleri: WASM `FaceIndex` sınıfı (tarama ve içine tıklayarak alanın yüz dizini), `offsetPathXY`, `hatchLinesXY`, `transformEntities` (taşı/kopyala/dizi/yapıştır tek çağrı), `divisionPoints` (Böl önizlemesi tek çağrı).
-  - Bilinen maliyet: 10 000 nesneyi taşımak JSON yüzünden ~0,15 s (TS ~0,01 s). İyileştirme: dönüşümü depoda yapıp sonucu paketli döndürmek.
-- **S3b yapıldı:** ilkel modüller (`model/geometry.ts`'in ölçüleri, `geom/affine`, `arc`, `bulge`, `intersect`, `ellipse`, `spline`, `model/entities.ts`, `render/triangulate.ts`) de cephe; stil motoru, ifade dili ve SVG düzenleyicisinin kendi geometrisi dışında TS'te geometri algoritması kalmadı. Ayrıntılar ADR 0008 “İlkel modüller (S3b)”.
-  - `dist`, `angleDeg`, `bearingGrad`, `distToSegment` sayı alan girişlerden; halka ölçüleri çekirdeğin belleğindeki kazıma tamponundan (bellek ayırmadan) geçer.
-  - Tümünü göster, pano taban noktası ve kutupsal dizinin seçim ortası depodaki `extent(ids)` sorgusundan gelir.
-  - TS'te kalan kayıt işleri: tipler, kutu büyütme, `bulgeAt`, `entityGeometry`, sabitler.
-- **S3c yapıldı:** son TS referansları silindi, tek kaynak bekçisi eklendi. Ayrıntılar ADR 0008 “Tek kaynak bekçisi ve TS referanslarının silinmesi (S3c)”.
-  - Son derin koşu (S3b'den sonra): S4/S5 çağrı kümeleri işlem başına 20 000, depo parity'si iki sahnede 5 000'er tur, işlem parity'si 2 000 tur; temiz. Depo turu ~75 ms sürdüğü için 20 000 tur 50 dakikayı ve testin süre sınırını aşardı.
-  - Silinenler: `src/wasm/parity/reference/*`, `parity.test.ts`, depo ve işlem parity testleri, kümelerin `fns`/`ties` alanları. Kalan `src/wasm/calls/` (kümeler, sahne, `storeCases.ts`, bağımsız referans testi).
-  - Referanssız yerine geçenler: `viewport/picking.test.ts` (eşitlenen depo = baştan kurulan depo, düzenlemeler boyunca), `processing/runs.test.ts` (sayfa = worker, kapsam ve önizleme iki yoldan aynı).
-  - Bekçi `src/model/singleSource.test.ts`: cephelerde aritmetik ve `Math.` yok (TypeScript sözdizimi ağacıyla; sayma/dizinleme serbest, tek istisna `extendBounds`).
-  - Kaydediciler çekirdekten kaydeder; mevcut dosyaları son bite kadar yeniden ürettiler (ADR'de), donmuş dosyalar TS'ten kaydedildiği gibi kaldı.
-- Kare başına binlerce çağrı yapan yerler toplu API alır; bölme noktaları ve tarama önizlemesi S3a'da yapıldı.
-
-### S4: worker (yapıldı)
-
-- Sayfadaki `clientExecutor` ve worker'ın `handleJob`'ı aynı `runJob`'ı çağırır: çalıştırma okuduğu nesneleri (features girdileri) kendi deposuna paketler (`ObjectStore`, `processing/geometry.ts`), araç `ctx.geometry` ile kimlikten sorar; depo çalıştırma bitince bırakılır.
-- Çekirdeğe geçenler (`crates/geometry-core/src/processing/`, `store/processing.rs`): köşe numaralama (halka sırası, ortak köşe ızgarası, dışa bakan yön; adlar ve sayaç TS'te `nameCorners`), köşe yazısının yeri (`cornerTexts`), kenar ölçüsü yazıları ve ortak kenar anahtarları (`edgeLengths`), “görünen” kapsamının kutu testi (`inBox`, pencerede görünümün deposu). İfadelerin geometri değerleri Öznitelik hesapla, İfadeyle seç, pencere önizlemesi, sınıflama ve kural süzgeçlerinde bütün nesneler için bir kez depodan gelir.
-- Taşırken TS'te üç kırılganlık bulundu ve iki tarafta düzeltildi (ADR 0008 “S4'te bulunanlar”): boş halkada `TypeError`, adsız noktanın numara yutması, 2^53'ün ötesinde bitmeyen ızgara döngüsü.
-- Eski hesap referanstı (S3c'de silindi). Çağrı kümesi S4 ve araç parity'si derin koşuda temiz; donmuş dosyalar `calls-s4-processing.json` ve `store-processing.json`.
-- **Ölçüm (bulut, 50 000 parsel):** numaralama 871 → 289 ms, kenar uzunlukları 280 → 158 ms (ortanca); `$alan` yazan Öznitelik hesapla sayfada 53 → 136 ms (depo kurulumu; Otomatik 2 000 nesneden sonra worker'ı seçer).
-
-### S5: araç ve görünümdeki satır içi hesaplar (yapıldı)
-
-- **Yapıldı:** nokta girişi (`coordinateInput.ts`: göreli, kutupsal, imleç yönünde), orto ve kutupsal imleç (`tracking.ts` → `constrainCursor`), nesne izleme (`viewport/objectTracking.ts`), nokta hesabının kendi aritmetiği ve araçların yapı hesapları (yarıçapla düzgün çokgen, yay devamı, açıortay, çoklu çizgi yay parçaları, köşe yuvarla ve pah, döndür, ölçekle, kutupsal dizi, hizala, ölçü kolları, halka …) `geometry-core::tools`'ta; araçlar `src/tools/constructions.ts` ile çağırır. Derin koşu temiz, `calls-s5-*.json` donduruldu. Kutupsal dizide TM'deki bir kırılganlık iki tarafta düzeltildi. TS'te kalanların listesi ve gerekçesi ADR 0008'de.
-- **Doğrulama (S5 dalı):** `npx tsc --noEmit -p .` ve `pnpm test` temiz, `pnpm rust:test` (clippy dahil) temiz, `pnpm e2e`'de yalnız WebGPU'nun bilinen üç denetimi düştü.
-- **Kalan:**
-  - Araçların çağırdığı ilkel model işlevleri (`dist`, `angleDeg` …) S3b'de o modüllerle birlikte cepheye döndü (`survey` S3a'da); eski TS referansları S3c'de silindi.
-  - Yazılan değerlerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`, uzat-kısalt farkı) ve dikdörtgen dizinin ötelemeleri (tek çarpım; büyük bir dizinin önizlemesi her karede binlerce ötelemeyi JSON'dan geçirirdi) bilerek TS'te kaldı; komutlar sunucuya gidince (CLAUDE.md §18) komut zarfıyla birlikte yeniden bakılır. Kullanıcı aksini isterse küçük işlemlerle taşınır.
-
-### S6: belgeler ve ölçüm raporu
-
-- CLAUDE.md güncellenir:
-  - §2, §4.1, §4.8.1 (çekirdek Rust'ta), §4.9 (PickIndex → depo), §9.4, §11 (“Rust alt küme” borcu kalkar, robust predicates borcu yazılır), §12;
-  - §13'e yalnız doğrulanmış durum notu.
-- `docs/perf/interaction-*.md`: önce/sonra raporu.
-
-**Kapsam dışı:** stil motoru, ifade dili ve SVG düzenleyicisinin geometrisi (`src/style/svg/*`).
-- Bunlar ayrı `style-core` işidir; geometriyi çekirdekten alırlar.
-- §23.3 robust predicates, S6'dan sonra ayrı bir dilimdir: yalnız Rust'ta, bağımsız referanslarla. Değişen sonuçlar bilinçli olarak golden dosyaya işlenir.
-
-### Dosya biçimleri (eski `wip/formats-dxf`, main'e alındı)
-
-- **Durum (24 Eylül):** park edilmiş dal yeniden kuruldu, incelendi, düzeltildi, sınandı ve S5'ten sonra main'e alındı (beş commit). Uzak `wip/formats-dxf` olduğu gibi duruyor. ADR 0009 “önerildi”: sahibinin onayını bekliyor; açık kararlar §6'da.
-- **Commit'ler (sırayla):**
-  - koordinat listeleri: Netcad NCN, TXT, CSV içe/dışa aktarma (eski `7ff6950`);
-  - DXF içe aktarma: ASCII DXF, bloklar tam patlatılır (eski `dcf3f2e`);
-  - incelemenin düzeltmeleri ve testleri;
-  - `crates/formats` ve `crates/formats-wasm`'da yalnız rustfmt (dal biçimlenmemişti, `cargo fmt --all -- --check` düşüyordu);
-  - belgeler (CLAUDE.md §1–12, ADR 0009, bu dosya).
-- **Çakışmalar:** CLAUDE.md (§4.3 `files` satırı, §4.8 Kaydet/Aç ve Yeni proje, §9.4 duman testi, §11, §12), `app/createApp.ts` (bulut yeniden adlandırma ve silme ile komut kaydı), `app/fileIO.ts` (`DiscardChoice` ile `PickedFile`, `pickForImport`). Hepsinde main'in metni korundu, dalın eklemeleri üstüne kondu. `Cargo.lock` yalnız cargo ile güncellendi; yeni dış bağımlılık yok (npm de).
-- **WIP `0320b7f` alınmadı** (uzak dalda duruyor). DXF yazıcısının (Dosya → Dışa aktar → DXF) başlangıcıydı ve derlenmiyordu (`dxf/xdata.rs` modül listesinde bile yoktu):
-  - sözleşmede `DxfWriteLayer` ve `DxfWriteInput`;
-  - KentOS'un kendi genişletilmiş verisini (1001 `KENTOS`: etiket, öznitelikler, deliğin dış halkasının tanıtıcısı, Catmull-Rom ve kapalı işaretleri) okuyan bir ayrıştırıcı;
-  - KentOS eğrisini tam Bézier parçalarına çeviren `catmull_rom_beziers` (testli).
-  - Yazıcının kendisi, `writeDxf`, pencere, komut ve testler yoktu. DXF dışa aktarma ayrı bir dilimdir ve oradan başlayabilir. İçe aktarıcıdaki kancaları (varlık tanıtıcısı, `KENTOS` verisinin okunması) bu yüzden kaldırıldı.
-- **İncelemede düzeltilenler** (ayrıntı commit iletisinde ve ADR 0009'da):
-  - Biçimler, uygulamanın da hesapladığını ortak çekirdekten alır (`bulge_path_outline`, alan, içerme); kopyaları silindi. DXF taramasının çoklu çizgi sınırı artık uygulamanın kendi taramasıyla aynı noktaları alır. Biçim modülü 494 KB (gzip 187 KB), öncekinden 5 KB küçük.
-  - DXF: katman adı tablodaki yazılışıyla (büyük/küçük harf); okunamayan ATTRIB raporlanır; blok açmada adım sınırı (hiçbir şey çizmeyen iç içe bloklar worker'ı kilitliyordu); MINSERT hücreleri 10 000'den çok sütunda yanlış satıra düşüyordu, dizi 10 000 × 10 000 ile sınırlandı; NURBS derecesi en çok 25; hesaplanamayan tarama eğrisi raporlanır; ACI 251–254 AutoCAD'in gri tonları.
-  - Tarayıcı: `readDxf` bütün arabelleği devreder, görünümü kopyalar (pencere `bytes.buffer` gönderiyordu); koordinat listesi penceresi kapanınca önizleme okuması durur; açık düzenleme ya da model grubu varken içe aktarma beklenir (modelin geri alma adımına katılıp iptaliyle geri alınıyordu).
-  - Yeni testler: `io/client.test.ts`, `io/coords.test.ts`, `io/apply.test.ts`'e çalışan model; Rust'ta katman adı, öznitelik raporu, dolaşma sınırı, MINSERT ızgarası, derece sınırı, sınır bayrakları, örnekleme kuralı, gri tonlar.
-- **Doğrulama (bulut konteyneri, dalın son hâli):** `cargo test -p kentos-formats` 49 test; `pnpm rust:test` (workspace testleri ve clippy `-D warnings`) temiz, 220 test (veritabanı testleri sır olmadığı için atlandı); `cargo fmt --all -- --check` temiz; `npx tsc --noEmit -p .` temiz; `pnpm test` 791 test geçti (5 fixture kaydedicisi atlandı); `pnpm e2e`: 100 denetim geçti; düşen üçü bu konteynerde main'de de düşen WebGPU denetimleri (aygıt kaybı).
-- **Kalan:** sahibinin ADR 0009 onayı; DXF dışa aktarma dilimi; büyük dosyada içe aktarmanın ana iş parçacığındaki süresinin ölçülmesi (JSON ayrıştırma, denetim, belgeye ekleme; ölçülmedi).
-
-## 4. Taşıma yöntemi (P dilimleri ve S'deki yeni çekirdek işlevleri)
+## 4. Taşıma yöntemi ve yeni çekirdek işlevleri
 
 - **Birebir taşıma.** JavaScript sayı anlamı `crates/geometry-core/src/jsmath.rs`'tedir:
   - `js_round`, `js_sign`;
@@ -180,13 +114,14 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `kentos` adlı veritabanına asla dokunulmaz; o başka bir uygulamanındır. KentOS CAD'in veritabanı `kentos_cad`'dir.
 - **Bulut konteyneri (Claude Code on the web):** kök kullanıcıyla çalışır.
   - Chromium `/opt/pw-browsers/chromium`'dadır ve kökte `--no-sandbox` ister. `cdp.mjs` bayrak eklemez; depoya dokunmadan `exec /opt/pw-browsers/chromium --no-sandbox "$@"` diyen bir sarmalayıcıyı `CHROME_BIN` ile verin.
-  - Başsız SwiftShader'da WebGPU aygıtı ilk karelerde kaybolur (“A valid external Instance reference no longer exists”). `pnpm e2e`'nin üç WebGPU denetimi bu yüzden düşer; taban commit'te de aynıdır. Öbür denetimler anlamlıdır.
+  - Başsız SwiftShader'da WebGPU aygıtı ilk karelerde kaybolur (“A valid external Instance reference no longer exists”). `pnpm e2e`'nin üç WebGPU denetimi bu yüzden düşer; taban commit'te de aynıdır. Öbür denetimler anlamlıdır. Bir alt ajan WebGPU'nun bu konteynerde `--use-angle=vulkan` bayrağı olmadan çalıştığını gördü; `cdp.mjs` değiştirilmedi (kullanıcının makinesindeki bayraklar bozulmasın diye denemeden değiştirmeyin).
   - `wasm-bindgen-cli` kurulu gelmez (`cargo install … --locked`, ~1,5 dk).
 - **Ölçüm:** taban kullanıcının makinesinde (Intel Iris Xe GPU) alındı.
-  - Karşılaştırmayı kullanıcı kendi makinesinde `pnpm perf:interaction --label s1` ile yapar.
-  - Bulutta yalnız aynı makinede önce/sonra çifti anlamlıdır. `--allow-swiftshader` ile çalıştırılırsa yalnız ana iş parçacığı süreleri anlamlıdır.
-- **Ağır işler tek tek:** cargo, tam vitest, e2e ve ölçüm aynı anda çalışmaz; kullanıcının makinesi bir kez dondu.
-  - Alt ajan en çok 3 olmalı (token bütçesi).
+  - Karşılaştırmayı kullanıcı kendi makinesinde `pnpm perf:interaction --label s6` ile yapar.
+  - Bulutta yalnız aynı makinede önce/sonra çifti anlamlıdır. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır, bir koşu (`--runs 1`) ~50 dk sürer.
+  - Düzenek çalışma dizinindeki kaynağı sunar: ölçüm sürerken `src/` değişirse ölçüm bozulur. Ölçülecek commit'i ayrı bir git worktree'sinde çalıştırın (`node_modules` bağı ve `src/wasm/pkg` kopyasıyla); ana dizinde çalışmaya devam edilebilir.
+- **Ağır işler:** kullanıcının makinesinde cargo, tam vitest, e2e ve ölçüm aynı anda çalışmaz (makine bir kez dondu). Bulut konteynerinde paralel çalıştırılabilir (kullanıcı izin verdi), ama ölçüm sürerken başka ağır iş çalışmaz.
+- **Alt ajan:** kullanıcı kredinin azaldığını söyledi; yalnız gerçekten gerekirse ve tek tek. Alt ajan ayrı worktree'de çalışır, main'e push etmez; sonucunu siz inceleyip sınar ve alırsınız.
 - **Commit ve push:** dilim başına bir commit, mevcut biçimde İngilizce mesajla (ör. “Shared core, P8: …”). `tsc`, `pnpm test`, clippy ve gerekiyorsa `pnpm e2e` geçince main'e push edilir.
 - **Test ve doğrulama:**
   - Hata düzeltmesi önce hatayı yeniden üreten testle başlar.
@@ -210,3 +145,14 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 9. Dosya biçimleri (ADR 0009) main'e alındı; ADR'nin onayı bekliyor.
 10. İçe aktarmada “Bu koordinatlar hangi sistemde?” sorusu projenin sistemi seçili açılıyor; içe aktarılabilen tek seçenek o olduğu için kullanıcı hiçbir şeye dokunmadan içe aktarabiliyor. Seçim yapılmadan “İçe aktar” düğmesi kapalı mı kalsın (açık onay)?
 11. DXF ACI 251–254 gri tonları AutoCAD 2000 ve sonrasının tablosuna (ezdxf ile aynı: 80, 105, 130, 190) göre düzeltildi; bir AutoCAD çizimiyle doğrulanması iyi olur.
+12. Bilgi için (kullanıcı aksini isterse değişir; ayrıntı ADR 0008 S4, S5): hedef katmandaki adsız nokta artık numaralı sayılmaz (önce bir numarayı yutuyordu); köşesiz yolun `$y`/`$x`'i boştur (önce bütün ifadeyi boşaltan hata veriyordu); yazılan değerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`) ve dikdörtgen dizinin ötelemeleri TS'te kaldı, çünkü iki dilde bit bit aynıdır ve önizlemede her karede JSON'a değmez.
+
+## 7. Devralan ajan için ilk adımlar
+
+1. Bu dosyayı ve §1'deki belgeleri okuyun. CLAUDE.md §0 ve §13 sonrası kullanıcının metnidir: yalnız doğrulanmış durum notu eklenir.
+2. Ortamı kurun (§5): `pnpm install --frozen-lockfile`, `cargo install wasm-bindgen-cli --version 0.2.128 --locked`, bulutta Chromium sarmalayıcısı (`CHROME_BIN`).
+3. `main`'i doğrulayın: `npx tsc --noEmit -p .`, `pnpm test`, `pnpm rust:test`, `pnpm e2e`. Beklenen sonuçlar §2 “Son doğrulama”dadır; bulutta üç WebGPU denetimi bilinen biçimde düşer.
+4. Kullanıcıya §6'daki açık kararları sorun; özellikle 8 (WASM bütçesi) ve 9 (ADR 0009), çünkü §3'teki işlerin çoğu bunlara bağlı.
+5. §3'ten sıradaki işi alın. Dilim başına bir commit, İngilizce ileti (“Shared core, …” ya da “File formats, …”), sonunda oturumun atıf satırları; `tsc`, `pnpm test`, Rust'a dokunulduysa `pnpm rust:test` ve arayüze ya da çekirdeğe dokunulduysa `pnpm e2e` geçince `main`'e ve oturum dalına push edilir.
+6. Yeni bir çekirdek işlevi: önce Rust'ta işlev ve birim testi, sonra çağrı tablosu (`op!`), çağrı kümesi ve donmuş fixture (§4), sonra TS cephesi (`op<Sig>('ad')`), en son çağıranlar. Cephede aritmetik yazmayın; bekçi test düşer. WASM boyutunu ADR 0008 tablosuna yazın.
+7. İş bitince bu dosyayı güncelleyin: biten maddeyi silin, yeni kararı ekleyin.
