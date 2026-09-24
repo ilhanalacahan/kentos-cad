@@ -447,6 +447,35 @@ try {
     eyeHidden && focusKept && (await b.eval(`window.kentos.doc.layers.get('kaldirim').visible && !window.__layerRows[0].hasAttribute('data-hidden')`)) && (await sameRows()) && `${await layerCounts()}` === `${c0},${g0}`,
   );
   await b.eval('delete window.__layerRows; delete window.__focusBefore');
+  // A long layer tree builds only the rows near its scroll window (TreeView, CLAUDE.md §6.3): with a
+  // 300-layer group the last layer has no row; End scrolls to it, builds it with its count and selects it.
+  const virtualTree = await b.eval(`(async () => {
+    const k = window.kentos, layers = k.doc.layers;
+    const saved = structuredClone(layers.tree), active = layers.active.value;
+    const g = layers.add({ name: 'Uzun grup', type: 'group' }, null);
+    const ids = Array.from({ length: 300 }, (_, i) => layers.add({ name: 'Uzun ' + i }, g.id).id);
+    k.doc.addMany([0, 1].map((i) => ({ kind: 'point', layerId: ids[299], p: { x: ${E} + i, y: ${N} - 300 }, attrs: {} })));
+    await new Promise((ok) => setTimeout(ok, 100));
+    const tree = document.querySelector('.panel--layers .tree');
+    const rows = () => tree.querySelectorAll('.tree__row:not(.tree__probe)').length;
+    const rowOf = (id) => tree.querySelector('.tree__row[data-id="' + id + '"]');
+    const out = { built: rows(), lastBefore: !!rowOf(ids[299]) };
+    tree.focus();
+    tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+    await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+    const last = rowOf(ids[299]);
+    const r = last?.getBoundingClientRect(), t = tree.getBoundingClientRect();
+    Object.assign(out, { selected: last?.getAttribute('aria-selected'), inView: !!r && r.top >= t.top - 1 && r.bottom <= t.bottom + 1, count: last?.querySelector('.tree__count')?.textContent, place: last?.getAttribute('aria-posinset') + '/' + last?.getAttribute('aria-setsize'), after: rows() });
+    k.commands.execute('edit.undo');
+    layers.reset(saved, active);
+    await new Promise((ok) => setTimeout(ok, 50));
+    return out;
+  })()`);
+  check(
+    'Layers panel: a long tree builds only the rows near its window; End scrolls to the last and builds it',
+    virtualTree.built < 80 && !virtualTree.lastBefore && virtualTree.selected === 'true' && virtualTree.inView && virtualTree.count === '2' && virtualTree.place === '300/300' && virtualTree.after < 130,
+    JSON.stringify(virtualTree),
+  );
 
   // Area operations (Alan işlemleri) on fresh squares east of everything else.
   const AX = E + 400;
