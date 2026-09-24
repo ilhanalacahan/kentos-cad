@@ -526,7 +526,7 @@ const report = {
   date: new Date().toISOString(),
   commit,
   dirtyTree,
-  machine: { cpu, threads: cpus().length, memoryGb: Math.round(totalmem() / 2 ** 30), loadAverageAtStart: load0.map((v) => Math.round(v * 100) / 100), chrome: execSync('google-chrome --version').toString().trim(), node: process.version },
+  machine: { cpu, threads: cpus().length, memoryGb: Math.round(totalmem() / 2 ** 30), loadAverageAtStart: load0.map((v) => Math.round(v * 100) / 100), chrome: execFileSync(process.env.CHROME_BIN ?? 'google-chrome', ['--version']).toString().trim(), node: process.version },
   setup: {
     runs,
     scale,
