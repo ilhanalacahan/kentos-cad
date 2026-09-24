@@ -369,7 +369,7 @@ async function panScenario(env) {
   await b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at(), button: 'middle', buttons: 0, clickCount: 1 });
   await settle();
   checkMoves('pan', PAN_STEPS, probe);
-  return { planned: PAN_STEPS, sent: PAN_STEPS, wallMs, moves: probe.moves, frames: probe.frames };
+  return { pan: true, planned: PAN_STEPS, sent: PAN_STEPS, wallMs, moves: probe.moves, frames: probe.frames };
 }
 
 /** A style change on the big layer rebuilds it (and only it) in the next frame. */
@@ -401,8 +401,9 @@ function scenarioMetrics(r) {
   if (r.frames?.length) {
     out['frame.cpu'] = summarize(r.frames.map((f) => f.build + f.render + f.overlay));
     for (const k of ['build', 'render', 'overlay', 'labels', 'tool']) out[`frame.${k}`] = summarize(r.frames.map((f) => f[k]));
-    // Wall time from one frame's start to the next: the frame rate reached, the GPU's work included.
-    if (r.frames.length > 1 && Number.isFinite(r.frames[0].at)) out['frame.interval'] = summarize(r.frames.slice(1).map((f, i) => f.at - r.frames[i].at));
+    // Wall time from one frame's start to the next while panning: the frame rate reached, the GPU's work included.
+    // (Elsewhere the harness itself sets the pace: a read after each trim move, a pause between rebuilds.)
+    if (r.pan && r.frames.length > 1 && Number.isFinite(r.frames[0].at)) out['frame.interval'] = summarize(r.frames.slice(1).map((f, i) => f.at - r.frames[i].at));
     // Frame i belongs to move i (one frame per move, checked); only frames with an edge under the cursor draw a preview.
     if (r.hovered && r.frames.length === r.hovered.length) out['frame.preview'] = summarize(r.frames.filter((_, i) => r.hovered[i]).map((f) => f.tool));
   }
@@ -674,10 +675,14 @@ md.push('');
 let compared = null;
 if (compareFile && existsSync(compareFile) && resolve(compareFile) !== resolve(`${outDir}/interaction-${label}.json`)) {
   const base = JSON.parse(readFileSync(compareFile, 'utf8'));
+  // Only like with like: the same generator parameters (a --scale run is not comparable) and the same machine, Chrome and GPU.
+  const sameData = (name) => JSON.stringify(base.datasets?.[name]?.params) === JSON.stringify(summaries[name]?.params);
+  const skipped = Object.keys(summaries).filter((name) => !sameData(name));
+  const sameConditions = base.machine?.cpu === report.machine.cpu && base.machine?.chrome === report.machine.chrome && base.setup?.glRenderer === report.setup.glRenderer;
   compared = [];
   for (const [key, m] of Object.entries(metrics)) {
     const o = base.metrics?.[key];
-    if (!o || !(o.p95 > 0)) continue;
+    if (!o || !(o.p95 > 0) || skipped.includes(key.split('/')[0])) continue;
     const ratio = m.p95 / o.p95;
     // Outside the other run's whole p95 range by more than 10 % (and by 0.1 ms, the scale of timer and scheduling noise).
     const clear = Math.abs(m.p95 - o.p95) >= 0.1;
@@ -691,15 +696,17 @@ if (compareFile && existsSync(compareFile) && resolve(compareFile) !== resolve(`
   md.push("p95 koşuların ortancasıdır. “Gerileme”: yeni p95, eski ölçümün en yüksek koşusundan %10'dan ve 0.1 ms'den fazla yüksek; “iyileşme”: en düşük koşusundan aynı paylarla düşük. Ölçüm koşulları (makine, Chrome, GPU) aynı değilse karşılaştırma geçersizdir.");
   md.push('');
   md.push(`Önce: ${base.machine?.cpu}, ${base.machine?.chrome}, ${base.setup?.glRenderer}. Şimdi: ${report.machine.cpu}, ${report.machine.chrome}, ${report.setup.glRenderer}.`);
+  if (!sameConditions) md.push('', '**Makine, Chrome ya da GPU farklı: bu karşılaştırma geçersizdir; önce aynı koşullarda yeni taban alın.**');
+  if (skipped.length) md.push('', `**Veri seti parametreleri farklı, karşılaştırılmadı:** ${skipped.map((name) => `\`${name}\``).join(', ')} (ör. \`--scale\`).`);
   md.push('');
   md.push('| Ölçüt | önce p95 | şimdi p95 | oran | sonuç |');
   md.push('|---|---|---|---|---|');
   for (const c of compared) md.push(`| \`${c.key}\` | ${ms(c.base)} | ${ms(c.now)} | ${c.ratio.toFixed(2)} | ${c.verdict} |`);
   md.push('');
   const worse = compared.filter((c) => c.verdict === 'gerileme');
-  md.push(worse.length ? `**${worse.length} ölçütte gerileme var.**` : 'Gerileme yok.');
+  md.push(!compared.length ? 'Karşılaştırılacak ölçüt yok.' : worse.length ? `**${worse.length} ölçütte gerileme var.**` : 'Gerileme yok.');
   md.push('');
-  report.compared = { with: compareFile.replace(`${process.cwd()}/`, ''), results: compared };
+  report.compared = { with: compareFile.replace(`${process.cwd()}/`, ''), sameConditions, skipped, results: compared };
   writeFileSync(`${outDir}/interaction-${label}.json`, `${JSON.stringify(report, null, 2)}\n`);
 }
 writeFileSync(`${outDir}/interaction-${label}.md`, md.join('\n'));
