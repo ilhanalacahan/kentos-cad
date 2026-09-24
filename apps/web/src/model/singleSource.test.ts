@@ -18,12 +18,13 @@ import { describe, expect, it } from 'vitest';
  * (crates/shared/style-core, docs/adr/0008 “İfade dili”, “Stil
  * derleyicisi”): their TypeScript builds the table of what expressions read
  * and the program of a layer's symbols, and reads the answers back. The SVG
- * editor keeps its own geometry for now (the next style-core slice,
- * docs/DEVIR.md), and so do the style window's classes (breaks of a value
- * range), the symbol previews' sample shapes and the page's half of a
- * styled layer (colours, atlas images, how far a batch reaches), which are
- * presentation; screen-space drawing (pixel offsets on the overlay) is
- * presentation, not geometry.
+ * editor's geometry, its file reading and writing included, is the SVG
+ * core's (crates/shared/svg-core, “SVG düzenleyicisi”): style/svg only
+ * passes calls. The style window's classes (breaks of a value range), the
+ * symbol previews' sample shapes, the page's half of a styled layer
+ * (colours, atlas images, how far a batch reaches) and the editor's views
+ * (ui/svgedit: zoom, drag, rulers) are presentation; screen-space drawing
+ * (pixel offsets on the overlay) is presentation, not geometry.
  */
 
 /**
@@ -37,9 +38,12 @@ const SOURCES = import.meta.glob<string>(
     './geom/*.ts',
     './ops/*.ts',
     './expression/*.ts',
+    '../style/svg/*.ts',
     '!./**/*.test.ts',
+    '!../style/svg/*.test.ts',
     '!./geom/goldenCases.ts',
     '!./expression/cases.ts',
+    '!../style/svg/testSetup.ts',
     './geometry.ts',
     './entities.ts',
     '../render/triangulate.ts',
@@ -64,6 +68,12 @@ const repoPath = (key: string) => new URL(key, 'file:///src/model/').pathname.sl
 const EXCEPTIONS: Record<string, Record<string, string>> = {
   'src/model/geometry.ts': {
     extendBounds: 'Growing a box by a point is bookkeeping (min, max and the padding the caller asks for), not geometry.',
+  },
+  'src/style/svg/svgModel.ts': {
+    shapeId: 'A counter that makes ids unique (bookkeeping, not geometry).',
+  },
+  'src/style/svg/importSvg.ts': {
+    newGroup: 'A counter that makes group ids unique (bookkeeping, not geometry).',
   },
   'src/style/primitives.ts': {
     '(modül)': 'Definitions, not calculations: a CSS pixel on paper (25.4/96 mm) and the shape parameters the shaders take when a symbol gives none (an arc opening of half a turn).',

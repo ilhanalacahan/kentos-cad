@@ -271,9 +271,8 @@ export class NodeTool {
         const next = sp.nodes[(ni + 1) % len];
         const dx = (next.x - prev.x) / 6;
         const dy = (next.y - prev.y) / 6;
-        n.in = [n.x - dx, n.y - dy];
-        n.out = [n.x + dx, n.y + dy];
-        n.type = 'smooth';
+        // A new node object: its fields in the order the core writes them (the editor compares drawings as text).
+        sp.nodes[ni] = { x: n.x, y: n.y, in: [n.x - dx, n.y - dy], out: [n.x + dx, n.y + dy], type: 'smooth' };
       } else {
         delete n.in;
         delete n.out;

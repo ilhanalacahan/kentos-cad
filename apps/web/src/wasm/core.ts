@@ -98,9 +98,14 @@ const SPECIAL = new Map<string, number>([
 ]);
 const revive = (_key: string, v: unknown) => (typeof v === 'string' && v.charCodeAt(0) === 35 && SPECIAL.has(v) ? SPECIAL.get(v) : v);
 
-/** A core result read back: the special numbers are strings starting with "#". */
+/**
+ * A core result read back: the special numbers are the strings "#NaN",
+ * "#Inf" and "#-Inf". The reviver (a call per value, several times slower)
+ * runs only when one of them is there: colours such as "#AA3300" start with
+ * "#" too.
+ */
 export function readResult(text: string): unknown {
-  return text.includes('"#') ? JSON.parse(text, revive) : JSON.parse(text);
+  return text.includes('"#NaN"') || text.includes('"#Inf"') || text.includes('"#-Inf"') ? JSON.parse(text, revive) : JSON.parse(text);
 }
 
 const special = (_key: string, x: unknown) => (typeof x !== 'number' || Number.isFinite(x) ? x : x !== x ? '#NaN' : x > 0 ? '#Inf' : '#-Inf');
