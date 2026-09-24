@@ -30,6 +30,7 @@ pub mod measure;
 pub mod numeric;
 pub mod ops;
 pub mod tessellate;
+pub mod triangulate;
 pub mod vec2;
 
 pub use vec2::Vec2;

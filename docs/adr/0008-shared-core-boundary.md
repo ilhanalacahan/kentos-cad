@@ -69,6 +69,11 @@ Kullanıcının kararları (2026-09-24):
   - JSON.stringify NaN ve ±∞'u `null` yazdığı için, sayı beklenen yerde `null` NaN okunur; TS de NaN'ı taşımaya devam ederdi. Eksik alan `null` sayılır; `None` olan `Option` alanları yazılmaz (TS'in tanımsız özellikleri yazmaması gibi); bilinmeyen alanlar yok sayılır.
   - `JSON.stringify(-0)` `"0"` yazar. Girdideki −0 korunmaz; `.kcad` ve bulut kaydı da bunu zaten korumuyor.
 - **`undefined` ve `null`:** JSON'da `undefined` yoktur. `op(ad, true)`, TS işlevi yokluk için `undefined` döndürüyorsa `null`'u `undefined`'a çevirir. İsteğe bağlı alanlar çekirdekte yazılmaz (`skip_serializing_if`).
+- **Tipli toplu girişler:** kare başına binlerce çağrı yapan yerler JSON tablosundan değil, `Float64Array` giren ve dizi dönen tipli girişlerden geçer (`crates/wasm`, `core.ts`). Tuzak bildirimi `op` ile aynıdır.
+  - İlki `triangulateMany(xy, ringSizes, polyRings)`: bir katmanın bütün dolguları tek çağrıda. Halkaların noktaları art arda, halka başına köşe sayısı, çokgen başına halka sayısı (önce dış halka, sonra delikler) girer; üçgen başına üç köşe dizini döner.
+  - Dizin dönmesinin nedeni: köprü köşeleri yalnız yineler, yeni nokta kurmaz. Dolgunun koordinatları çağıranın kendi noktalarıdır; orijine göre fark (§4.9) çizim paketlemesidir ve TS'te kalır.
+  - Tipli giriş adıyla çağrılan karşılığıyla (`triangulate`) sınanır (`src/wasm/triangulate.wasm.test.ts`); o da parity testiyle TS'e bağlıdır ve fixture'la dondurulur. Aynı test basit halkalarda üçgen alanlarının toplamının halkanın alanına eşit olduğunu denetler.
+  - Aynı makinede (bulut, Node 22) 50 000 halka: TS döngüsü 160–350 ms, paketleme dahil toplu çağrı ısındıktan sonra 48–60 ms; Float32 çıktı bit bit aynı.
 - **Sıcak yollar (S1):** kenet, seçme, etiket, tutamaç, hayaletler ve budama önizlemesi JSON tablosundan geçmez. Belgenin kopyasını tutan bir geometri deposuna (`Store`) tipli, `Float64Array` giriş-çıkışlı toplu sorgular yapılır. Depo `doc.events.touched` ile eşitlenir. Ayrıntısı o dilimde bu ADR'ye eklenir.
 
 ### Başlatma, worker ve hata
@@ -98,6 +103,7 @@ Kullanıcının kararları (2026-09-24):
   | P4 + P5 (+40 işlem) | 494 KB | 170 KB | Düzlem bindirme motoru, alan cebiri, nesne modeli ve işlemleri |
   | P6 (+23 işlem) | 559 KB | 190 KB | Yol parametresi, budama, uzatma, kırma, uzat-kısalt; elips ve yardımcı çizgi kesimleri |
   | P7 (+13 işlem) | 618 KB | 210 KB | Öteleme, köşe yuvarla ve pah, birleştir, köşe ekle/sil, patlat, nesne ↔ alan |
+  | P8 (+1 işlem, 1 toplu giriş) | 630 KB | 215 KB | Delikli halkaların üçgenlenmesi (köprü ve kulak kırpma), tipli `triangulateMany` |
 
 ### Doğrulama
 

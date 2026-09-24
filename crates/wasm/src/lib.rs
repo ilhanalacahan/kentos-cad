@@ -8,6 +8,7 @@ use kentos_geometry_core::Vec2;
 use kentos_geometry_core::geom::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
 use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
+use kentos_geometry_core::triangulate::triangulate_many;
 use wasm_bindgen::prelude::*;
 
 fn points(xy: &[f64]) -> Vec<Vec2> {
@@ -116,6 +117,18 @@ pub fn polygon_perimeter_js(
 ) -> f64 {
     let (outer, inner) = rings(xy, bulges, holes, hole_bulges, hole_sizes);
     polygon_perimeter(&outer, &inner)
+}
+
+/// Fill triangles of many polygons in one call (a layer's fills,
+/// docs/adr/0008): `xy` holds every ring's points one after another,
+/// `ring_sizes` each ring's vertex count and `poly_rings` each polygon's ring
+/// count (its outer ring, then its holes). Three vertex indices (into the
+/// points of `xy`) per triangle come back, polygon after polygon.
+#[wasm_bindgen(js_name = triangulateMany)]
+pub fn triangulate_many_js(xy: &[f64], ring_sizes: &[u32], poly_rings: &[u32]) -> Vec<u32> {
+    let sizes: Vec<usize> = ring_sizes.iter().map(|&n| n as usize).collect();
+    let polys: Vec<usize> = poly_rings.iter().map(|&n| n as usize).collect();
+    triangulate_many(&points(xy), &sizes, &polys)
 }
 
 #[cfg(test)]

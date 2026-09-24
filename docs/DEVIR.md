@@ -21,35 +21,26 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - **Kullanıcının hedefi:** “Öncelikle ortak çekirdeği tamamlayalım.”
   - CLAUDE.md §14 der ki: CAD hesabı `crates/geometry-core` içinde bir kez yazılır, native ve wasm32 olarak derlenir.
   - Eşdeğerlik kanıtlanınca TypeScript algoritması silinir.
-- **Yapıldı (P0–P7):** `src/model/geom` ve `src/model/ops` içindeki bütün işlemler Rust'ta.
+- **Yapıldı (P0–P8):** `src/model/geom`, `src/model/ops` ve `src/render/triangulate.ts` içindeki bütün işlemler Rust'ta.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
-  - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p7`) native ve WASM'da geçiyor.
+  - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
+  - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
 - **Ama çalışan geometri hâlâ TypeScript.** Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır. Asıl geçiş S1–S3'tedir.
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
   - olay günlüğü budama (migration 0003);
   - etkileşim ölçüm düzeneği (`pnpm perf:interaction`) ve TypeScript tabanı.
-- **Son doğrulama (main, 36b87f4):**
-  - `npx tsc --noEmit -p .` temiz, `pnpm test` 758 test geçti.
-  - `cargo clippy --workspace --all-targets -- -D warnings` temiz.
-  - Veritabanı testleri geçti; `pnpm e2e` “Tüm kontroller geçti.” dedi.
-- **WASM paketi:** 618 KB, gzip ile 210 KB. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip.
+- **Son doğrulama (main, P8 commit'i, bulut konteyneri):**
+  - `npx tsc --noEmit -p .` temiz, `pnpm test` 764 test geçti.
+  - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
+  - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
+- **WASM paketi:** 630 KB, gzip ile 215 KB. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip.
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
 
 ## 3. Sıradaki işler (bu sırayla)
-
-### P8: üçgenleme
-
-- `src/render/triangulate.ts` (delikli halka, köprü ve ear clipping) Rust'a birebir taşınır.
-- Toplu bir `triangulateMany(halkalar, ofsetler)` eklenir: noktalar `Float64Array` ile girer, üçgen dizinleri toplu döner.
-- Taşıma yöntemi §4'teki gibidir:
-  - `src/wasm/parity/sets/p8-*.ts` çağrı kümesi;
-  - derin koşu;
-  - fixture;
-  - ADR 0008 boyut satırı.
 
 ### S1: WASM geometri deposu (en büyük kazanç)
 
@@ -186,6 +177,10 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - **Sırlar depoda yok** (`.env.local`):
   - Veritabanı testleri atlanır, `pnpm e2e:cloud` çalışmaz; veritabanı kurmaya çalışmayın.
   - `kentos` adlı veritabanına asla dokunulmaz; o başka bir uygulamanındır. KentOS CAD'in veritabanı `kentos_cad`'dir.
+- **Bulut konteyneri (Claude Code on the web):** kök kullanıcıyla çalışır.
+  - Chromium `/opt/pw-browsers/chromium`'dadır ve kökte `--no-sandbox` ister. `cdp.mjs` bayrak eklemez; depoya dokunmadan `exec /opt/pw-browsers/chromium --no-sandbox "$@"` diyen bir sarmalayıcıyı `CHROME_BIN` ile verin.
+  - Başsız SwiftShader'da WebGPU aygıtı ilk karelerde kaybolur (“A valid external Instance reference no longer exists”). `pnpm e2e`'nin üç WebGPU denetimi bu yüzden düşer; taban commit'te de aynıdır. Öbür denetimler anlamlıdır.
+  - `wasm-bindgen-cli` kurulu gelmez (`cargo install … --locked`, ~1,5 dk).
 - **Ölçüm:** taban kullanıcının makinesinde (Intel Iris Xe GPU) alındı.
   - Karşılaştırmayı kullanıcı kendi makinesinde `pnpm perf:interaction --label s1` ile yapar.
   - Bulutta yalnız aynı makinede önce/sonra çifti anlamlıdır. `--allow-swiftshader` ile çalıştırılırsa yalnız ana iş parçacığı süreleri anlamlıdır.

@@ -1,4 +1,4 @@
-import { callOp, initSync, opId } from './pkg/kentos_wasm.js';
+import { callOp, initSync, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
 import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
 
 /**
@@ -48,6 +48,25 @@ export function onCoreFault(handler: (err: Error) => void): void {
   onFault = handler;
 }
 
+/** A trap stops the core for good: the app hears of it once. */
+function fault(err: unknown): void {
+  if (err instanceof WebAssembly.RuntimeError && !faulted) {
+    faulted = true;
+    onFault?.(err);
+  }
+}
+
+/** Runs a typed entry point (a hot path), reporting a trap as `op` does. */
+function typed<T>(run: () => T): T {
+  if (!compiled) throw new Error('Geometri çekirdeği henüz başlatılmadı.');
+  try {
+    return run();
+  } catch (err) {
+    fault(err);
+    throw err;
+  }
+}
+
 const SPECIAL = new Map<string, number>([
   ['#NaN', NaN],
   ['#Inf', Infinity],
@@ -76,10 +95,7 @@ export function op<F extends (...args: never[]) => unknown>(name: string, undef 
     try {
       text = callOp(id, JSON.stringify(args));
     } catch (err) {
-      if (err instanceof WebAssembly.RuntimeError && !faulted) {
-        faulted = true;
-        onFault?.(err);
-      }
+      fault(err);
       throw err;
     }
     const v = readResult(text);
@@ -91,4 +107,15 @@ export function op<F extends (...args: never[]) => unknown>(name: string, undef 
 /** Runs an operation by name on already-built JSON arguments (the golden fixtures). */
 export function callNamed(name: string, args: unknown[]): unknown {
   return op(name)(...(args as never[]));
+}
+
+/**
+ * Fill triangles of many polygons in one call (a layer's fills): `xy` holds
+ * every ring's points one after another, `ringSizes` each ring's vertex
+ * count and `polyRings` each polygon's ring count (its outer ring, then its
+ * holes). Three vertex indices (into the points of `xy`) per triangle come
+ * back, polygon after polygon; a renderer takes the coordinates from `xy`.
+ */
+export function triangulateMany(xy: Float64Array, ringSizes: Uint32Array, polyRings: Uint32Array): Uint32Array {
+  return typed(() => wasmTriangulateMany(xy, ringSizes, polyRings));
 }
