@@ -1,5 +1,7 @@
 //! Rings and paths of straight segments (`src/model/geometry.ts`).
 
+use crate::api::Op;
+use crate::op;
 use crate::vec2::{Vec2, dist};
 
 /// Signed shoelace area, positive for counter-clockwise rings. Coordinates
@@ -49,3 +51,10 @@ pub fn point_in_polygon(p: Vec2, pts: &[Vec2]) -> bool {
     }
     inside
 }
+
+pub(crate) static OPS: &[Op] = &[
+    op!("signedArea", |(pts,): (Vec<Vec2>,)| signed_area(&pts)),
+    op!("pointInPolygon", |(p, pts): (Vec2, Vec<Vec2>)| {
+        point_in_polygon(p, &pts)
+    }),
+];

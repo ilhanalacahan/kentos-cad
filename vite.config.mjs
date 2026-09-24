@@ -1,4 +1,6 @@
-// Vite configuration. The only addition to the defaults: requests under /v1/
+// Vite configuration. Workers are ES modules (the processing worker starts
+// its own copy of the Rust geometry core, src/wasm/core.ts); tests start the
+// core first (src/wasm/testSetup.ts). Requests under /v1/
 // go to the local KentOS API (apps/api, `pnpm api`), in both `vite` and
 // `vite preview`, and so does the project WebSocket (/v1/ws). When the API is
 // not running the answer is a quiet 503, so the app shows "Sunucu: yok"
@@ -58,4 +60,6 @@ function kentosApi() {
 
 export default defineConfig({
   plugins: [kentosApi()],
+  worker: { format: 'es' },
+  test: { setupFiles: ['src/wasm/testSetup.ts'] },
 });

@@ -9,10 +9,11 @@ publish.workspace = true
 # Pure dependencies only: this crate must build for every target (native,
 # wasm32) and never reach for the file system, the network or a runtime
 # (CLAUDE.md §14). rust_decimal carries exact decimals for the numeric
-# policy (§23); it is pure Rust.
+# policy (§23); libm gives every target the same transcendental functions
+# (§23.4); serde and serde_json carry objects across the WASM boundary and
+# the golden fixtures (docs/adr/0008). All pure Rust.
 [dependencies]
 rust_decimal = { workspace = true }
-
-[dev-dependencies]
+libm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

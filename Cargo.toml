@@ -13,7 +13,12 @@ publish = false
 # Exact versions: adding or bumping a dependency is a decision (CLAUDE.md §3).
 [workspace.dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
+# float_roundtrip: parsed floats are exact (the default parser may be one ulp off), so
+# coordinates cross the WASM boundary and files bit for bit (docs/adr/0008).
+serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }
+# Transcendental functions of the geometry core: the same code on every target, so native
+# and WASM agree bit for bit (CLAUDE.md §23.4, docs/adr/0008).
+libm = "=0.2.16"
 rust_decimal = { version = "=1.43.0", default-features = false, features = ["std"] }
 ts-rs = { version = "=12.0.1", features = ["serde-json-impl"] }
 wasm-bindgen = "=0.2.128"
@@ -34,3 +39,11 @@ tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "fmt"] }
 [profile.release]
 lto = "thin"
 codegen-units = 4
+
+# The browser build of the core (pnpm rust:wasm): smallest and fastest code, and a
+# panic traps instead of unwinding (the app rebuilds the core then, docs/adr/0008).
+[profile.wasm]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+panic = "abort"

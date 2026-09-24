@@ -16,9 +16,9 @@ Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. F
 
   | Crate | Görev | Bağımlılık |
   |---|---|---|
-  | `crates/geometry-core` | Saf analitik geometri (f64), `src/model/geom` ve `src/model/geometry.ts`'in birebir karşılığı; §23 sayısal politikası (`numeric`) | Yalnızca saf crate'ler (rust_decimal). Dosya sistemi, ağ, Tokio, SQLx, HTTP ya da WebGPU'ya bağlanamaz; wasm32 için de derlenir |
+  | `crates/geometry-core` | Saf analitik geometri (f64), `src/model/geom` ve `src/model/geometry.ts`'in birebir karşılığı; §23 sayısal politikası (`numeric`); çağrı tablosu (`api`, ADR 0008) | Yalnızca saf crate'ler (rust_decimal, libm, serde, serde_json). Dosya sistemi, ağ, Tokio, SQLx, HTTP ya da WebGPU'ya bağlanamaz; wasm32 için de derlenir |
   | `crates/contracts` | Sürümlü veri sözleşmeleri; TS tipleri buradan üretilir (ADR 0002) | serde, serde_json, ts-rs |
-  | `crates/wasm` | Çekirdeğin tarayıcı sınırı: düz `Float64Array` giriş ve çıkış | geometry-core, wasm-bindgen |
+  | `crates/wasm` | Çekirdeğin tarayıcı sınırı: çağrı tablosu (JSON) ve düz `Float64Array` giriş-çıkışlı sıcak yollar (ADR 0008) | geometry-core, wasm-bindgen |
   | `apps/api` | HTTP API; Faz A'da yalnızca `GET /v1/health` | contracts, axum, tokio |
 
 - Bağımlılıklar kullanıcı onayıyla eklendi ve tam sürüme kilitlendi (`=`). `Cargo.lock` depoya girer.
@@ -30,13 +30,14 @@ Sunucu yığını kesindir: Axum, Tokio, SQLx (PostgreSQL + PostGIS) ve Tower. F
   | rust_decimal | 1.43.0 (yalnızca `std`) |
   | ts-rs | 12.0.1 |
   | wasm-bindgen | 0.2.128 |
+  | libm | 0.2.16 (ADR 0008) |
   | axum | 0.8.9 |
   | tokio | 1.53.1 |
 
 - Araç zinciri `rust-toolchain.toml` ile 1.96.0'a sabitlenir; `wasm32-unknown-unknown` hedefi zincirle birlikte kurulur.
 - WASM paketi `wasm-bindgen-cli` 0.2.128 ile üretilir (`pnpm rust:wasm`, `--target web`, `src/wasm/pkg`). Komutun sürümü `wasm-bindgen` crate'iyle aynı olmak zorundadır; paket depoya girmez. `src/wasm/golden.wasm.test.ts` paketin çalışma alanı sürümüyle derlendiğini denetler, eski paket testte yakalanır.
 - **Derleme sınırı:** `.cargo/config.toml` derlemeyi 4 işle sınırlar. Geliştirici makinesi tarayıcı, Vite ve başsız Chrome ile paylaşılıyor. Paralel ağır süreçler makineyi bir kez kilitledi. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz.
-- Ana `pnpm test` Rust araç zincirine bağımlı değildir. Rust ve WASM denetimleri `pnpm test:rust` ile ayrıca çalışır.
+- ~~Ana `pnpm test` Rust araç zincirine bağımlı değildir.~~ **2026-09-24'te değişti (ADR 0008):** uygulama geometriyi Rust çekirdeğinden aldığı için `pnpm dev`, `test`, `build` ve `e2e` önce `scripts/wasm/ensure.mjs` ile WASM paketini (gerekirse) derler; Rust araç zinciri bunlar için de gereklidir. `serde_json` `float_roundtrip` özelliğiyle kullanılır; paket `wasm` profiliyle (`lto = "fat"`, `panic = "abort"`) derlenir. `pnpm test:rust` Rust testleri, clippy ve WASM testlerini birlikte çalıştırır.
 
 ## Sonuçlar
 

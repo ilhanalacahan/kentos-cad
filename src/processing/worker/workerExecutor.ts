@@ -1,3 +1,4 @@
+import { coreModule } from '../../wasm/core';
 import type { Executor, RunJob } from '../job';
 import type { DocumentSnapshot, Feedback, ProcessingTool, RunResult } from '../types';
 import type { WorkerReply, WorkerRequest } from './protocol';
@@ -28,6 +29,8 @@ const CANCEL_POLL_MS = 50;
  */
 export function workerExecutor(spawn: () => WorkerLike, tools: ReadonlySet<string>): Executor {
   let worker: WorkerLike | null = null;
+  /** Whether the worker still needs the geometry core (it comes with the first job). */
+  let fresh = false;
   let seq = 0;
   const pending = new Map<number, Pending>();
 
@@ -59,6 +62,7 @@ export function workerExecutor(spawn: () => WorkerLike, tools: ReadonlySet<strin
       failAll('Arka plan çalıştırıcısı beklenmedik biçimde durdu.');
     };
     worker = w;
+    fresh = true;
     return w;
   };
 
@@ -83,7 +87,10 @@ export function workerExecutor(spawn: () => WorkerLike, tools: ReadonlySet<strin
         };
         pending.set(id, { resolve: done(resolve), reject: done(reject), feedback });
         try {
-          ensure().postMessage({ type: 'run', id, job, entities: [...doc.all()] });
+          const w = ensure();
+          const core = fresh ? (coreModule() ?? undefined) : undefined;
+          w.postMessage({ type: 'run', id, job, entities: [...doc.all()], core });
+          fresh = false;
         } catch (err) {
           pending.delete(id);
           clearInterval(timer);

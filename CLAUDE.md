@@ -93,6 +93,7 @@ pnpm test                 # Vitest birim testleri (geometri, işlemler, belge, b
 pnpm e2e                  # Başsız Chrome'da uçtan uca duman testi (kendi Vite sunucusunu açar)
 npx tsc --noEmit -p .     # yalnızca tip denetimi
 pnpm rust:test            # Rust çalışma alanı: cargo test + clippy (-D warnings)
+pnpm wasm                 # WASM paketi kaynak değiştiyse derlenir (dev/test/build/e2e bunu kendileri çalıştırır)
 pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → src/wasm/pkg (depoya girmez)
 pnpm test:rust            # rust:test + rust:wasm + WASM golden testleri
 pnpm db:setup             # kentosd db-setup + migrate + dev-seed (yerel PostGIS'te kentos_cad, iki rol, örnek kurum)
@@ -104,7 +105,7 @@ pnpm e2e:cloud            # gerçek sunucu ve veritabanıyla bulut akışı (gir
 - **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini ve proje WebSocket'ini (`/v1/ws`) `vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; yerel çizim sunucuya hiç bağlı değildir.
 - **Sunucu ayarları** (`kentosd`, önce ortam değişkeni, sonra `.env.local`; `.env.local` depoya girmez, `0600`): `KENTOS_DATABASE_URL` (sunucu rolü), `KENTOS_DATABASE_OWNER_URL` (migration ve yönetim), `KENTOS_PUBLIC_URL` (tarayıcının adresi; WebSocket kaynak denetimi ve OpenID dönüşü, varsayılan `http://localhost:5173`), `KENTOS_COOKIE_SECURE`, `KENTOS_LOCAL_LOGIN`, OpenID için `KENTOS_OIDC_ISSUER`, `KENTOS_OIDC_CLIENT_ID`, isteğe bağlı `KENTOS_OIDC_CLIENT_SECRET`, `KENTOS_OIDC_AUDIENCE`, `KENTOS_OIDC_LABEL`. Veritabanı testleri `KENTOS_TEST_ADMIN_URL` ile geçici `kentos_cad_test_*` veritabanları açar; sunucu yoksa atlanır, `KENTOS_TEST_DB=required` bunu hata sayar (ADR 0006, 0007).
 
-- **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. `pnpm test` Rust gerektirmez; WASM testleri paket yoksa atlanır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
+- **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. **Uygulama geometriyi Rust çekirdeğinden (WASM) alır** (ADR 0008): `pnpm dev`, `test`, `build` ve `e2e` önce `scripts/wasm/ensure.mjs`'i çalıştırır; çekirdeğin kaynakları değiştiyse paket `nice` ile yeniden derlenir (`src/wasm/pkg/.stamp`). Bu yüzden Rust araç zinciri bunların hepsi için gereklidir. Sayfa çekirdeği uygulamadan önce başlatır (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
 
 - **Çizim motoru:** varsayılan WebGL2'dir; WebGPU isteğe bağlıdır.
   - Etkin motor durum çubuğunun sağ alt köşesinde yazar. Tıklayınca motor seçilir: seçim hemen uygulanır (`view.switchBackend`, sayfa yenilenmez) ve `prefs.rendererPreference` ile hatırlanır. Aynı seçim **Görünüm → Çizim motoru** menüsünde ve Uygulama ayarları → Çizim motoru bölümünde de vardır.
@@ -162,6 +163,8 @@ içinde kurulur.
 | `tools/`      | Etkileşimli araçlar ve araç kataloğu                                                                                                                                                                                       | core, model, viewport (tip), app (tip)      | ui                                     |
 | `ui/`         | Bileşenler, paneller, pencereler, widget'lar                                                                                                                                                                               | hepsi (servisler `AppContext` üzerinden)    | model'i doğrudan değiştirmek (bkz. §8) |
 | `app/`        | Kompozisyon kökü, komutlar, menüler, kısayollar, durum depoları, biçimlendirici                                                                                                                                            | hepsi                                       | —                                      |
+
+**`wasm/`** (Rust geometri çekirdeğinin tarayıcı cephesi: `core.ts` başlatma ve `op()` çağrıları; `pkg/` üretilir) modelin altındadır: `model` ve sağındaki her katman onu içe aktarabilir, o yalnızca `pkg/`'yi içe aktarır. Parity ve fixture testleri (`wasm/parity/`) teste özeldir (ADR 0008).
 
 **`contracts/`** zincirin dışındadır: Rust'tan (`crates/contracts`, ts-rs) üretilen sürümlü sözleşme tipleri (`generated/`, elle düzenlenmez) ve sözleşme sürümü (`version.ts`). Hiçbir şey içe aktarmaz; her katman buradan tip alabilir. Uygulamanın kendi tipleri sözleşmeye `contracts.test.ts`'te derleme anında denetlenir (ADR 0002).
 
@@ -645,6 +648,8 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `geo/crs.test.ts` | CRS kaydı: Rust ile paylaşılan dosyayla birebir aynılık (kayıt değişince yeniden kaydedilir; Rust tarafı EPSG değerlerine göre denetler), tekil SRID, varsayılan, dilim önerisi (sınırda batı dilimi), SRID/ad/bölge araması |
 | `model/external.test.ts` | Dışarıdan gelen değişiklikler: `touched` olayları (geri alma ve başarısız işlem dahil), geri alma adımı ve kaydedilmemiş işareti yazmadan uygulama, başkasının dokunduğu nesnenin geri alma adımının silinmesi, dokunulmayanların korunması, proje bilgilerinin sessiz uygulanması, açık grupta reddetme |
 | `app/cloud/sync.test.ts` | Bulut otomatik kaydı, sunucunun bellek içi benzeriyle (`fakeServer.ts`): yanıttan sonra “kaydedildi”, geri almayla sıfır gönderim, silip geri alınca aynı kimlikle yeniden açma, ölü ağda ve kaybolan yanıtta iki kez yazmama, çakışmada durma ve iki çözüm yolu, başka editörün değişikliğinin geri alma adımsız gelmesi, yerel değişiklikli nesnede çakışma, yeniden açılışta cihaz taslağı ve kayıp komutun aynı anahtarla gönderilmesi, yeniden açıldıktan sonraki düzenlemenin taslaktan önce gelmesi, proje bilgisi yetkisi, kurala uymayan gelen nesnenin reddi |
+| `wasm/parity/parity.test.ts` | TypeScript ile Rust çekirdeğinin yan yana karşılaştırması: her çağrı kümesinin adlı sınır durumları ve işlem başına 200 tohumlu rastgele çağrı (`PARITY_CASES` artırır); sayılar golden toleransıyla, metin, uzunluk ve anahtarlar tam (ADR 0008) |
+| `wasm/calls.wasm.test.ts` | Dondurulmuş çağrı fixture'ları (`fixtures/geometry/v1/calls-*.json`) uygulamanın yolundan (`core.ts` → WASM) |
 | `wasm/golden.wasm.test.ts` | Rust çekirdeğinin WASM derlemesinde aynı golden durumlar ve bağımsız referanslar; paketin çalışma alanı sürümüyle derlendiği (eski paket kırılır). Paket yoksa atlanır; `pnpm test:rust` derleyip çalıştırır |
 | `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
 | `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
@@ -653,6 +658,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 
 **Rust testleri** (`pnpm rust:test`: `cargo test` + clippy `-D warnings`):
 - `crates/geometry-core/tests/golden.rs`: TS ile aynı golden dosya ve bağımsız referanslar;
+- `tests/calls.rs`: dondurulmuş çağrı fixture'ları çekirdeğin çağrı tablosundan; `jsmath` (Math.round, sign, min/max, V8 `Math.hypot`), `api` (JSON yazıcı: NaN/±∞, en kısa sayı biçimi; çağrı tablosu);
 - `tests/numeric.rs`: §23 yuvarlama, hisse ve dağıtım, Python'la üretilmiş dosyalara karşı;
 - `crates/contracts/tests/document.rs`: .kcad örneğinin gidiş-dönüşü ve reddi;
 - `tests/crs.rs`: CRS kaydının EPSG değerleri;
@@ -761,7 +767,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
 - Pencere seçiminde çokgenlerin sınır kutusu kullanılıyor (tam geometri testi değil).
 - Ayar pencereleri her değişiklikte bölümü yeniden çiziyor (odak korunuyor); kısa formlar için yeterli.
 - Arayüz bileşenlerinin birim testi yok; arayüz yalnızca duman testiyle (`pnpm e2e`) sınanıyor.
-- Rust çekirdeği (`crates/geometry-core`) TypeScript geometrisinin yalnızca bir alt kümesini karşılıyor: bulge yayı, yol uzunluğu, halka ve delikli alan, çevre, nokta-çokgen, sınır kutusu. Uygulama WASM paketini henüz yüklemiyor; çalışan geometri TypeScript'tir. Yaylı nesnelerin sınır kutusu TS'de 72 parçalı ana hatla yaklaşık bulunuyor ve golden setinde yok (ADR 0002).
+- Rust çekirdeği (`crates/geometry-core`) TypeScript geometrisinin yalnızca bir alt kümesini karşılıyor: bulge yayı, yol uzunluğu, halka ve delikli alan, çevre, nokta-çokgen, sınır kutusu. Uygulama çekirdeği açılışta yükler ve çağrı yolu kuruludur (ADR 0008), ama çalışan geometri henüz TypeScript'tir; modüller taşındıkça TS algoritması silinecek. Yaylı nesnelerin sınır kutusu TS'de 72 parçalı ana hatla yaklaşık bulunuyor ve golden setinde yok (ADR 0002).
 - §23 sayısal politika (yuvarlama, hisse, artık dağıtımı) yalnızca Rust'ta var. Onaylı resmî politika olmadığı için durumu `draft`; kesin kadastral işlemler kapalı. `ctx.format` yalnızca gösterimdir.
 - Bulut (Faz B) sınırları:
   - Tipli öznitelik şeması yok: öznitelikler sunucuda da metin (`properties jsonb`).
@@ -868,11 +874,11 @@ src/
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
   styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları)
-  wasm/                      Rust çekirdeğinin WASM golden testi; pkg/ `pnpm rust:wasm` ile üretilir, depoya girmez
+  wasm/                      Rust çekirdeğinin tarayıcı cephesi: core.ts (başlatma, op() çağrıları, NaN/±∞ geri çevirme, hata bildirimi), testSetup.ts (Vitest), parity/ (TS ↔ Rust çağrı kümeleri, karşılaştırma), golden ve çağrı fixture testleri; pkg/ `pnpm wasm` ile üretilir, depoya girmez
 crates/
   contracts/                 Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları)
-  geometry-core/             Saf analitik geometri (f64) ve §23 sayısal politika (rust_decimal); tests/ (golden, bağımsız referans, sayısal)
-  wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen, düz Float64Array)
+  geometry-core/             Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı) ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, bağımsız referans, sayısal)
+  wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen): çağrı tablosu (opId/callOp, JSON) ve düz Float64Array girişleri
   postgres/                  Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
   application/               Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı), cad (Entity ↔ PostGIS satırı), projects, changes (`project.changes`), events; tests/ (geçici veritabanıyla)
 apps/api/                    kentosd: `serve` (Axum; http/ auth, projects, ws, error; oidc.rs; hub.rs), `db-setup`, `migrate`, yönetim komutları (cli.rs), config.rs
@@ -880,9 +886,10 @@ fixtures/                    İki dilin paylaştığı sürümlü dosyalar: geom
 Cargo.toml, rust-toolchain.toml, .cargo/config.toml   Rust çalışma alanı, sabit araç zinciri, 4 işlik derleme sınırı
 vite.config.mjs              /v1 isteklerini yerel API'ye ileten eklenti (dev ve preview)
 scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo) ve bulut senaryosu (cloud.mjs)
-scripts/fixtures/            Fixture kaydedicileri (GOLDEN_WRITE=1) ve bağımsız referans üreticileri (Python decimal/fractions)
+scripts/wasm/ensure.mjs      WASM paketini kaynak özeti değiştiyse derler (dev/test/build/e2e öncesi)
+scripts/fixtures/            Fixture kaydedicileri (GOLDEN_WRITE=1; record-calls: çağrı kümeleri) ve bağımsız referans üreticileri (Python decimal/fractions)
 scripts/perf/                Build envanteri (bundle.mjs) ve başlangıç ölçümü (startup.mjs) → docs/perf/
-docs/adr/                    Mimari kararlar (0001 çalışma alanı, 0002 sözleşme ve fixture, 0003 işlem anlamı, 0004 sayısal politika, 0005 performans hedefleri (taslak), 0006 veri katmanı, 0007 kimlik doğrulama)
+docs/adr/                    Mimari kararlar (0001 çalışma alanı, 0002 sözleşme ve fixture, 0003 işlem anlamı, 0004 sayısal politika, 0005 performans hedefleri (taslak), 0006 veri katmanı, 0007 kimlik doğrulama, 0008 ortak çekirdek sınırı)
 docs/perf/                   Ölçüm raporları ve özet (README.md)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
 docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanları, birimler, işleyiciler, kitaplık, çizim hattı, aşamalar

@@ -52,6 +52,11 @@ Tarayıcı, WASM, API ve saklanan dosyalar aynı veriyi konuşacak. Tipler iki d
   - düz şekillerin ve dairenin sınır kutusu.
 - **Bilinen fark:** TypeScript `entityBounds`, yaylı yolların ve yayların sınırını 72 parçalı ana hatla bulur (yaklaşık). Rust'a kesin yay sınırı taşınırken iki taraf birlikte değişecek; o güne kadar bu işlevler golden setinde yoktur.
 
+### Çağrı fixture'ları (ADR 0008)
+
+- Geometri Rust'a taşınırken her modülün davranışı `fixtures/geometry/v1/calls-*.json` dosyalarına dondurulur: `{ fn, args, expect }` satırları, aynı tolerans ve `crs` alanıyla. Kayıt TS varken yapılır (`scripts/fixtures/record-calls.test.ts`); native (`tests/calls.rs`) ve WASM (`src/wasm/calls.wasm.test.ts`) aynı dosyaları çekirdeğin çağrı tablosundan geçirir.
+- TS silinince bu dosyalar davranış kilidi olarak kalır; `cases.json` gibi, değiştirmek incelenmiş bir karardır.
+
 ### CRS kaydı
 
 - `fixtures/crs/v1/registry.json`, `src/geo/crs.ts`'ten üretilir (`scripts/fixtures/record-crs.test.ts`, `GOLDEN_WRITE=1`). Kaynak TypeScript kaydı kalır (§5).

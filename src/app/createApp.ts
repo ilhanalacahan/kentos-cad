@@ -28,6 +28,7 @@ import { createStyles, registerStyleCommands } from './styles';
 import { Formatter } from './format';
 import { applyUiScale } from './commands';
 import { createPreferences, createUiState, DraftingSettings, MessageLog } from './state';
+import { onCoreFault } from '../wasm/core';
 
 /** An OpenID sign-in that failed comes back as `?oidc=error&reason=…`: say why, then clean the address. */
 function reportSignInError(ctx: AppContext): void {
@@ -116,6 +117,8 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   });
   registerDefaultKeybindings(ctx);
   commands.events.on('missing', ({ id }) => ctx.log.error(`Komut bulunamadı: ${id}`));
+  // A trap in the geometry core is a bug in it; the drawing itself is safe (saving needs no core).
+  onCoreFault(() => ctx.log.error('Geometri çekirdeği beklenmedik biçimde durdu. Çizimi kaydedip sayfayı yenileyin; hata sürerse bildirin.'));
 
   shell = new AppShell(ctx);
   root.replaceChildren(shell.el);

@@ -2,6 +2,7 @@
 //! the segment pts[i] → pts[i+1] carries bulge = tan(θ/4), θ its included
 //! angle, positive counter-clockwise; 0 is a straight segment.
 
+use crate::jsmath::{atan, atan2, js_hypot, sin};
 use crate::polygon::{path_length, signed_area};
 use crate::vec2::Vec2;
 
@@ -36,7 +37,7 @@ pub fn bulge_arc(a: Vec2, b: Vec2, bulge: f64) -> Option<BulgeArc> {
     }
     let dx = b.x - a.x;
     let dy = b.y - a.y;
-    let chord = dx.hypot(dy);
+    let chord = js_hypot(dx, dy);
     if chord < EPS {
         return None;
     }
@@ -47,8 +48,8 @@ pub fn bulge_arc(a: Vec2, b: Vec2, bulge: f64) -> Option<BulgeArc> {
     Some(BulgeArc {
         c,
         r,
-        a0: (a.y - c.y).atan2(a.x - c.x),
-        sweep: 4.0 * bulge.atan(),
+        a0: atan2(a.y - c.y, a.x - c.x),
+        sweep: 4.0 * atan(bulge),
     })
 }
 
@@ -68,7 +69,7 @@ pub fn bulge_path_length(pts: &[Vec2], bulges: Option<&[f64]>, closed: bool) -> 
         let b = pts[(i + 1) % n];
         l += match bulge_arc(a, b, bulge_at(bulges, i)) {
             Some(arc) => arc.r * arc.sweep.abs(),
-            None => (b.x - a.x).hypot(b.y - a.y),
+            None => js_hypot(b.x - a.x, b.y - a.y),
         };
     }
     l
@@ -83,7 +84,7 @@ pub fn bulge_ring_area(pts: &[Vec2], bulges: Option<&[f64]>) -> f64 {
     let n = pts.len();
     for i in 0..n {
         if let Some(arc) = bulge_arc(pts[i], pts[(i + 1) % n], bulge_at(bulges, i)) {
-            area += ((arc.r * arc.r) / 2.0) * (arc.sweep - arc.sweep.sin());
+            area += ((arc.r * arc.r) / 2.0) * (arc.sweep - sin(arc.sweep));
         }
     }
     area

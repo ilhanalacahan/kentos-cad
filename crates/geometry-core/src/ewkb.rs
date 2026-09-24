@@ -80,7 +80,9 @@ impl Reader<'_> {
             .get(self.at..end)
             .ok_or("EWKB beklenenden kısa")?;
         self.at = end;
-        Ok(chunk.try_into().expect("slice of N bytes"))
+        chunk
+            .try_into()
+            .map_err(|_| "EWKB beklenenden kısa".to_string())
     }
     fn u32(&mut self) -> Result<u32, String> {
         let b = self.take::<4>()?;

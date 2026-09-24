@@ -2,6 +2,9 @@
 //! checked on the TS side by `src/model/geom/golden.test.ts`): the Rust port
 //! must reproduce every recorded result within the file's tolerance.
 
+// Test harness code, not the core: the std float methods are fine here.
+#![allow(clippy::disallowed_methods)]
+
 use kentos_geometry_core::Vec2;
 use kentos_geometry_core::bulge::{bulge_arc, bulge_path_length, bulge_ring_area};
 use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};

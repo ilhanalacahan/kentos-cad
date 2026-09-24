@@ -8,7 +8,8 @@ import type { RunResult } from '../types';
  * time per worker; ids pair replies with requests.
  */
 
-export type WorkerRequest = { type: 'run'; id: number; job: RunJob; entities: readonly Entity[] };
+/** `core`: the compiled geometry core, sent with a new worker's first job (src/wasm/core.ts). */
+export type WorkerRequest = { type: 'run'; id: number; job: RunJob; entities: readonly Entity[]; core?: WebAssembly.Module };
 
 export type WorkerReply =
   | { type: 'progress'; id: number; fraction: number; label: string }

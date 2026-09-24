@@ -14,6 +14,20 @@ fn points(xy: &[f64]) -> Vec<Vec2> {
     xy.chunks_exact(2).map(|c| Vec2::new(c[0], c[1])).collect()
 }
 
+/// The id of a core operation by its TypeScript name (`src/wasm/core.ts`
+/// asks once per operation), or −1 when this build has no such operation.
+#[wasm_bindgen(js_name = opId)]
+pub fn op_id(name: &str) -> i32 {
+    kentos_geometry_core::api::find(name).map_or(-1, |i| i as i32)
+}
+
+/// Runs a core operation on a JSON array of arguments; the result is JSON
+/// (docs/adr/0008). Unreadable arguments throw.
+#[wasm_bindgen(js_name = callOp)]
+pub fn call_op(id: u32, args: &str) -> Result<String, JsError> {
+    kentos_geometry_core::api::run(id as usize, args).map_err(|e| JsError::new(&e))
+}
+
 /// Version of the core, to tell a stale WASM build from the app.
 #[wasm_bindgen(js_name = coreVersion)]
 pub fn core_version() -> String {

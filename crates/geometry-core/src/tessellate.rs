@@ -8,6 +8,7 @@ use std::f64::consts::{PI, TAU};
 
 use crate::Vec2;
 use crate::bulge::{bulge_arc, bulge_at};
+use crate::jsmath::{acos, cos, js_hypot, js_min, sin};
 
 /// Most chords one curve piece may get. Beyond it the tolerance is not met: at
 /// 1 mm a full circle reaches the cap at about 1.3 km radius. The projection is
@@ -24,7 +25,7 @@ pub fn arc_segments(r: f64, sweep: f64, tol: f64) -> usize {
     let step = if tol >= r {
         PI / 4.0
     } else {
-        (2.0 * (1.0 - tol / r).acos()).min(PI / 4.0)
+        js_min(2.0 * acos(1.0 - tol / r), PI / 4.0)
     };
     ((sweep / step).ceil() as usize).clamp(1, MAX_SEGMENTS)
 }
@@ -35,7 +36,7 @@ pub fn arc_points(c: Vec2, r: f64, a0: f64, sweep: f64, tol: f64) -> Vec<Vec2> {
     (0..=n)
         .map(|i| {
             let a = a0 + sweep * (i as f64) / (n as f64);
-            Vec2::new(c.x + r * a.cos(), c.y + r * a.sin())
+            Vec2::new(c.x + r * cos(a), c.y + r * sin(a))
         })
         .collect()
 }
@@ -95,12 +96,12 @@ pub fn ellipse_points(
     // With even parameter steps dt the sagitta is about ds²/(8ρ): a·dt²/8 at the
     // major vertices (ds = b·dt, ρ = b²/a) and b·dt²/8 at the minor ones, so the
     // worst case is that of a circle with the major radius.
-    let n = arc_segments(major.x.hypot(major.y), sweep, tol);
+    let n = arc_segments(js_hypot(major.x, major.y), sweep, tol);
     let minor = Vec2::new(-major.y * ratio, major.x * ratio);
     let at = |t: f64| {
         Vec2::new(
-            c.x + major.x * t.cos() + minor.x * t.sin(),
-            c.y + major.y * t.cos() + minor.y * t.sin(),
+            c.x + major.x * cos(t) + minor.x * sin(t),
+            c.y + major.y * cos(t) + minor.y * sin(t),
         )
     };
     let last = if full { n - 1 } else { n };
@@ -117,7 +118,7 @@ fn reflect(a: Vec2, b: Vec2) -> Vec2 {
 }
 
 fn knot(a: Vec2, b: Vec2) -> f64 {
-    let k = (b.x - a.x).hypot(b.y - a.y).sqrt();
+    let k = js_hypot(b.x - a.x, b.y - a.y).sqrt();
     if k == 0.0 { 1e-6 } else { k }
 }
 
@@ -159,7 +160,7 @@ fn point_segment_distance(p: Vec2, a: Vec2, b: Vec2) -> f64 {
     } else {
         (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0)
     };
-    (p.x - (a.x + dx * t)).hypot(p.y - (a.y + dy * t))
+    js_hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t))
 }
 
 /// The spline through `pts` as points. Each span is split evenly, doubling
@@ -217,13 +218,14 @@ pub fn catmull_rom(pts: &[Vec2], closed: bool, tol: f64) -> Vec<Vec2> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jsmath::js_max;
 
     fn max_sagitta_circle(pts: &[Vec2], c: Vec2, r: f64) -> f64 {
         let mut worst: f64 = 0.0;
         for i in 0..pts.len() {
             let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
             let m = Vec2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
-            worst = worst.max(r - (m.x - c.x).hypot(m.y - c.y));
+            worst = js_max(worst, r - js_hypot(m.x - c.x, m.y - c.y));
         }
         worst
     }
@@ -257,7 +259,7 @@ mod tests {
         assert_eq!(*open.last().unwrap(), pts[2]);
         assert!(open.contains(&pts[1]));
         // The half circle below the first chord bulges to y = −5 at its middle.
-        let lowest = open.iter().map(|p| p.y).fold(f64::MAX, f64::min);
+        let lowest = open.iter().map(|p| p.y).fold(f64::MAX, js_min);
         assert!((-5.0..-4.999).contains(&lowest), "{lowest}");
         let ring = bulge_path(&pts, None, true, 0.001);
         assert_eq!(ring, pts.to_vec());
@@ -271,10 +273,9 @@ mod tests {
         let c = Vec2::new(0.0, 0.0);
         let (full, closed) = ellipse_points(c, Vec2::new(10.0, 0.0), 0.5, 0.0, 0.0, 0.001);
         assert!(closed && full.len() > 16);
-        assert!(
-            full.iter()
-                .all(|p| ((p.x / 10.0).powi(2) + (p.y / 5.0).powi(2) - 1.0).abs() < 1e-12)
-        );
+        assert!(full.iter().all(|p| {
+            ((p.x / 10.0) * (p.x / 10.0) + (p.y / 5.0) * (p.y / 5.0) - 1.0).abs() < 1e-12
+        }));
         let (half, closed) = ellipse_points(c, Vec2::new(10.0, 0.0), 0.5, 0.0, PI, 0.001);
         assert!(!closed);
         assert!((half[0].x - 10.0).abs() < 1e-12 && (half.last().unwrap().x + 10.0).abs() < 1e-9);
