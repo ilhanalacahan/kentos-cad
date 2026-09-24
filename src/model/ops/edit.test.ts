@@ -273,6 +273,12 @@ describe('divisionParams', () => {
     const c: CircleEntity = { ...base(), kind: 'circle', c: v(0, 0), r: 1 };
     expect(divisionParams(pathOf(c)!, { parts: 4 })).toHaveLength(4);
   });
+  it('divides a full ellipse like a circle, an elliptical arc like an arc', () => {
+    const full: Entity = { ...base(), kind: 'ellipse', c: v(0, 0), major: v(10, 0), ratio: 0.5, t0: 0, t1: 0 };
+    expect(pathOf(full)!.closed).toBe(true);
+    expect(divisionPoints(full, { parts: 4 }, false)).toHaveLength(4);
+    expect(divisionPoints({ ...full, t1: Math.PI } as Entity, { parts: 4 }, false)).toHaveLength(3);
+  });
   it('measures off a step without a point on the far end', () => {
     expect(divisionParams(pathOf(line(0, 0, 10, 0))!, { step: 2.5 })).toEqual([2.5, 5, 7.5]);
   });

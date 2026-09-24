@@ -7,7 +7,7 @@ use crate::api::json::{FromJson, Json, read_field};
 use crate::entity::{Entity, Shape, ellipse_geom};
 use crate::geom::arc::norm_angle;
 use crate::geom::bulge::{bulge_of_sweep, clean_bulge_path};
-use crate::geom::ellipse::{closest_param, ellipse_point};
+use crate::geom::ellipse::{closest_param, ellipse_point, is_full_ellipse};
 use crate::geom::intersect::{Edge, closest_on_edge, intersect_edges, point_at};
 use crate::jsmath::{js_cmp, js_floor, js_hypot, js_max, js_min, js_sign, or, stable_sort};
 use crate::op;
@@ -41,9 +41,17 @@ pub fn path_of(e: &Shape) -> Option<Path> {
         cum.push(s);
         s += edge_length(ed);
     }
-    let closed = match e {
+    // A full ellipse runs round like a circle (the TypeScript counted it open: Böl put n − 1 points).
+    let closed = match *e {
         Shape::Polygon { .. } | Shape::Circle { .. } => true,
-        Shape::Spline { closed, .. } => *closed,
+        Shape::Spline { closed, .. } => closed,
+        Shape::Ellipse {
+            c,
+            major,
+            ratio,
+            t0,
+            t1,
+        } => is_full_ellipse(&ellipse_geom(c, major, ratio, t0, t1)),
         _ => false,
     };
     Some(Path {
