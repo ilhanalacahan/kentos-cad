@@ -608,6 +608,77 @@ try {
   const turned = await b.eval(`window.kentos.doc.get(${slanted})`);
   check('döndür Referans: the line turns onto north', Math.abs(turned.b.x - (AX + 115)) < 1e-9 && Math.abs(turned.b.y - (N - 85)) < 1e-9);
 
+  // Move, copy, mirror, array and paste: the geometry store moves its own copies and only the
+  // new geometry comes back (packed, not JSON). Typed points, exact coordinates, every other
+  // field kept, one undo step each.
+  const MX = AX + 200;
+  await b.eval(`window.kentos.view.camera.fit({ minX: ${MX - 10}, minY: ${N - 30}, maxX: ${MX + 140}, maxY: ${N + 80} }, 20)`);
+  await sleep(100);
+  const parcel = await b.eval(`(() => { const k = window.kentos; let id; k.doc.transact('t', () => { id = k.doc.add({ kind: 'polygon', layerId: k.doc.layers.active.value, attrs: { Ada: '104', Parsel: '7' }, label: '7', color: '#aa3322', pts: [{ x: ${MX}, y: ${N} }, { x: ${MX + 10.25}, y: ${N} }, { x: ${MX + 10.25}, y: ${N + 8.5} }, { x: ${MX}, y: ${N + 8.5} }], bulges: [0, 0.25, 0, 0] }).id; }); return id; })()`);
+  const bow = await addGeom({ kind: 'arc', c: { x: MX + 5, y: N + 20 }, r: 3, a0: 0.5, a1: 2 });
+  const both = () => b.eval(`[${parcel}, ${bow}].map((id) => window.kentos.doc.get(id))`);
+  const start = await both();
+  await b.eval(`window.kentos.selection.set([${parcel}, ${bow}])`);
+  await key('m', { shift: true });
+  await cmd(`${MX},${N}`);
+  await cmd('@12.5,-7.25');
+  const [mp, ma] = await both();
+  check(
+    'move: a typed displacement lands exactly, every other field kept',
+    mp.pts.every((p, i) => p.x === start[0].pts[i].x + 12.5 && p.y === start[0].pts[i].y - 7.25) && JSON.stringify(mp.bulges) === '[0,0.25,0,0]' && mp.label === '7' && mp.color === '#aa3322' && mp.attrs.Parsel === '7' && ma.c.x === start[1].c.x + 12.5 && ma.r === 3 && Math.abs(ma.a0 - 0.5) < 1e-9 && Math.abs(ma.a1 - 2) < 1e-9,
+    JSON.stringify([mp.pts[2], ma]),
+  );
+  await key('z', { ctrl: true });
+  const undoneMove = JSON.stringify(await both()) === JSON.stringify(start);
+  await key('y', { ctrl: true });
+  check('move: one undo step takes both back, redo moves them again', undoneMove && JSON.stringify(await both()) === JSON.stringify([mp, ma]));
+  const beforeCopy = await b.eval('window.kentos.doc.size');
+  await b.eval(`window.kentos.selection.set([${parcel}])`);
+  await key('c', { shift: true });
+  await cmd(`${MX},${N}`);
+  await cmd('@0,20');
+  await cmd('@0,40');
+  await key('Escape');
+  const copies = await b.eval('[...window.kentos.doc.all()].slice(-2)');
+  const ownAttrs = await b.eval(`[...window.kentos.doc.all()].slice(-2).every((e) => e.attrs !== window.kentos.doc.get(${parcel}).attrs)`);
+  check(
+    'copy: copies at typed offsets with the parcel’s fields and their own attributes',
+    (await b.eval('window.kentos.doc.size')) === beforeCopy + 2 && copies.every((c, k) => c.id !== parcel && c.kind === 'polygon' && c.pts.every((p, i) => p.x === mp.pts[i].x && p.y === mp.pts[i].y + 20 * (k + 1)) && c.label === '7' && c.color === '#aa3322' && c.attrs.Ada === '104') && ownAttrs,
+  );
+  await b.eval(`window.kentos.selection.set([${bow}])`);
+  await key('i', { shift: true });
+  await cmd(`${MX + 60},${N}`);
+  await cmd(`${MX + 60},${N + 10}`);
+  const mirrored = await newest();
+  check('mirror: the arc lands across the axis, still counter-clockwise', mirrored.kind === 'arc' && mirrored.id !== bow && Math.abs(mirrored.c.x - (2 * (MX + 60) - ma.c.x)) < 1e-9 && mirrored.c.y === ma.c.y && Math.abs(mirrored.a0 - (Math.PI - 2)) < 1e-8 && Math.abs(mirrored.a1 - (Math.PI - 0.5)) < 1e-8, JSON.stringify(mirrored));
+  const beforeGrid = await b.eval('window.kentos.doc.size');
+  await b.eval(`window.kentos.selection.set([${parcel}])`);
+  await key('a', { shift: true });
+  await cmd('2,3');
+  await cmd('15,12');
+  const grid = await b.eval('[...window.kentos.doc.all()].slice(-5)');
+  const cells = [[15, 0], [30, 0], [0, 12], [15, 12], [30, 12]];
+  check('array 2 × 3: five copies on the grid', (await b.eval('window.kentos.doc.size')) === beforeGrid + 5 && grid.every((c, k) => c.pts.every((p, i) => p.x === mp.pts[i].x + cells[k][0] && p.y === mp.pts[i].y + cells[k][1])));
+  await key('z', { ctrl: true });
+  check('array: one undo step takes all five back', (await b.eval('window.kentos.doc.size')) === beforeGrid);
+  await b.eval(`window.kentos.selection.set([${parcel}, ${bow}])`);
+  await key('c', { ctrl: true });
+  const pasteBase = await b.eval('window.kentos.clipboard.get().base');
+  const beforePasteTool = await b.eval('window.kentos.doc.size');
+  await key('v', { ctrl: true });
+  await b.move(...(await toScreen(MX + 90, N + 50)));
+  await cmd(`${MX + 100},${N + 50}`);
+  const pasted = await b.eval('[...window.kentos.selection.ids.value].map((id) => window.kentos.doc.get(id))');
+  const [pdx, pdy] = [MX + 100 - pasteBase.x, N + 50 - pasteBase.y];
+  check(
+    'paste: the copies land by the base point, fields kept',
+    (await b.eval('window.kentos.doc.size')) === beforePasteTool + 2 && pasted.length === 2 && pasted[0].pts.every((p, i) => p.x === mp.pts[i].x + pdx && p.y === mp.pts[i].y + pdy) && pasted[0].attrs.Parsel === '7' && pasted[0].label === '7' && pasted[1].kind === 'arc' && pasted[1].c.x === ma.c.x + pdx && pasted[1].r === 3,
+    `${pdx}, ${pdy}`,
+  );
+  await key('z', { ctrl: true });
+  check('paste: one undo step', (await b.eval('window.kentos.doc.size')) === beforePasteTool);
+  await b.eval('window.kentos.selection.clear()');
+
   // Drawing engines: WebGL2 by default; WebGPU switched live from the status
   // bar must draw the same scene. Pixels are read straight after a frame.
   check('WebGL2 is the default engine', (await b.eval('window.kentos.view.backendKind.value')) === 'webgl2');
