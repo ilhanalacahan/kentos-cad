@@ -6,7 +6,11 @@
 /// The shortest decimal that reads back to `v`, without an exponent
 /// ("452345.123"). Negative zero is written as "0".
 pub fn plain(v: f64) -> String {
-    if v == 0.0 { "0".to_string() } else { format!("{v}") }
+    if v == 0.0 {
+        "0".to_string()
+    } else {
+        format!("{v}")
+    }
 }
 
 /// A DXF real: the shortest round-trip decimal, positional for ordinary
@@ -23,7 +27,11 @@ pub fn dxf_real(v: f64) -> String {
     }
     let s = format!("{v:e}");
     let (mantissa, exp) = s.split_once('e').unwrap_or((s.as_str(), "0"));
-    let mantissa = if mantissa.contains('.') { mantissa.to_string() } else { format!("{mantissa}.0") };
+    let mantissa = if mantissa.contains('.') {
+        mantissa.to_string()
+    } else {
+        format!("{mantissa}.0")
+    };
     let (sign, digits) = exp.strip_prefix('-').map_or(("+", exp), |d| ("-", d));
     format!("{mantissa}E{sign}{digits:0>2}")
 }
@@ -81,7 +89,11 @@ pub fn parse_decimal(s: &str, comma: bool) -> Option<f64> {
             return None;
         }
     }
-    let v: f64 = if comma { t.replace(',', ".").parse().ok()? } else { t.parse().ok()? };
+    let v: f64 = if comma {
+        t.replace(',', ".").parse().ok()?
+    } else {
+        t.parse().ok()?
+    };
     v.is_finite().then_some(v)
 }
 
@@ -91,9 +103,28 @@ mod tests {
 
     #[test]
     fn shortest_decimals_read_back_bit_for_bit() {
-        for v in [452345.123, 4412345.678, 0.1 + 0.2, 1.0 / 3.0, -1e-300, 6.123233995736766e-17, 1e20, 5.0, -0.5, 4.4e6] {
-            assert_eq!(parse_real(&plain(v)).map(f64::to_bits), Some(v.to_bits()), "{v}");
-            assert_eq!(parse_real(&dxf_real(v)).map(f64::to_bits), Some(v.to_bits()), "{v}");
+        for v in [
+            452345.123,
+            4412345.678,
+            0.1 + 0.2,
+            1.0 / 3.0,
+            -1e-300,
+            6.123233995736766e-17,
+            1e20,
+            5.0,
+            -0.5,
+            4.4e6,
+        ] {
+            assert_eq!(
+                parse_real(&plain(v)).map(f64::to_bits),
+                Some(v.to_bits()),
+                "{v}"
+            );
+            assert_eq!(
+                parse_real(&dxf_real(v)).map(f64::to_bits),
+                Some(v.to_bits()),
+                "{v}"
+            );
         }
         assert_eq!(plain(452345.123), "452345.123");
         assert_eq!(plain(-0.0), "0");

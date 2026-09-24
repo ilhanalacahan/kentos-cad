@@ -19,7 +19,12 @@ impl Items {
     fn add(&mut self, what: &str, reason: &str, line: u32, n: u32) {
         let key = (what.to_string(), reason.to_string());
         let i = *self.index.entry(key).or_insert_with(|| {
-            self.list.push(ReportItem { what: what.to_string(), count: 0, reason: reason.to_string(), lines: Vec::new() });
+            self.list.push(ReportItem {
+                what: what.to_string(),
+                count: 0,
+                reason: reason.to_string(),
+                lines: Vec::new(),
+            });
             self.list.len() - 1
         });
         let item = &mut self.list[i];
@@ -62,7 +67,10 @@ impl Report {
     }
 
     pub fn fact(&mut self, label: &str, value: impl Into<String>) {
-        self.source.push(SourceFact { label: label.to_string(), value: value.into() });
+        self.source.push(SourceFact {
+            label: label.to_string(),
+            value: value.into(),
+        });
     }
 
     pub fn total(&self) -> u32 {
@@ -70,11 +78,20 @@ impl Report {
     }
 
     pub fn import(self) -> ImportReport {
-        ImportReport { counts: self.counts, skipped: self.skipped.list, notes: self.notes.list, source: self.source }
+        ImportReport {
+            counts: self.counts,
+            skipped: self.skipped.list,
+            notes: self.notes.list,
+            source: self.source,
+        }
     }
 
     pub fn export(self) -> ExportReport {
-        ExportReport { counts: self.counts, notes: self.notes.list, skipped: self.skipped.list }
+        ExportReport {
+            counts: self.counts,
+            notes: self.notes.list,
+            skipped: self.skipped.list,
+        }
     }
 }
 

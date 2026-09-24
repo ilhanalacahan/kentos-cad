@@ -46,7 +46,11 @@ fn point(degree: usize, knots: &[f64], ctrl: &[Vec2], weights: Option<&[f64]>, u
         for j in (r..=degree).rev() {
             let i = k - degree + j;
             let den = knots[i + degree + 1 - r] - knots[i];
-            let a = if den == 0.0 { 0.0 } else { (u - knots[i]) / den };
+            let a = if den == 0.0 {
+                0.0
+            } else {
+                (u - knots[i]) / den
+            };
             let prev = d[j - 1];
             for (c, x) in d[j].iter_mut().enumerate() {
                 *x = (1.0 - a) * prev[c] + a * *x;
@@ -67,13 +71,27 @@ fn chord_distance(p: Vec2, a: Vec2, b: Vec2) -> f64 {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn refine(degree: usize, knots: &[f64], ctrl: &[Vec2], w: Option<&[f64]>, tol: f64, u0: f64, p0: Vec2, u1: f64, p1: Vec2, depth: u32, out: &mut Vec<Vec2>) {
+fn refine(
+    degree: usize,
+    knots: &[f64],
+    ctrl: &[Vec2],
+    w: Option<&[f64]>,
+    tol: f64,
+    u0: f64,
+    p0: Vec2,
+    u1: f64,
+    p1: Vec2,
+    depth: u32,
+    out: &mut Vec<Vec2>,
+) {
     let um = 0.5 * (u0 + u1);
     let pm = point(degree, knots, ctrl, w, um);
     // Quarter points too: a symmetric S-bend can pass through the chord's middle.
     let q1 = point(degree, knots, ctrl, w, 0.5 * (u0 + um));
     let q3 = point(degree, knots, ctrl, w, 0.5 * (um + u1));
-    let far = chord_distance(pm, p0, p1).max(chord_distance(q1, p0, p1)).max(chord_distance(q3, p0, p1));
+    let far = chord_distance(pm, p0, p1)
+        .max(chord_distance(q1, p0, p1))
+        .max(chord_distance(q3, p0, p1));
     if depth < 16 && far > tol {
         refine(degree, knots, ctrl, w, tol, u0, p0, um, pm, depth + 1, out);
         refine(degree, knots, ctrl, w, tol, um, pm, u1, p1, depth + 1, out);
@@ -84,12 +102,20 @@ fn refine(degree: usize, knots: &[f64], ctrl: &[Vec2], w: Option<&[f64]>, tol: f
 
 /// The curve as points, every chord within `tol` of it; None when the knot
 /// vector does not fit or the degree is above `MAX_DEGREE`.
-pub fn sample(degree: usize, knots: &[f64], ctrl: &[Vec2], weights: Option<&[f64]>, tol: f64) -> Option<Vec<Vec2>> {
+pub fn sample(
+    degree: usize,
+    knots: &[f64],
+    ctrl: &[Vec2],
+    weights: Option<&[f64]>,
+    tol: f64,
+) -> Option<Vec<Vec2>> {
     let n = ctrl.len().checked_sub(1)?;
     if degree == 0 || degree > MAX_DEGREE || n < degree || knots.len() != ctrl.len() + degree + 1 {
         return None;
     }
-    if knots.windows(2).any(|k| !(k[1] >= k[0])) || weights.is_some_and(|w| w.len() != ctrl.len() || w.iter().any(|&x| !(x > 0.0))) {
+    if knots.windows(2).any(|k| !(k[1] >= k[0]))
+        || weights.is_some_and(|w| w.len() != ctrl.len() || w.iter().any(|&x| !(x > 0.0)))
+    {
         return None;
     }
     let (lo, hi) = (knots[degree], knots[n + 1]);
@@ -104,9 +130,13 @@ pub fn sample(degree: usize, knots: &[f64], ctrl: &[Vec2], weights: Option<&[f64
         let (u0, u1) = (pair[0], pair[1]);
         let p0 = *out.last()?;
         let p1 = point(degree, knots, ctrl, weights, u1);
-        refine(degree, knots, ctrl, weights, tol, u0, p0, u1, p1, 0, &mut out);
+        refine(
+            degree, knots, ctrl, weights, tol, u0, p0, u1, p1, 0, &mut out,
+        );
     }
-    out.iter().all(|p| p.x.is_finite() && p.y.is_finite()).then_some(out)
+    out.iter()
+        .all(|p| p.x.is_finite() && p.y.is_finite())
+        .then_some(out)
 }
 
 #[cfg(test)]
@@ -125,10 +155,20 @@ mod tests {
         assert_eq!(pts.last(), Some(&v(2.0, 0.0)));
         // A quarter circle as a rational quadratic: every sample on the unit circle.
         let w = [1.0, std::f64::consts::FRAC_1_SQRT_2, 1.0];
-        let arc = sample(2, &knots, &[v(1.0, 0.0), v(1.0, 1.0), v(0.0, 1.0)], Some(&w), 1e-4).expect("points");
+        let arc = sample(
+            2,
+            &knots,
+            &[v(1.0, 0.0), v(1.0, 1.0), v(0.0, 1.0)],
+            Some(&w),
+            1e-4,
+        )
+        .expect("points");
         assert!(arc.len() > 4);
         for q in &arc {
-            assert!(((q.x * q.x + q.y * q.y).sqrt() - 1.0).abs() < 1e-12, "{q:?}");
+            assert!(
+                ((q.x * q.x + q.y * q.y).sqrt() - 1.0).abs() < 1e-12,
+                "{q:?}"
+            );
         }
         // Chords stay within the tolerance: midpoints between samples are near the circle.
         for pair in arc.windows(2) {
@@ -139,17 +179,43 @@ mod tests {
 
     #[test]
     fn a_cubic_with_interior_knots_and_bad_vectors() {
-        let ctrl = [v(0.0, 0.0), v(1.0, 3.0), v(3.0, 3.0), v(4.0, 0.0), v(6.0, -2.0)];
+        let ctrl = [
+            v(0.0, 0.0),
+            v(1.0, 3.0),
+            v(3.0, 3.0),
+            v(4.0, 0.0),
+            v(6.0, -2.0),
+        ];
         let knots = [0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0];
         let pts = sample(3, &knots, &ctrl, None, 1e-3).expect("points");
         assert_eq!(pts.first(), Some(&v(0.0, 0.0)));
         assert_eq!(pts.last(), Some(&v(6.0, -2.0)));
         assert!(sample(3, &knots[..8], &ctrl, None, 1e-3).is_none());
-        assert!(sample(3, &[0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 1.0, 1.0, 1.0], &ctrl, None, 1e-3).is_none());
+        assert!(
+            sample(
+                3,
+                &[0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 1.0, 1.0, 1.0],
+                &ctrl,
+                None,
+                1e-3
+            )
+            .is_none()
+        );
         // A degree above the cap is refused before any work (a consistent knot vector for it included).
         let many: Vec<Vec2> = (0..=MAX_DEGREE + 1).map(|i| v(i as f64, 0.0)).collect();
-        let clamped: Vec<f64> = std::iter::repeat_n(0.0, MAX_DEGREE + 2).chain(std::iter::repeat_n(1.0, MAX_DEGREE + 2)).collect();
+        let clamped: Vec<f64> = std::iter::repeat_n(0.0, MAX_DEGREE + 2)
+            .chain(std::iter::repeat_n(1.0, MAX_DEGREE + 2))
+            .collect();
         assert!(sample(MAX_DEGREE + 1, &clamped, &many, None, 1e-3).is_none());
-        assert!(sample(MAX_DEGREE, &clamped[1..clamped.len() - 1], &many[1..], None, 1e-3).is_some());
+        assert!(
+            sample(
+                MAX_DEGREE,
+                &clamped[1..clamped.len() - 1],
+                &many[1..],
+                None,
+                1e-3
+            )
+            .is_some()
+        );
     }
 }

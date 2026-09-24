@@ -9,7 +9,9 @@ use kentos_contracts::{CoordReadOptions, CoordWriteInput, DxfReadOptions, FORMAT
 use wasm_bindgen::prelude::*;
 
 fn bad_input(what: &str, e: &serde_json::Error) -> JsError {
-    JsError::new(&format!("{what} okunamadı ({e}); uygulama ile dosya biçimi paketi uyuşmuyor olabilir (pnpm wasm)."))
+    JsError::new(&format!(
+        "{what} okunamadı ({e}); uygulama ile dosya biçimi paketi uyuşmuyor olabilir (pnpm wasm)."
+    ))
 }
 
 fn to_json<T: serde::Serialize>(v: &T) -> Result<Vec<u8>, JsError> {
@@ -46,7 +48,8 @@ impl Written {
 /// Reads a coordinate list: `options` is `CoordReadOptions`, the result `CoordRead` (JSON bytes).
 #[wasm_bindgen(js_name = readCoords)]
 pub fn read_coords(bytes: &[u8], options: &str) -> Result<Vec<u8>, JsError> {
-    let opts: CoordReadOptions = serde_json::from_str(options).map_err(|e| bad_input("Okuma seçenekleri", &e))?;
+    let opts: CoordReadOptions =
+        serde_json::from_str(options).map_err(|e| bad_input("Okuma seçenekleri", &e))?;
     to_json(&kentos_formats::coords::read(bytes, &opts))
 }
 
@@ -54,7 +57,8 @@ pub fn read_coords(bytes: &[u8], options: &str) -> Result<Vec<u8>, JsError> {
 /// A file that is not a DXF (a DWG, a binary DXF, broken groups) throws the reason.
 #[wasm_bindgen(js_name = readDxf)]
 pub fn read_dxf(bytes: &[u8], options: &str) -> Result<Vec<u8>, JsError> {
-    let opts: DxfReadOptions = serde_json::from_str(options).map_err(|e| bad_input("Okuma seçenekleri", &e))?;
+    let opts: DxfReadOptions =
+        serde_json::from_str(options).map_err(|e| bad_input("Okuma seçenekleri", &e))?;
     let result = kentos_formats::dxf::read(bytes, &opts).map_err(|e| JsError::new(&e))?;
     to_json(&result)
 }
@@ -62,7 +66,11 @@ pub fn read_dxf(bytes: &[u8], options: &str) -> Result<Vec<u8>, JsError> {
 /// Writes a coordinate list from `CoordWriteInput` (JSON).
 #[wasm_bindgen(js_name = writeCoords)]
 pub fn write_coords(input: &str) -> Result<Written, JsError> {
-    let input: CoordWriteInput = serde_json::from_str(input).map_err(|e| bad_input("Yazılacak noktalar", &e))?;
+    let input: CoordWriteInput =
+        serde_json::from_str(input).map_err(|e| bad_input("Yazılacak noktalar", &e))?;
     let (bytes, report) = kentos_formats::coords::write(&input);
-    Ok(Written { bytes, report: String::from_utf8(to_json(&report)?).unwrap_or_default() })
+    Ok(Written {
+        bytes,
+        report: String::from_utf8(to_json(&report)?).unwrap_or_default(),
+    })
 }

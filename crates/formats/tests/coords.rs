@@ -4,16 +4,28 @@
 //! and Excel's UTF-16 text. Every coordinate is the float64 nearest to the
 //! file's decimal (compared bit for bit with Rust's own literal).
 
-use kentos_contracts::{CoordColumn, CoordDelimiter, CoordRead, CoordReadOptions, DecimalMark, Entity};
+use kentos_contracts::{
+    CoordColumn, CoordDelimiter, CoordRead, CoordReadOptions, DecimalMark, Entity,
+};
 use kentos_formats::coords;
 
 fn fixture(name: &str) -> Vec<u8> {
-    let path = format!("{}/../../fixtures/formats/v1/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../fixtures/formats/v1/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
 fn read(name: &str) -> CoordRead {
-    coords::read(&fixture(name), &CoordReadOptions { preview_rows: 20, entities: true, ..Default::default() })
+    coords::read(
+        &fixture(name),
+        &CoordReadOptions {
+            preview_rows: 20,
+            entities: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// (label, x = Y, y = X, z) of every point read.
@@ -45,7 +57,15 @@ fn netcad_ncn_reads_name_y_x_z() {
     let r = read("netcad.ncn");
     assert_eq!(r.encoding, "UTF-8");
     assert_eq!(r.delimiter, CoordDelimiter::Space);
-    assert_eq!(r.columns, vec![CoordColumn::Name, CoordColumn::Y, CoordColumn::X, CoordColumn::Z]);
+    assert_eq!(
+        r.columns,
+        vec![
+            CoordColumn::Name,
+            CoordColumn::Y,
+            CoordColumn::X,
+            CoordColumn::Z
+        ]
+    );
     assert_eq!(r.data_lines, 4);
     assert_eq!(r.error_count, 0);
     same(
@@ -58,7 +78,10 @@ fn netcad_ncn_reads_name_y_x_z() {
         ],
     );
     let b = r.bounds.expect("extent");
-    assert_eq!((b.min_x, b.max_x, b.min_y, b.max_y), (452345.123, 452380.1, 4412339.9, 4412360.33));
+    assert_eq!(
+        (b.min_x, b.max_x, b.min_y, b.max_y),
+        (452345.123, 452380.1, 4412339.9, 4412360.33)
+    );
 }
 
 #[test]
@@ -68,8 +91,20 @@ fn a_turkish_spreadsheet_in_windows_1254() {
     assert_eq!(r.delimiter, CoordDelimiter::Semicolon);
     assert_eq!(r.decimal, DecimalMark::Comma);
     assert!(r.header);
-    assert_eq!(r.header_fields, vec!["Nokta Adı", "Sağa (Y)", "Yukarı (X)", "Kot", "Açıklama"]);
-    assert_eq!(r.columns, vec![CoordColumn::Name, CoordColumn::Y, CoordColumn::X, CoordColumn::Z, CoordColumn::Code]);
+    assert_eq!(
+        r.header_fields,
+        vec!["Nokta Adı", "Sağa (Y)", "Yukarı (X)", "Kot", "Açıklama"]
+    );
+    assert_eq!(
+        r.columns,
+        vec![
+            CoordColumn::Name,
+            CoordColumn::Y,
+            CoordColumn::X,
+            CoordColumn::Z,
+            CoordColumn::Code
+        ]
+    );
     same(
         &points(&r),
         &[
@@ -78,7 +113,9 @@ fn a_turkish_spreadsheet_in_windows_1254() {
             ("İstasyon", 452350.005, 4412340.125, Some(13.001)),
         ],
     );
-    let Some(Entity::Point(p)) = r.result.as_ref().and_then(|x| x.entities.first()) else { panic!() };
+    let Some(Entity::Point(p)) = r.result.as_ref().and_then(|x| x.entities.first()) else {
+        panic!()
+    };
     assert_eq!(p.base.attrs.get("Kod").map(String::as_str), Some("ağaç"));
     assert_eq!(p.base.attrs.get("Z (m)").map(String::as_str), Some("12.75"));
 }
@@ -98,7 +135,13 @@ fn lines_that_are_not_points_are_named_with_their_numbers() {
             "Satır 4: Z (kot) değeri “x12” sayı değil.",
         ]
     );
-    same(&points(&r), &[("P1", 452345.1, 4412345.2, Some(10.0)), ("P5", 452345.8, 4412345.9, None)]);
+    same(
+        &points(&r),
+        &[
+            ("P1", 452345.1, 4412345.2, Some(10.0)),
+            ("P5", 452345.8, 4412345.9, None),
+        ],
+    );
     let skipped = &r.result.as_ref().expect("objects").report.skipped;
     assert_eq!(skipped.iter().map(|s| s.count).sum::<u32>(), 3);
 }

@@ -30,8 +30,17 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
-        let start = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) { 3 } else { 0 };
-        Lexer { bytes, pos: start, line: 0, peeked: None }
+        let start = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+            3
+        } else {
+            0
+        };
+        Lexer {
+            bytes,
+            pos: start,
+            line: 0,
+            peeked: None,
+        }
     }
 
     fn read_line(&mut self) -> Option<&'a [u8]> {
@@ -56,19 +65,27 @@ impl<'a> Lexer<'a> {
         if let Some(p) = self.peeked.take() {
             return Ok(Some(p));
         }
-        let Some(code_line) = self.read_line() else { return Ok(None) };
+        let Some(code_line) = self.read_line() else {
+            return Ok(None);
+        };
         let line = self.line;
-        let t = std::str::from_utf8(code_line).map(str::trim).unwrap_or("\u{FFFD}");
+        let t = std::str::from_utf8(code_line)
+            .map(str::trim)
+            .unwrap_or("\u{FFFD}");
         // Blank lines at the very end (after EOF) are common; anywhere else they are an error below.
         if t.is_empty() && self.bytes[self.pos..].iter().all(u8::is_ascii_whitespace) {
             return Ok(None);
         }
         let Ok(code) = t.parse::<i32>() else {
             let shown: String = t.chars().take(24).collect();
-            return Err(format!("Satır {line}: grup kodu bir sayı olmalı, “{shown}” bulundu. Dosya bozuk ya da ASCII DXF değil."));
+            return Err(format!(
+                "Satır {line}: grup kodu bir sayı olmalı, “{shown}” bulundu. Dosya bozuk ya da ASCII DXF değil."
+            ));
         };
         let Some(value) = self.read_line() else {
-            return Err(format!("Satır {line}: dosya bir grup kodundan sonra bitiyor; eksik ya da yarım kalmış bir dosya."));
+            return Err(format!(
+                "Satır {line}: dosya bir grup kodundan sonra bitiyor; eksik ya da yarım kalmış bir dosya."
+            ));
         };
         Ok(Some(Pair { code, value, line }))
     }
@@ -117,8 +134,17 @@ mod tests {
     fn broken_files_say_where() {
         let mut l = Lexer::new(b"  0\nSECTION\nabc\nx\n");
         l.next().expect("ok");
-        assert_eq!(l.next().err().as_deref(), Some("Satır 3: grup kodu bir sayı olmalı, “abc” bulundu. Dosya bozuk ya da ASCII DXF değil."));
+        assert_eq!(
+            l.next().err().as_deref(),
+            Some(
+                "Satır 3: grup kodu bir sayı olmalı, “abc” bulundu. Dosya bozuk ya da ASCII DXF değil."
+            )
+        );
         let mut l = Lexer::new(b"  0\n");
-        assert!(l.next().err().is_some_and(|e| e.starts_with("Satır 1: dosya bir grup kodundan sonra bitiyor")));
+        assert!(
+            l.next()
+                .err()
+                .is_some_and(|e| e.starts_with("Satır 1: dosya bir grup kodundan sonra bitiyor"))
+        );
     }
 }

@@ -33,7 +33,11 @@ pub fn rgb(index: u8) -> [u8; 3] {
             let value = [255.0, 204.0, 153.0, 127.0, 76.0][usize::from(k / 2)];
             let pastel = k % 2 == 1;
             let ch = |c: f64| -> u8 {
-                let x = if pastel { value * (1.0 + c) / 2.0 } else { value * c };
+                let x = if pastel {
+                    value * (1.0 + c) / 2.0
+                } else {
+                    value * c
+                };
                 x.floor().clamp(0.0, 255.0) as u8
             };
             [ch(r), ch(g), ch(b)]

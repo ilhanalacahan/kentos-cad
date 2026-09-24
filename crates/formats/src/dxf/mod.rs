@@ -60,7 +60,13 @@ fn version_name(v: &str) -> String {
         "AC1024" => "2010",
         "AC1027" => "2013",
         "AC1032" => "2018",
-        _ => return if v.is_empty() { "belirtilmemiş".to_string() } else { v.to_string() },
+        _ => {
+            return if v.is_empty() {
+                "belirtilmemiş".to_string()
+            } else {
+                v.to_string()
+            };
+        }
     };
     format!("AutoCAD {name} ({v})")
 }
@@ -94,7 +100,11 @@ fn classify_pattern(elements: &[f64]) -> LineType {
 /// A line type from its name, where the LTYPE table does not say.
 fn classify_name(name: &str) -> LineType {
     let n = name.to_uppercase();
-    if n.contains("DASHDOT") || n.contains("CENTER") || n.contains("PHANTOM") || n.contains("DIVIDE") {
+    if n.contains("DASHDOT")
+        || n.contains("CENTER")
+        || n.contains("PHANTOM")
+        || n.contains("DIVIDE")
+    {
         LineType::Dashdot
     } else if n.contains("DOT") {
         LineType::Dotted
@@ -160,21 +170,45 @@ impl<'a> Reader<'a> {
                     let aci_ = g(62).and_then(|x| parse_int(x.text())).unwrap_or(7);
                     let color = match g(420).and_then(|x| parse_int(x.text())) {
                         Some(rgb) => aci::true_color(rgb),
-                        None => aci::color(u8::try_from(aci_.unsigned_abs().clamp(1, 255)).unwrap_or(7)),
+                        None => {
+                            aci::color(u8::try_from(aci_.unsigned_abs().clamp(1, 255)).unwrap_or(7))
+                        }
                     };
                     let ltype = g(6).map(|x| self.dec.string(x.value)).unwrap_or_default();
-                    let line_type = self.ltypes.get(&ltype.to_uppercase()).copied().unwrap_or_else(|| classify_name(&ltype));
-                    let weight = g(370).and_then(|x| parse_int(x.text())).filter(|&w| w > 0).map(|w| w as f64 / 100.0);
-                    let def = LayerDef { name: name(), color, visible: aci_ >= 0 && flags & 1 == 0, locked: flags & 4 != 0, line_type, line_weight: weight };
+                    let line_type = self
+                        .ltypes
+                        .get(&ltype.to_uppercase())
+                        .copied()
+                        .unwrap_or_else(|| classify_name(&ltype));
+                    let weight = g(370)
+                        .and_then(|x| parse_int(x.text()))
+                        .filter(|&w| w > 0)
+                        .map(|w| w as f64 / 100.0);
+                    let def = LayerDef {
+                        name: name(),
+                        color,
+                        visible: aci_ >= 0 && flags & 1 == 0,
+                        locked: flags & 4 != 0,
+                        line_type,
+                        line_weight: weight,
+                    };
                     let key = def.name.to_uppercase();
                     self.lib.layer_colors.insert(key.clone(), def.color.clone());
                     self.lib.layer_names.insert(key, def.name.clone());
                     self.layers.push(def);
                 }
                 "LTYPE" => {
-                    let elements: Vec<f64> = groups.iter().filter(|x| x.code == 49).filter_map(|x| parse_real(x.text())).collect();
+                    let elements: Vec<f64> = groups
+                        .iter()
+                        .filter(|x| x.code == 49)
+                        .filter_map(|x| parse_real(x.text()))
+                        .collect();
                     let n = name();
-                    let t = if elements.is_empty() { classify_name(&n) } else { classify_pattern(&elements) };
+                    let t = if elements.is_empty() {
+                        classify_name(&n)
+                    } else {
+                        classify_pattern(&elements)
+                    };
                     self.ltypes.insert(n.to_uppercase(), t);
                 }
                 "STYLE" => {
@@ -188,10 +222,18 @@ impl<'a> Reader<'a> {
     }
 
     /// Reads the entity whose type was just taken (with the VERTEX or ATTRIB entities that follow it).
-    fn entity(&mut self, name: &str, line: u32) -> Result<Result<entity::Parsed, (String, u32)>, String> {
+    fn entity(
+        &mut self,
+        name: &str,
+        line: u32,
+    ) -> Result<Result<entity::Parsed, (String, u32)>, String> {
         let groups = self.lex.until_zero()?;
         let mut after: Vec<(u32, Vec<Pair<'a>>)> = Vec::new();
-        let follows = name == "POLYLINE" || (name == "INSERT" && groups.iter().any(|g| g.code == 66 && parse_int(g.text()) == Some(1)));
+        let follows = name == "POLYLINE"
+            || (name == "INSERT"
+                && groups
+                    .iter()
+                    .any(|g| g.code == 66 && parse_int(g.text()) == Some(1)));
         if follows {
             while let Some(p) = self.lex.peek()? {
                 if p.is(0, "VERTEX") || p.is(0, "ATTRIB") {
@@ -208,7 +250,10 @@ impl<'a> Reader<'a> {
             }
         }
         let fit_data = self.version.as_str() >= "AC1024";
-        Ok(entity::parse(name, line, &groups, self.dec, after, fit_data).map_err(|u| (u.reason, line)))
+        Ok(
+            entity::parse(name, line, &groups, self.dec, after, fit_data)
+                .map_err(|u| (u.reason, line)),
+        )
     }
 
     fn blocks(&mut self, skipped: &mut Vec<(String, String, u32)>) -> Result<(), String> {
@@ -249,7 +294,14 @@ impl<'a> Reader<'a> {
                     Err((reason, line)) => skipped.push((kind, reason, line)),
                 }
             }
-            self.lib.blocks.insert(name.to_uppercase(), Block { base, entities, xref: flags & 4 != 0 });
+            self.lib.blocks.insert(
+                name.to_uppercase(),
+                Block {
+                    base,
+                    entities,
+                    xref: flags & 4 != 0,
+                },
+            );
         }
         Ok(())
     }
@@ -282,7 +334,11 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
     if bytes.len() >= 6 && bytes.starts_with(b"AC1") && bytes[3..6].iter().all(u8::is_ascii_digit) {
         return Err("Bu bir DWG dosyası. DWG kapalı (tescilli) bir biçimdir ve KentOS okuyamaz; dosyayı AutoCAD ya da Netcad'de DXF olarak kaydedip onu açın.".into());
     }
-    let limit = if opts.max_entities == 0 { DEFAULT_LIMIT } else { opts.max_entities as usize };
+    let limit = if opts.max_entities == 0 {
+        DEFAULT_LIMIT
+    } else {
+        opts.max_entities as usize
+    };
     let mut out = Out::new(limit, (limit as u64).saturating_mul(VISITS_PER_OBJECT));
     // Until the header says otherwise: UTF-8 when the bytes are, else Turkish Windows.
     let initial = encoding(bytes, "", "", &mut out);
@@ -306,7 +362,10 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
         }
         if p.code != 0 {
             if !saw_section {
-                return Err(format!("Satır {}: bu bir DXF dosyası değil (ilk grup “0 SECTION” olmalı).", p.line));
+                return Err(format!(
+                    "Satır {}: bu bir DXF dosyası değil (ilk grup “0 SECTION” olmalı).",
+                    p.line
+                ));
             }
             continue;
         }
@@ -315,7 +374,10 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
         }
         if !p.is(0, "SECTION") {
             if !saw_section {
-                return Err(format!("Satır {}: bu bir DXF dosyası değil (ilk grup “0 SECTION” olmalı).", p.line));
+                return Err(format!(
+                    "Satır {}: bu bir DXF dosyası değil (ilk grup “0 SECTION” olmalı).",
+                    p.line
+                ));
             }
             continue;
         }
@@ -324,7 +386,9 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
         match name.text().to_uppercase().as_str() {
             "HEADER" => {
                 rd.header()?;
-                rd.dec = Decoder { enc: encoding(bytes, &rd.version, &rd.codepage, &mut out) };
+                rd.dec = Decoder {
+                    enc: encoding(bytes, &rd.version, &rd.codepage, &mut out),
+                };
             }
             "TABLES" => rd.tables()?,
             "BLOCKS" => rd.blocks(&mut block_skips)?,
@@ -366,16 +430,40 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
     for l in &rd.layers {
         if let Some(&count) = out.per_layer.get(&l.name) {
             listed.insert(l.name.clone());
-            layers.push(ImportLayer { name: l.name.clone(), color: l.color.clone(), visible: l.visible, locked: l.locked, line_type: l.line_type, line_weight: l.line_weight, count });
+            layers.push(ImportLayer {
+                name: l.name.clone(),
+                color: l.color.clone(),
+                visible: l.visible,
+                locked: l.locked,
+                line_type: l.line_type,
+                line_weight: l.line_weight,
+                count,
+            });
         }
     }
-    let mut extra: Vec<(&String, &u32)> = out.per_layer.iter().filter(|(n, _)| !listed.contains(*n)).collect();
+    let mut extra: Vec<(&String, &u32)> = out
+        .per_layer
+        .iter()
+        .filter(|(n, _)| !listed.contains(*n))
+        .collect();
     extra.sort();
     for (name, &count) in extra {
-        layers.push(ImportLayer { name: name.clone(), color: "ink".to_string(), visible: true, locked: false, line_type: LineType::Continuous, line_weight: None, count });
+        layers.push(ImportLayer {
+            name: name.clone(),
+            color: "ink".to_string(),
+            visible: true,
+            locked: false,
+            line_type: LineType::Continuous,
+            line_weight: None,
+            count,
+        });
     }
     if out.truncated > 0 {
-        out.report.skip("Nesne sınırı", &format!("ilk {limit} nesne alındı; kalanlar alınmadı (dosyayı katmanlara bölün)"), 0);
+        out.report.skip(
+            "Nesne sınırı",
+            &format!("ilk {limit} nesne alındı; kalanlar alınmadı (dosyayı katmanlara bölün)"),
+            0,
+        );
     }
     if out.exhausted {
         out.report.skip(
@@ -392,5 +480,10 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
             out.report.note("Birim", &format!("dosya birimini {} olarak bildiriyor; koordinatlar ölçeklenmeden alındı (metre sayıldı)", units_name(u)), 0);
         }
     }
-    Ok(ImportResult { entities: out.entities, layers, report: out.report.import(), bounds: out.bounds })
+    Ok(ImportResult {
+        entities: out.entities,
+        layers,
+        report: out.report.import(),
+        bounds: out.bounds,
+    })
 }

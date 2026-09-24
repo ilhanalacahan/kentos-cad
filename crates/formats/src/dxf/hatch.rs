@@ -8,17 +8,41 @@ use crate::num::{parse_int, parse_real};
 
 #[derive(Clone, Debug)]
 pub enum Edge {
-    Line { a: [f64; 2], b: [f64; 2] },
+    Line {
+        a: [f64; 2],
+        b: [f64; 2],
+    },
     /// Angles in degrees as stored; `ccw` false: the arc runs clockwise and DXF stores the angles negated.
-    Arc { c: [f64; 2], r: f64, a0: f64, a1: f64, ccw: bool },
+    Arc {
+        c: [f64; 2],
+        r: f64,
+        a0: f64,
+        a1: f64,
+        ccw: bool,
+    },
     /// Major axis end relative to the centre; parameters in degrees.
-    Ellipse { c: [f64; 2], major: [f64; 2], ratio: f64, a0: f64, a1: f64, ccw: bool },
-    Spline { degree: usize, knots: Vec<f64>, ctrl: Vec<[f64; 2]>, weights: Vec<f64> },
+    Ellipse {
+        c: [f64; 2],
+        major: [f64; 2],
+        ratio: f64,
+        a0: f64,
+        a1: f64,
+        ccw: bool,
+    },
+    Spline {
+        degree: usize,
+        knots: Vec<f64>,
+        ctrl: Vec<[f64; 2]>,
+        weights: Vec<f64>,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub enum Path {
-    Poly { pts: Vec<[f64; 2]>, bulges: Vec<f64> },
+    Poly {
+        pts: Vec<[f64; 2]>,
+        bulges: Vec<f64>,
+    },
     Edges(Vec<Edge>),
 }
 
@@ -61,19 +85,24 @@ impl<'g, 'a> Cursor<'g, 'a> {
                 self.at += 1;
                 Ok(p)
             }
-            Some(p) => Err(format!("tarama sınırı beklenmedik biçimde sürüyor (grup {code} yerine {}, satır {})", p.code, p.line)),
+            Some(p) => Err(format!(
+                "tarama sınırı beklenmedik biçimde sürüyor (grup {code} yerine {}, satır {})",
+                p.code, p.line
+            )),
             None => Err(format!("tarama sınırı eksik (grup {code} bekleniyordu)")),
         }
     }
 
     fn real(&mut self, code: i32) -> Result<f64, String> {
         let p = self.take(code)?;
-        parse_real(p.text()).ok_or_else(|| format!("sayı okunamadı (grup {code}, satır {})", p.line))
+        parse_real(p.text())
+            .ok_or_else(|| format!("sayı okunamadı (grup {code}, satır {})", p.line))
     }
 
     fn int(&mut self, code: i32) -> Result<i64, String> {
         let p = self.take(code)?;
-        parse_int(p.text()).ok_or_else(|| format!("tam sayı okunamadı (grup {code}, satır {})", p.line))
+        parse_int(p.text())
+            .ok_or_else(|| format!("tam sayı okunamadı (grup {code}, satır {})", p.line))
     }
 
     fn xy(&mut self, x: i32) -> Result<[f64; 2], String> {
@@ -81,25 +110,41 @@ impl<'g, 'a> Cursor<'g, 'a> {
     }
 
     fn optional_real(&mut self, code: i32) -> Result<Option<f64>, String> {
-        if self.peek() == Some(code) { self.real(code).map(Some) } else { Ok(None) }
+        if self.peek() == Some(code) {
+            self.real(code).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 
     /// A count read from the file, bounded by what the groups can hold.
     fn count(&mut self, code: i32) -> Result<usize, String> {
         let n = self.int(code)?;
-        usize::try_from(n).ok().filter(|&n| n <= self.list.len()).ok_or_else(|| format!("sayı geçersiz (grup {code}: {n})"))
+        usize::try_from(n)
+            .ok()
+            .filter(|&n| n <= self.list.len())
+            .ok_or_else(|| format!("sayı geçersiz (grup {code}: {n})"))
     }
 }
 
 fn edge(c: &mut Cursor, fit_data: bool) -> Result<Edge, String> {
     match c.int(72)? {
-        1 => Ok(Edge::Line { a: c.xy(10)?, b: c.xy(11)? }),
+        1 => Ok(Edge::Line {
+            a: c.xy(10)?,
+            b: c.xy(11)?,
+        }),
         2 => {
             let centre = c.xy(10)?;
             let r = c.real(40)?;
             let a0 = c.real(50)?;
             let a1 = c.real(51)?;
-            Ok(Edge::Arc { c: centre, r, a0, a1, ccw: c.int(73)? != 0 })
+            Ok(Edge::Arc {
+                c: centre,
+                r,
+                a0,
+                a1,
+                ccw: c.int(73)? != 0,
+            })
         }
         3 => {
             let centre = c.xy(10)?;
@@ -107,7 +152,14 @@ fn edge(c: &mut Cursor, fit_data: bool) -> Result<Edge, String> {
             let ratio = c.real(40)?;
             let a0 = c.real(50)?;
             let a1 = c.real(51)?;
-            Ok(Edge::Ellipse { c: centre, major, ratio, a0, a1, ccw: c.int(73)? != 0 })
+            Ok(Edge::Ellipse {
+                c: centre,
+                major,
+                ratio,
+                a0,
+                a1,
+                ccw: c.int(73)? != 0,
+            })
         }
         4 => {
             let degree = usize::try_from(c.int(94)?).unwrap_or(0);
@@ -143,7 +195,12 @@ fn edge(c: &mut Cursor, fit_data: bool) -> Result<Edge, String> {
                     c.xy(13)?;
                 }
             }
-            Ok(Edge::Spline { degree, knots, ctrl, weights })
+            Ok(Edge::Spline {
+                degree,
+                knots,
+                ctrl,
+                weights,
+            })
         }
         t => Err(format!("bilinmeyen tarama sınırı kenarı ({t})")),
     }
@@ -159,7 +216,11 @@ fn path(c: &mut Cursor, fit_data: bool) -> Result<Path, String> {
         let mut bulges = Vec::with_capacity(n);
         for _ in 0..n {
             pts.push(c.xy(10)?);
-            let b = if has_bulge { c.optional_real(42)? } else { None };
+            let b = if has_bulge {
+                c.optional_real(42)?
+            } else {
+                None
+            };
             bulges.push(b.unwrap_or(0.0));
         }
         Path::Poly { pts, bulges }
@@ -185,7 +246,18 @@ fn path(c: &mut Cursor, fit_data: bool) -> Result<Path, String> {
 
 /// A HATCH's groups (common groups included; they are skipped).
 pub fn parse_hatch(list: &[Pair<'_>], fit_data: bool) -> Result<Hatch, String> {
-    let mut h = Hatch { elevation: 0.0, name: String::new(), solid: false, gradient: false, style: 0, angle: 0.0, scale: 1.0, double: false, lines: Vec::new(), paths: Vec::new() };
+    let mut h = Hatch {
+        elevation: 0.0,
+        name: String::new(),
+        solid: false,
+        gradient: false,
+        style: 0,
+        angle: 0.0,
+        scale: 1.0,
+        double: false,
+        lines: Vec::new(),
+        paths: Vec::new(),
+    };
     let mut c = Cursor { list, at: 0 };
     let mut in_hatch = false;
     while let Some(code) = c.peek() {
@@ -222,7 +294,11 @@ pub fn parse_hatch(list: &[Pair<'_>], fit_data: bool) -> Result<Hatch, String> {
                     for _ in 0..dashes {
                         c.real(49)?;
                     }
-                    h.lines.push(PatternLine { angle, offset, dashes });
+                    h.lines.push(PatternLine {
+                        angle,
+                        offset,
+                        dashes,
+                    });
                 }
             }
             450 => h.gradient = c.int(450)? != 0,
@@ -237,8 +313,17 @@ pub fn parse_hatch(list: &[Pair<'_>], fit_data: bool) -> Result<Hatch, String> {
     }
     // Writers without the subclass markers: read the groups again from the start.
     if !in_hatch && h.paths.is_empty() && list.iter().any(|p| p.code == 91) {
-        let start = list.iter().position(|p| p.code == 100 || p.code == 10).unwrap_or(0);
-        let marked: Vec<Pair<'_>> = std::iter::once(Pair { code: 100, value: b"AcDbHatch", line: 0 }).chain(list[start..].iter().copied()).collect();
+        let start = list
+            .iter()
+            .position(|p| p.code == 100 || p.code == 10)
+            .unwrap_or(0);
+        let marked: Vec<Pair<'_>> = std::iter::once(Pair {
+            code: 100,
+            value: b"AcDbHatch",
+            line: 0,
+        })
+        .chain(list[start..].iter().copied())
+        .collect();
         return parse_hatch(&marked, fit_data);
     }
     Ok(h)
@@ -264,10 +349,14 @@ mod tests {
         let h = parse_hatch(&groups(text), false).expect("hatch");
         assert_eq!(h.name, "ANSI31");
         assert_eq!(h.paths.len(), 2);
-        let Path::Poly { pts, bulges } = &h.paths[0] else { panic!() };
+        let Path::Poly { pts, bulges } = &h.paths[0] else {
+            panic!()
+        };
         assert_eq!(pts, &vec![[0.0, 0.0], [2.0, 0.0]]);
         assert_eq!(bulges, &vec![1.0, 1.0]);
-        let Path::Edges(edges) = &h.paths[1] else { panic!() };
+        let Path::Edges(edges) = &h.paths[1] else {
+            panic!()
+        };
         assert!(matches!(edges[1], Edge::Arc { r, ccw: true, .. } if r == 0.5));
         assert_eq!((h.style, h.lines.len(), h.lines[0].angle), (1, 1, 45.0));
     }

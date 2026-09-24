@@ -12,7 +12,7 @@ use kentos_geometry_core::geom::arc::DEFAULT_STEP;
 use kentos_geometry_core::geom::bulge::bulge_path_outline;
 use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 
-use crate::math::{atan2, cos, hypot, norm_angle, sin, sin_cos_deg, TAU};
+use crate::math::{TAU, atan2, cos, hypot, norm_angle, sin, sin_cos_deg};
 
 pub const fn v(x: f64, y: f64) -> Vec2 {
     Vec2 { x, y }
@@ -46,20 +46,42 @@ pub struct Similarity {
 }
 
 impl Tf {
-    pub const IDENTITY: Tf = Tf { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: 0.0, f: 0.0 };
+    pub const IDENTITY: Tf = Tf {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        e: 0.0,
+        f: 0.0,
+    };
 
     pub fn translate(dx: f64, dy: f64) -> Tf {
-        Tf { e: dx, f: dy, ..Tf::IDENTITY }
+        Tf {
+            e: dx,
+            f: dy,
+            ..Tf::IDENTITY
+        }
     }
 
     /// Rotation by `deg` degrees counter-clockwise (exact for quarter turns).
     pub fn rotate_deg(deg: f64) -> Tf {
         let (s, c) = sin_cos_deg(deg);
-        Tf { a: c, b: s, c: -s, d: c, e: 0.0, f: 0.0 }
+        Tf {
+            a: c,
+            b: s,
+            c: -s,
+            d: c,
+            e: 0.0,
+            f: 0.0,
+        }
     }
 
     pub fn scale(sx: f64, sy: f64) -> Tf {
-        Tf { a: sx, d: sy, ..Tf::IDENTITY }
+        Tf {
+            a: sx,
+            d: sy,
+            ..Tf::IDENTITY
+        }
     }
 
     pub fn is_identity(&self) -> bool {
@@ -70,7 +92,10 @@ impl Tf {
         if self.is_identity() {
             return p;
         }
-        v(self.a * p.x + self.c * p.y + self.e, self.b * p.x + self.d * p.y + self.f)
+        v(
+            self.a * p.x + self.c * p.y + self.e,
+            self.b * p.x + self.d * p.y + self.f,
+        )
     }
 
     /// The linear part only (for directions and axis vectors).
@@ -113,7 +138,15 @@ impl Tf {
         if dot.abs() > 1e-10 * lu * lv || (lu - lv).abs() > 1e-10 * lu.max(lv) {
             return None;
         }
-        Some(Similarity { scale: lu, angle: if uy == 0.0 && ux > 0.0 { 0.0 } else { atan2(uy, ux) }, mirror: self.det() < 0.0 })
+        Some(Similarity {
+            scale: lu,
+            angle: if uy == 0.0 && ux > 0.0 {
+                0.0
+            } else {
+                atan2(uy, ux)
+            },
+            mirror: self.det() < 0.0,
+        })
     }
 }
 
@@ -136,7 +169,11 @@ pub fn ocs_axes(n: [f64; 3]) -> Option<([f64; 3], [f64; 3], [f64; 3])> {
     };
     let la = (ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]).sqrt();
     let ax = [ax[0] / la, ax[1] / la, ax[2] / la];
-    let ay = [n[1] * ax[2] - n[2] * ax[1], n[2] * ax[0] - n[0] * ax[2], n[0] * ax[1] - n[1] * ax[0]];
+    let ay = [
+        n[1] * ax[2] - n[2] * ax[1],
+        n[2] * ax[0] - n[0] * ax[2],
+        n[0] * ax[1] - n[1] * ax[0],
+    ];
     let ly = (ay[0] * ay[0] + ay[1] * ay[1] + ay[2] * ay[2]).sqrt();
     Some((ax, [ay[0] / ly, ay[1] / ly, ay[2] / ly], n))
 }
@@ -149,7 +186,14 @@ pub fn ocs_tf(n: [f64; 3], elevation: f64) -> Option<Tf> {
         return Some(Tf::IDENTITY);
     }
     let (ax, ay, nz) = ocs_axes(n)?;
-    Some(Tf { a: ax[0], b: ax[1], c: ay[0], d: ay[1], e: elevation * nz[0], f: elevation * nz[1] })
+    Some(Tf {
+        a: ax[0],
+        b: ax[1],
+        c: ay[0],
+        d: ay[1],
+        e: elevation * nz[0],
+        f: elevation * nz[1],
+    })
 }
 
 /// An ellipse in the model's form: centre, major axis, minor/major ratio ≤ 1, parameters t0 → t1 (equal: whole).
@@ -166,7 +210,14 @@ pub struct EllipseParts {
 /// any two independent vectors, the image of a circle or of another
 /// ellipse under an affine map), in the model's form: counter-clockwise
 /// parameter, principal axes, the longer one first. None when it is flat.
-pub fn ellipse_from(c: Vec2, u: Vec2, mut vv: Vec2, mut t0: f64, mut t1: f64, full: bool) -> Option<EllipseParts> {
+pub fn ellipse_from(
+    c: Vec2,
+    u: Vec2,
+    mut vv: Vec2,
+    mut t0: f64,
+    mut t1: f64,
+    full: bool,
+) -> Option<EllipseParts> {
     if u.x * vv.y - u.y * vv.x < 0.0 {
         // Clockwise: t → −t turns it counter-clockwise.
         vv = v(-vv.x, -vv.y);
@@ -175,7 +226,11 @@ pub fn ellipse_from(c: Vec2, u: Vec2, mut vv: Vec2, mut t0: f64, mut t1: f64, fu
     let uu = u.x * u.x + u.y * u.y;
     let vvv = vv.x * vv.x + vv.y * vv.y;
     let uv = u.x * vv.x + u.y * vv.y;
-    let mut phi = if uv == 0.0 && uu >= vvv { 0.0 } else { 0.5 * atan2(2.0 * uv, uu - vvv) };
+    let mut phi = if uv == 0.0 && uu >= vvv {
+        0.0
+    } else {
+        0.5 * atan2(2.0 * uv, uu - vvv)
+    };
     let (s, co) = (sin(phi), cos(phi));
     let mut a = v(u.x * co + vv.x * s, u.y * co + vv.y * s);
     let mut b = v(-u.x * s + vv.x * co, -u.y * s + vv.y * co);
@@ -190,8 +245,18 @@ pub fn ellipse_from(c: Vec2, u: Vec2, mut vv: Vec2, mut t0: f64, mut t1: f64, fu
         return None;
     }
     let ratio = (lb / la).min(1.0);
-    let (t0, t1) = if full { (0.0, 0.0) } else { (norm_angle(t0 - phi), norm_angle(t1 - phi)) };
-    Some(EllipseParts { c, major: a, ratio, t0, t1 })
+    let (t0, t1) = if full {
+        (0.0, 0.0)
+    } else {
+        (norm_angle(t0 - phi), norm_angle(t1 - phi))
+    };
+    Some(EllipseParts {
+        c,
+        major: a,
+        ratio,
+        t0,
+        t1,
+    })
 }
 
 /// Segments of an arc of `sweep` radians, by the app's rule (`tessellateArc`,
@@ -264,7 +329,11 @@ mod tests {
         assert_eq!((s.scale, s.mirror), (1.0, false));
         assert!((s.angle - PI / 2.0).abs() < 1e-15);
         assert_eq!(Tf::scale(2.0, 3.0).similarity(), None);
-        assert!(Tf::scale(-2.0, 2.0).similarity().is_some_and(|s| s.mirror && s.scale == 2.0));
+        assert!(
+            Tf::scale(-2.0, 2.0)
+                .similarity()
+                .is_some_and(|s| s.mirror && s.scale == 2.0)
+        );
     }
 
     #[test]
@@ -283,33 +352,67 @@ mod tests {
     #[test]
     fn an_ellipse_from_a_stretched_circle() {
         // A unit circle scaled 3 × 1: major along x, ratio 1/3, whole.
-        let e = ellipse_from(v(0.0, 0.0), v(3.0, 0.0), v(0.0, 1.0), 0.0, 0.0, true).expect("ellipse");
-        assert_eq!((e.major, e.ratio, e.t0, e.t1), (v(3.0, 0.0), 1.0 / 3.0, 0.0, 0.0));
+        let e =
+            ellipse_from(v(0.0, 0.0), v(3.0, 0.0), v(0.0, 1.0), 0.0, 0.0, true).expect("ellipse");
+        assert_eq!(
+            (e.major, e.ratio, e.t0, e.t1),
+            (v(3.0, 0.0), 1.0 / 3.0, 0.0, 0.0)
+        );
         // Taller than wide: the major axis turns to y, the parameter by a quarter.
-        let e = ellipse_from(v(0.0, 0.0), v(1.0, 0.0), v(0.0, 2.0), 0.0, PI / 2.0, false).expect("ellipse");
-        assert!((e.major.x).abs() < 1e-15 && (e.major.y - 2.0).abs() < 1e-15 && (e.ratio - 0.5).abs() < 1e-15);
+        let e = ellipse_from(v(0.0, 0.0), v(1.0, 0.0), v(0.0, 2.0), 0.0, PI / 2.0, false)
+            .expect("ellipse");
+        assert!(
+            (e.major.x).abs() < 1e-15
+                && (e.major.y - 2.0).abs() < 1e-15
+                && (e.ratio - 0.5).abs() < 1e-15
+        );
         // The point at the old t = π/2 is the major end: new t1 = 0.
         assert!(e.t1.abs() < 1e-15 || (e.t1 - TAU).abs() < 1e-15, "{e:?}");
         // Mirrored (clockwise) parameterisation: the arc keeps its points.
-        let e = ellipse_from(v(0.0, 0.0), v(2.0, 0.0), v(0.0, -1.0), 0.0, PI / 2.0, false).expect("ellipse");
+        let e = ellipse_from(v(0.0, 0.0), v(2.0, 0.0), v(0.0, -1.0), 0.0, PI / 2.0, false)
+            .expect("ellipse");
         let at = |t: f64| {
             let m = v(-e.major.y * e.ratio, e.major.x * e.ratio);
-            v(e.c.x + e.major.x * cos(t) + m.x * sin(t), e.c.y + e.major.y * cos(t) + m.y * sin(t))
+            v(
+                e.c.x + e.major.x * cos(t) + m.x * sin(t),
+                e.c.y + e.major.y * cos(t) + m.y * sin(t),
+            )
         };
         let (p0, p1) = (at(e.t0), at(e.t1));
         // Old t = 0 → (2, 0), old t = π/2 → (0, −1); the model's arc runs from (0, −1) to (2, 0).
-        assert!(dist(p0, v(0.0, -1.0)) < 1e-12 && dist(p1, v(2.0, 0.0)) < 1e-12, "{p0:?} {p1:?}");
+        assert!(
+            dist(p0, v(0.0, -1.0)) < 1e-12 && dist(p1, v(2.0, 0.0)) < 1e-12,
+            "{p0:?} {p1:?}"
+        );
     }
 
     #[test]
     fn arcs_are_sampled_with_the_apps_step() {
-        assert_eq!((arc_steps(TAU), arc_steps(-PI / 2.0), arc_steps(1e-6), arc_steps(0.0)), (72, 18, 2, 2));
+        assert_eq!(
+            (
+                arc_steps(TAU),
+                arc_steps(-PI / 2.0),
+                arc_steps(1e-6),
+                arc_steps(0.0)
+            ),
+            (72, 18, 2, 2)
+        );
         // A clockwise quarter from (1, 0) to (0, −1): 18 points after the start, the last one exact.
         let mut out = Vec::new();
-        arc_points(v(0.0, 0.0), 1.0, 0.0, -PI / 2.0, Some(v(0.0, -1.0)), &mut out);
+        arc_points(
+            v(0.0, 0.0),
+            1.0,
+            0.0,
+            -PI / 2.0,
+            Some(v(0.0, -1.0)),
+            &mut out,
+        );
         assert_eq!(out.len(), 18);
         assert_eq!(out.last(), Some(&v(0.0, -1.0)));
-        assert!(out.iter().all(|p| (hypot(p.x, p.y) - 1.0).abs() < 1e-15 && p.x >= -1e-15 && p.y <= 1e-15));
+        assert!(
+            out.iter()
+                .all(|p| (hypot(p.x, p.y) - 1.0).abs() < 1e-15 && p.x >= -1e-15 && p.y <= 1e-15)
+        );
     }
 
     #[test]
@@ -318,12 +421,19 @@ mod tests {
         let ring = bulge_path_points(&[v(0.0, 0.0), v(2.0, 0.0)], &[1.0, 1.0], true);
         assert_eq!(ring.len(), 72);
         assert_eq!((ring[0], ring[36]), (v(0.0, 0.0), v(2.0, 0.0)));
-        assert!(ring.iter().all(|p| (hypot(p.x - 1.0, p.y) - 1.0).abs() < 1e-15));
+        assert!(
+            ring.iter()
+                .all(|p| (hypot(p.x - 1.0, p.y) - 1.0).abs() < 1e-15)
+        );
         let core = to_core(&ring);
         assert!((ring_area(&core) - PI).abs() < 0.01);
         assert!(ring_contains(&core, v(1.0, 0.5)) && !ring_contains(&core, v(3.0, 0.0)));
         // An open path ends at its last vertex; a bulge within 10⁻¹² of zero is straight.
-        let open = bulge_path_points(&[v(0.0, 0.0), v(2.0, 0.0), v(2.0, 5.0)], &[-1.0, 1e-13], false);
+        let open = bulge_path_points(
+            &[v(0.0, 0.0), v(2.0, 0.0), v(2.0, 5.0)],
+            &[-1.0, 1e-13],
+            false,
+        );
         assert_eq!((open.len(), open.last()), (38, Some(&v(2.0, 5.0))));
         assert!(has_arcs(&[0.0, -1.0]) && !has_arcs(&[0.0, 1e-13]) && !has_arcs(&[]));
     }
