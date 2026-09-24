@@ -36,6 +36,12 @@ export interface CallSet {
    * the recorder writes it into every case of that operation.
    */
   tolerance?: Record<string, Tolerance & { why: string }>;
+  /**
+   * Operations returning a list sorted by a measure (areas smallest first):
+   * items whose measure ties may come in either order, because the last bit
+   * of an arc's area (sin) decides the tie (docs/adr/0008).
+   */
+  ties?: Record<string, (item: never) => number>;
   /** The TypeScript functions, by operation name (the reference while they exist). */
   fns: Record<string, (...args: never[]) => unknown>;
   named: Call[];
@@ -153,6 +159,28 @@ export function sameResult(actual: unknown, expected: unknown, tol: Tolerance, p
     return null;
   }
   return actual === expected ? null : `${path}: ${JSON.stringify(actual)} ≠ ${JSON.stringify(expected)}`;
+}
+
+/**
+ * Whether `got` is `want` with items of equal measure reordered: the same
+ * measures in the same order (within 1e-9, relative), and every item of
+ * `want` matched by a distinct item of `got`.
+ */
+export function sameUpToTies(got: unknown, want: unknown, tol: Tolerance, key: (item: never) => number): boolean {
+  if (!Array.isArray(got) || !Array.isArray(want) || got.length !== want.length) return false;
+  const k = (x: unknown) => key(x as never);
+  for (let i = 0; i < want.length; i++) {
+    const a = k(got[i]);
+    const b = k(want[i]);
+    if (Math.abs(a - b) > 1e-9 * Math.max(1, Math.abs(a), Math.abs(b))) return false;
+  }
+  const used = new Set<number>();
+  return want.every((w) => {
+    const j = got.findIndex((g, i) => !used.has(i) && sameResult(g, w, tol) === null);
+    if (j < 0) return false;
+    used.add(j);
+    return true;
+  });
 }
 
 /** The calls of a set: its named cases, then `n` random ones per operation from a fixed seed. */

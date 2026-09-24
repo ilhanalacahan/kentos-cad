@@ -17,4 +17,11 @@ pub(super) static TABLES: &[&[Op]] = &[
     crate::geom::dimension::OPS,
     crate::geom::hatch::OPS,
     crate::ops::edge_labels::OPS,
+    crate::geom::region::OPS,
+    crate::geom::parallel::OPS,
+    crate::entity::OPS,
+    crate::ops::edges::OPS,
+    crate::ops::transform::OPS,
+    crate::ops::stretch::OPS,
+    crate::ops::grips::OPS,
 ];

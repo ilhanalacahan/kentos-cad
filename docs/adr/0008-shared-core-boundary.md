@@ -53,9 +53,8 @@ Kullanıcının kararları (2026-09-24):
 
 ### Nesne tipi
 
-- Çekirdek geometri tipini kendisi tanımlar (serde ile, TS'teki `EntityGeometry` biçiminde). `kentos-contracts`'a bağlanmaz: ts-rs ve sözleşme türetmeleri WASM paketine girmez.
-- Sözleşmedeki `Entity`, ortak alanlar ile bu geometrinin toplamıdır. İkisinin aynı kaldığını P5 dilimindeki bir Rust testi denetler.
-- Plan metnindeki “geometry-core → contracts” bağımlılığı bu yüzden kurulmadı.
+- Çekirdek geometri tipini kendisi tanımlar: `entity::Shape` (13 tür, `kind` etiketli, TS'teki `EntityGeometry` biçiminde). `kentos-contracts`'a bağlanmaz; ts-rs ve sözleşme türetmeleri WASM paketine girmez. Plan metnindeki “geometry-core → contracts” bağımlılığı bu yüzden kurulmadı.
+- `entity::Entity` = `Shape` + çekirdeğin yorumlamadığı bütün alanlar (`rest`: kimlik, katman, renk, öznitelikler, etiket, sembol), geldikleri gibi ve sırasıyla. TS'te `{ ...e, … }` döndüren işlemler (dönüşüm, tutamaç) bu alanları değişmeden geri verir; yeni bir şekil kuran işlemler (`{ kind: 'arc', … }`) vermez. `entityGeometry` TS'teki gibi yalnız kimlik, katman, öznitelik, renk ve etiketi düşürür.
 
 ### Sınır
 
@@ -96,6 +95,7 @@ Kullanıcının kararları (2026-09-24):
   | P2 (+43 işlem) | 388 KB | 135 KB | Argümanlar artık tek bir `Value` yolundan okunuyor (kazanç 1,5 KB) |
   | P3 (+10 işlem) | 454 KB | 156 KB | Fonksiyon başına döküm (kod 365 KB): serde 155 KB (serde_json ayrıştırma 53, türetilmiş okuyucular 43, yazıcı 60), her `sort_by` için ayrı sıralama kodu ~25 KB, geometri 74 KB, libm 11 KB, bellek ayırıcı 19 KB |
   | serde'siz JSON | 303 KB | 105 KB | Kendi JSON modülü (27 KB kod) ve tek bir kararlı sıralama (`jsmath::stable_sort`; std `sort_by` her karşılaştırıcı için yeniden üretiliyordu). Kod 244 KB, geometri 70 KB |
+  | P4 + P5 (+40 işlem) | 494 KB | 170 KB | Düzlem bindirme motoru, alan cebiri, nesne modeli ve işlemleri |
 
 ### Doğrulama
 
@@ -110,6 +110,8 @@ Kullanıcının kararları (2026-09-24):
   - native: `crates/geometry-core/tests/calls.rs`;
   - WASM, uygulamanın yolundan: `src/wasm/calls.wasm.test.ts`.
 - **Bağımsız referanslar** her dilimde kapalı biçimli ölçülerle genişletilir (§23.4): `reference.json` (alanlar) ve `reference-calls.json` (adıyla çağrılan işlemler: TM doğru kesişimi, üç noktadan çember, yarım daire yayı, parçaya uzaklık, güzergâh uzunluğu, iki çember kesişimi, teğet noktaları, yay uzunluğu; `scripts/fixtures/geometry_call_reference.py`). Native (`tests/calls.rs`), WASM ve TS varken TS (`src/wasm/parity/reference.test.ts`) hata sınırı içinde kalmalıdır.
+- **Eşit ölçülü sonuçların sırası:** alana göre sıralanan listelerde (alan cebiri, yüzler) eşit alanlı iki öğenin sırasını yayın alanındaki sin'in son biti belirleyebilir. Kümeler `ties` ile ölçüyü bildirir; parity testi, ölçüler aynı sırada ve öğeler eşleşiyorsa bu yer değişimini kabul eder. Kaydedici böyle durumları dondurmaz.
+- **Taşırken bulunan kırılgan karar (TS de düzeltildi):** bindirmede halka izleme, “aynı parçadan geri dönme” durumunu açıyla sınıyordu (`cw < 1e-12`). Kısa bir yayda iki açı 10⁻⁴'lük kirişlerden gelir ve sin/cos'un son bit farkı 2,4·10⁻¹²'ye büyür. TS bunu şans eseri tutturuyordu, libm tutturamadı; izleme yanlış yöne dönüp yüzleri kaybetti. Şimdi iki tarafta da ikiz parça yapısal olarak tanınır (aynı parça, ters yön). TS geometri testleri değişmeden geçer. Bu, §23.3'ün istediği türden sağlam bir karardır.
 - **Golden sahipliği:** TS silindikten sonra dosyalar donmuş davranış kilididir. Bilinçli bir davranış değişikliği (ör. §23.3 robust kararlar) dosyayı incelemeyle günceller.
 
 ## Sonuçlar

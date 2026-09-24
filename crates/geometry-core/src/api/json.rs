@@ -390,6 +390,30 @@ impl ToJson for f64 {
     }
 }
 
+impl ToJson for Json {
+    fn write_json(&self, out: &mut String) {
+        match self {
+            Json::Null => out.push_str("null"),
+            Json::Bool(b) => b.write_json(out),
+            Json::Num(x) => write_number(out, *x),
+            Json::Str(s) => write_str(out, s),
+            Json::Arr(items) => items.write_json(out),
+            Json::Obj(fields) => {
+                out.push('{');
+                for (i, (k, v)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    write_str(out, k);
+                    out.push(':');
+                    v.write_json(out);
+                }
+                out.push('}');
+            }
+        }
+    }
+}
+
 macro_rules! int_to_json {
     ($($t:ty),*) => {$(
         impl ToJson for $t {
@@ -525,17 +549,32 @@ macro_rules! json_struct {
 #[macro_export]
 macro_rules! json_tagged {
     ($t:ident, $tag:literal, $($v:ident => $name:literal { $($f:ident $(=> $n:literal)?),* $(,)? }),* $(,)?) => {
-        impl $crate::api::json::ToJson for $t {
-            fn write_json(&self, out: &mut String) {
+        impl $t {
+            /// The tag and fields, without the braces (to share an object with more fields).
+            #[allow(dead_code)]
+            pub fn write_fields(&self, out: &mut String, first: &mut bool) {
                 match self {
                     $($t::$v { $($f),* } => {
-                        out.push('{');
-                        let mut first = true;
-                        $crate::api::json::field(out, &mut first, $tag, $name);
-                        $($crate::api::json::field(out, &mut first, $crate::json_name!($f $(, $n)?), $f);)*
-                        out.push('}');
+                        $crate::api::json::field(out, first, $tag, $name);
+                        $($crate::api::json::field(out, first, $crate::json_name!($f $(, $n)?), $f);)*
                     })*
                 }
+            }
+            /// The JSON names of a variant's fields, by tag.
+            #[allow(dead_code)]
+            pub fn field_names(tag: &str) -> &'static [&'static str] {
+                match tag {
+                    $($name => &[$($crate::json_name!($f $(, $n)?)),*],)*
+                    _ => &[],
+                }
+            }
+        }
+        impl $crate::api::json::ToJson for $t {
+            fn write_json(&self, out: &mut String) {
+                out.push('{');
+                let mut first = true;
+                self.write_fields(out, &mut first);
+                out.push('}');
             }
         }
         impl $crate::api::json::FromJson for $t {

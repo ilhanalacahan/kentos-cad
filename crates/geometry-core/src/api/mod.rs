@@ -40,9 +40,30 @@ impl Args {
     }
 }
 
+/// What an operation's body returns: a value written as JSON, or a
+/// `Result` whose error becomes an exception in TypeScript.
+pub trait Respond {
+    fn respond(&self) -> Result<String, String>;
+}
+
+impl<T: ToJson + ?Sized> Respond for T {
+    fn respond(&self) -> Result<String, String> {
+        Ok(json::to_string(self))
+    }
+}
+
+impl<T: ToJson> Respond for Result<T, String> {
+    fn respond(&self) -> Result<String, String> {
+        match self {
+            Ok(v) => Ok(json::to_string(v)),
+            Err(e) => Err(e.clone()),
+        }
+    }
+}
+
 /// Writes a result.
-pub fn result<R: ToJson + ?Sized>(r: &R) -> Result<String, String> {
-    Ok(json::to_string(r))
+pub fn result<R: Respond + ?Sized>(r: &R) -> Result<String, String> {
+    r.respond()
 }
 
 /// Declares an operation: `op!("name", |a: A, b: B| body)`.

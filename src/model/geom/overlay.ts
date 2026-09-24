@@ -41,8 +41,10 @@ function trace(dps: readonly DirPiece[]): DirPiece[][] {
     let bestAngle = Infinity;
     for (const o of outgoing.get(dps[cur].to) ?? []) {
       let cw = normAngle(back[cur] - leave[o]);
-      // Straight back along the same piece is the last resort (a dead end).
-      if (cw < 1e-12) cw = TAU;
+      // Straight back along the same piece is the last resort (a dead end). The twin is
+      // recognised as such, not by its angle: on a short arc the two angles come from
+      // tiny chords and may differ by 1e-12 or so (docs/adr/0008).
+      if (cw < 1e-12 || (dps[o].piece === dps[cur].piece && dps[o].fwd !== dps[cur].fwd)) cw = TAU;
       if (cw < bestAngle) {
         bestAngle = cw;
         best = o;

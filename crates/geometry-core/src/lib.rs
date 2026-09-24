@@ -21,6 +21,7 @@
 )]
 
 pub mod api;
+pub mod entity;
 pub mod ewkb;
 pub mod geom;
 pub mod geometry;

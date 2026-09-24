@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { callNamed } from '../core';
-import { callsOf, sameResult, TOLERANCE, toJson } from './harness';
+import { callsOf, sameResult, sameUpToTies, TOLERANCE, toJson } from './harness';
 import { SETS } from './sets';
 
 /**
@@ -21,7 +21,10 @@ for (const set of SETS)
         for (const c of calls.filter((c) => c.fn === fn)) {
           const want = toJson((ts as (...a: unknown[]) => unknown)(...c.args));
           const got = toJson(callNamed(c.fn, c.args));
-          const r = sameResult(got, want, set.tolerance?.[fn] ?? TOLERANCE, c.name);
+          const tol = set.tolerance?.[fn] ?? TOLERANCE;
+          const r = sameResult(got, want, tol, c.name);
+          const tie = set.ties?.[fn];
+          if (r && tie && sameUpToTies(got, want, tol, tie)) continue;
           if (r) failures.push(`${r}\n    girdi: ${JSON.stringify(c.args).slice(0, 400)}`);
         }
         expect(failures.slice(0, 5).join('\n')).toBe('');

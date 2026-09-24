@@ -225,9 +225,7 @@ mod tests {
 
     #[test]
     fn stable_sort_keeps_ties_in_order_like_javascript() {
-        let mut v: Vec<(i32, usize)> = (0..200)
-            .map(|i: i32| (i * 7919 % 13, i as usize))
-            .collect();
+        let mut v: Vec<(i32, usize)> = (0..200).map(|i: i32| (i * 7919 % 13, i as usize)).collect();
         let mut want = v.clone();
         want.sort_by_key(|p| p.0); // std's stable sort
         stable_sort(&mut v, &mut |a, b| a.0.cmp(&b.0));
