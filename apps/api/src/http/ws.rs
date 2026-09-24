@@ -1,10 +1,13 @@
 //! `/v1/ws`: the live channel of an open project (CLAUDE.md §21.1). The
 //! client subscribes with the cursor it has applied; missed events are
-//! replayed first, then new ones follow as they are committed. The client
-//! sends a heartbeat (`ping`) at least every 60 s or is disconnected. Access
-//! and the session are checked again every 30 s, so a revoked membership or
-//! a signed-out session stops the stream. A job or a commit never depends on
-//! this socket: closing it loses nothing on the server.
+//! replayed first, then new ones follow as they are committed. A cursor the
+//! log cannot continue from (older than the events still kept, or beyond
+//! the newest) gets `resyncRequired`: the client opens the project again.
+//! The client sends a heartbeat (`ping`) at least every 60 s or is
+//! disconnected. Access and the session are checked again every 30 s, so a
+//! revoked membership or a signed-out session stops the stream. A job or a
+//! commit never depends on this socket: closing it loses nothing on the
+//! server.
 
 use std::time::{Duration, Instant};
 
@@ -64,6 +67,16 @@ fn error(e: &AppError) -> ServerMessage {
     }
 }
 
+/// What a failed replay tells the client: reopen, or why it stopped.
+fn answer(e: &AppError, project: Uuid) -> ServerMessage {
+    match e {
+        AppError::ResyncRequired(_) => ServerMessage::ResyncRequired {
+            project_id: project.to_string(),
+        },
+        _ => error(e),
+    }
+}
+
 /// Sends every event after the subscription's cursor; false when the socket is gone.
 async fn flush(
     socket: &mut WebSocket,
@@ -93,28 +106,28 @@ async fn flush(
     }
 }
 
-/// The subscription and the project's newest cursor.
+/// The subscription and where the project's log stands.
 async fn subscribe(
     state: &AppState,
     actor: &Actor,
     tenant: &str,
     project: &str,
     after: &str,
-) -> Result<(Subscription, i64), AppError> {
+) -> Result<(Subscription, events::Bounds), AppError> {
     let tenant = Uuid::parse_str(tenant).map_err(|_| AppError::not_found("Kurum bulunamadı."))?;
     let project = Uuid::parse_str(project).map_err(|_| AppError::not_found("Proje bulunamadı."))?;
     let cursor = after
         .parse::<i64>()
         .map_err(|_| AppError::invalid("after bir olay imleci olmalı."))?;
     let access = tenancy::access(state.db()?, actor, tenant).await?;
-    let latest = events::latest(state.db()?, &access, project).await?;
+    let bounds = events::bounds(state.db()?, &access, project).await?;
     Ok((
         Subscription {
             access,
             project,
             cursor,
         },
-        latest,
+        bounds,
     ))
 }
 
@@ -141,8 +154,8 @@ async fn run(mut socket: WebSocket, state: AppState, actor: Actor, session: Opti
                     Ok(ClientMessage::Unsubscribe) => sub = None,
                     Ok(ClientMessage::Subscribe { tenant_id, project_id, after }) => {
                         match subscribe(&state, &actor, &tenant_id, &project_id, &after).await {
-                            // A cursor beyond the newest event (a restored database): the client must reopen.
-                            Ok((s, latest)) if s.cursor > latest => {
+                            // Older than the events still kept, or beyond the newest (a restored database): reopen.
+                            Ok((s, bounds)) if !bounds.can_continue(s.cursor) => {
                                 sub = None;
                                 if !send(&mut socket, &ServerMessage::ResyncRequired { project_id: s.project.to_string() }).await { break }
                             }
@@ -152,7 +165,7 @@ async fn run(mut socket: WebSocket, state: AppState, actor: Actor, session: Opti
                                 match flush(&mut socket, &state, &mut s).await {
                                     Ok(true) => sub = Some(s),
                                     Ok(false) => break,
-                                    Err(e) => { if !send(&mut socket, &error(&e)).await { break } }
+                                    Err(e) => { if !send(&mut socket, &answer(&e, s.project)).await { break } }
                                 }
                             }
                             Err(e) => { if !send(&mut socket, &error(&e)).await { break } }
@@ -176,7 +189,7 @@ async fn run(mut socket: WebSocket, state: AppState, actor: Actor, session: Opti
                     match flush(&mut socket, &state, s).await {
                         Ok(true) => {}
                         Ok(false) => break,
-                        Err(e) => { sub = None; if !send(&mut socket, &error(&e)).await { break } }
+                        Err(e) => { let msg = answer(&e, s.project); sub = None; if !send(&mut socket, &msg).await { break } }
                     }
                 }
             }
@@ -202,7 +215,7 @@ async fn run(mut socket: WebSocket, state: AppState, actor: Actor, session: Opti
                     match flush(&mut socket, &state, s).await {
                         Ok(true) => {}
                         Ok(false) => break,
-                        Err(e) => { sub = None; if !send(&mut socket, &error(&e)).await { break } }
+                        Err(e) => { let msg = answer(&e, s.project); sub = None; if !send(&mut socket, &msg).await { break } }
                     }
                 }
             }

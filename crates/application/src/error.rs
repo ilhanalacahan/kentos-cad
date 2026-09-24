@@ -18,6 +18,8 @@ pub enum AppError {
     Invalid(String),
     /// The project was deleted: kept for recovery, but it can no longer be opened or changed (410).
     Deleted(String),
+    /// The events after this cursor are no longer kept (or never existed): reopen the project (410).
+    ResyncRequired(String),
     /// Someone changed what this edit was based on (409); nothing was written.
     Conflict {
         message: String,
@@ -51,6 +53,7 @@ impl AppError {
             Self::NotFound(_) => "not_found",
             Self::Invalid(_) => "invalid",
             Self::Deleted(_) => "project_deleted",
+            Self::ResyncRequired(_) => "resync_required",
             Self::Conflict { .. } => "conflict",
             Self::Limited { .. } => "rate_limited",
             Self::Database(e) if is_unavailable(e) => "unavailable",
@@ -74,7 +77,8 @@ impl fmt::Display for AppError {
             | Self::Forbidden(m)
             | Self::NotFound(m)
             | Self::Invalid(m)
-            | Self::Deleted(m) => f.write_str(m),
+            | Self::Deleted(m)
+            | Self::ResyncRequired(m) => f.write_str(m),
             Self::Conflict { message, .. } | Self::Limited { message, .. } => f.write_str(message),
             Self::Database(e) if is_unavailable(e) => {
                 f.write_str("Veritabanına şu an ulaşılamıyor. Birazdan yeniden deneyin.")

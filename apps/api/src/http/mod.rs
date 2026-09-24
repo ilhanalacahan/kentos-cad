@@ -8,6 +8,8 @@ pub mod projects;
 #[cfg(test)]
 mod tests;
 pub mod ws;
+#[cfg(test)]
+mod ws_tests;
 
 use std::sync::Arc;
 use std::time::Duration;

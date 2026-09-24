@@ -211,7 +211,9 @@ type ProjectRow = (
     bool,
 );
 
-/// A project's metadata, object count and the event cursor of this moment.
+/// A project's metadata, object count and the event cursor of this moment:
+/// the newest event's, or the log's horizon once old events were removed
+/// (never below it, or a client would be sent to reopen again and again).
 pub async fn info(
     db: &kentos_postgres::Db,
     access: &Access,
@@ -222,7 +224,8 @@ pub async fn info(
     let row: Option<ProjectRow> = sqlx::query_as(
         "select p.name, p.settings, p.layers, p.active_layer, p.origin_x, p.origin_y, p.home_view, p.styles, p.meta_version, p.data_revision,
                 (select count(*) from kentos.feature f where f.tenant_id = p.tenant_id and f.project_id = p.id),
-                coalesce((select max(seq) from kentos.outbox_event o where o.tenant_id = p.tenant_id and o.project_id = p.id), 0),
+                greatest(coalesce((select max(seq) from kentos.outbox_event o where o.tenant_id = p.tenant_id and o.project_id = p.id), 0),
+                         coalesce((select pruned_through from kentos.outbox_horizon h where h.tenant_id = p.tenant_id and h.project_id = p.id), 0)),
                 p.deleted_at is not null
            from kentos.project p where p.tenant_id = $1 and p.id = $2",
     )

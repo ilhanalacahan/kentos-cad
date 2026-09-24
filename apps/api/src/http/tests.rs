@@ -24,10 +24,11 @@ fn config() -> Config {
         cookie_secure: false,
         local_login: true,
         oidc: None,
+        event_retention: std::time::Duration::from_secs(7 * 24 * 3600),
     }
 }
 
-fn app(database: Option<Db>) -> Router {
+pub(super) fn app(database: Option<Db>) -> Router {
     router(AppState {
         config: Arc::new(config()),
         database,
@@ -37,7 +38,10 @@ fn app(database: Option<Db>) -> Router {
     })
 }
 
-async fn send(app: &Router, req: Request<Body>) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+pub(super) async fn send(
+    app: &Router,
+    req: Request<Body>,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
     let res = app.clone().oneshot(req).await.unwrap();
     let (parts, body) = res.into_parts();
     (
@@ -201,7 +205,7 @@ async fn local_sign_in_with_a_session_cookie() {
     db.close().await;
 }
 
-async fn signed_in(app: &Router, login: &str) -> String {
+pub(super) async fn signed_in(app: &Router, login: &str) -> String {
     let (status, headers, _) = send(app, login_request(login, "dogru-parola-1", true)).await;
     assert_eq!(status, StatusCode::OK, "{login} giriş yapamadı");
     headers
@@ -215,7 +219,12 @@ async fn signed_in(app: &Router, login: &str) -> String {
         .to_string()
 }
 
-fn json_req(method: &str, uri: &str, cookie: &str, body: serde_json::Value) -> Request<Body> {
+pub(super) fn json_req(
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    body: serde_json::Value,
+) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(uri)

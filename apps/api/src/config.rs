@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use kentos_postgres::env;
 use kentos_postgres::setup::{DATABASE_URL, OWNER_URL};
@@ -31,6 +32,29 @@ pub struct Config {
     pub cookie_secure: bool,
     pub local_login: bool,
     pub oidc: Option<OidcSettings>,
+    /// How long project events are kept (`KENTOS_EVENT_RETENTION_DAYS`, 1–3650 days, default 7).
+    pub event_retention: Duration,
+}
+
+/// Days of event log kept unless `KENTOS_EVENT_RETENTION_DAYS` says otherwise.
+pub const DEFAULT_RETENTION_DAYS: u64 = 7;
+
+/// `KENTOS_EVENT_RETENTION_DAYS`: whole days, at least one (a client away longer reopens the project).
+pub fn retention(value: Option<&str>) -> Result<Duration, String> {
+    let days = match value {
+        None => DEFAULT_RETENTION_DAYS,
+        Some(v) => v
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|d| (1..=3650).contains(d))
+            .ok_or_else(|| {
+                format!(
+                    "KENTOS_EVENT_RETENTION_DAYS 1 ile 3650 arasında bir gün sayısı olmalı: {v}"
+                )
+            })?,
+    };
+    Ok(Duration::from_secs(days * 24 * 3600))
 }
 
 impl Config {
@@ -78,8 +102,24 @@ impl Config {
             cookie_secure: flag("KENTOS_COOKIE_SECURE", false),
             local_login: flag("KENTOS_LOCAL_LOGIN", true),
             oidc,
+            event_retention: retention(get("KENTOS_EVENT_RETENTION_DAYS").as_deref())?,
             env_file,
             vars,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_event_retention_is_whole_days_within_bounds() {
+        let day = 24 * 3600;
+        assert_eq!(retention(None).unwrap().as_secs(), 7 * day);
+        assert_eq!(retention(Some(" 30 ")).unwrap().as_secs(), 30 * day);
+        for bad in ["0", "3651", "7.5", "yedi", "-1", ""] {
+            assert!(retention(Some(bad)).is_err(), "{bad}");
+        }
     }
 }

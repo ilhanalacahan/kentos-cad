@@ -1,8 +1,10 @@
 //! `kentosd`: the KentOS server (CLAUDE.md §14, §18). `serve` runs the API
-//! on 127.0.0.1 (`KENTOS_API_PORT`, default 8787); the other subcommands set
-//! up the database and administer tenants and accounts (see `cli::USAGE`).
-//! Without a database configured, `serve` answers `/v1/health` only, so the
-//! drawing app keeps working as before.
+//! on 127.0.0.1 (`KENTOS_API_PORT`, default 8787) and, in the background,
+//! removes project events older than the retention window
+//! (`KENTOS_EVENT_RETENTION_DAYS`); the other subcommands set up the
+//! database and administer tenants and accounts (see `cli::USAGE`). Without
+//! a database configured, `serve` answers `/v1/health` only, so the drawing
+//! app keeps working as before.
 
 mod cli;
 mod config;
@@ -14,10 +16,47 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use kentos_application::events;
 use kentos_postgres::Db;
 
 use crate::config::Config;
 use crate::http::AppState;
+
+/// The event log is pruned a minute after the start, then every hour, in batches of this many events.
+const PRUNE_FIRST: Duration = Duration::from_secs(60);
+const PRUNE_EVERY: Duration = Duration::from_secs(3600);
+const PRUNE_BATCH: i32 = 2000;
+
+/// Removes events older than `keep`. Every batch is one short statement on a
+/// pooled connection, so requests are never held up behind it; a failure is
+/// logged and the next round tries again. Clients whose cursor fell behind
+/// are told to reopen (`resyncRequired`, events.rs).
+async fn prune_events(db: Db, keep: Duration) {
+    let mut every =
+        tokio::time::interval_at(tokio::time::Instant::now() + PRUNE_FIRST, PRUNE_EVERY);
+    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        every.tick().await;
+        let mut removed = 0;
+        loop {
+            match events::prune(&db, keep, PRUNE_BATCH).await {
+                Ok(n) => {
+                    removed += n;
+                    if n < i64::from(PRUNE_BATCH) {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = ?e, "eski olaylar budanamadı; bir sonraki turda yeniden denenecek");
+                    break;
+                }
+            }
+        }
+        if removed > 0 {
+            tracing::info!(silinen = removed, "eski olaylar budandı");
+        }
+    }
+}
 
 async fn shutdown() {
     let _ = tokio::signal::ctrl_c().await;
@@ -60,6 +99,9 @@ async fn serve(config: Config) -> Result<(), String> {
         )?)),
         None => None,
     };
+    if let Some(db) = &database {
+        tokio::spawn(prune_events(db.clone(), config.event_retention));
+    }
     let state = AppState {
         config: Arc::new(config),
         database,

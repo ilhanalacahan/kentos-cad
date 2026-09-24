@@ -138,6 +138,17 @@ async fn the_server_role_cannot_read_hashes_or_administer() {
             .execute(pool)
             .await
     ));
+    // Old events go only through kentos.prune_outbox (at least an hour kept), never by hand.
+    assert!(denied(
+        sqlx::query("delete from kentos.outbox_event")
+            .execute(pool)
+            .await
+    ));
+    assert!(denied(
+        sqlx::query("update kentos.outbox_horizon set pruned_through = 0")
+            .execute(pool)
+            .await
+    ));
     // Its role is not the owner and cannot bypass row-level security.
     let (bypass, owner): (bool, bool) = sqlx::query_as(
         "select rolbypassrls, pg_has_role(current_user, 'kentos_cad_owner', 'member') from pg_roles where rolname = current_user",
