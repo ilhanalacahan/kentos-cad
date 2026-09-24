@@ -1,15 +1,13 @@
 import type { CrosshairSize } from '../app/state';
 import type { CadDocument } from '../model/document';
-import { entityAnchor, entityVertices, type Entity } from '../model/entities';
-import { entityGrips, midGripSegment } from '../model/ops/grips';
-import type { Bounds, Vec2 } from '../model/geometry';
-import { layoutDimension, type DimensionLayout } from '../model/geom/dimension';
-import type { LabelStyle } from '../model/layers';
+import type { Vec2 } from '../model/geometry';
+import type { DimensionLayout } from '../model/geom/dimension';
 import { resolveColor, type CanvasPalette } from '../render/color';
 import type { ToolCursor } from '../tools/Tool';
 import type { Camera } from './Camera';
 import type { TrackHit } from './objectTracking';
 import { SNAP_LABEL, type SnapHit } from './picking';
+import { DEFAULT_LABELS, DIMENSION_PREFIX, LABEL, LABEL_STRIDE, type GripSet } from './storeRecords';
 
 /** Screen-space annotation layer drawn with Canvas2D above the GPU canvas. */
 
@@ -24,62 +22,53 @@ function haloText(g: CanvasRenderingContext2D, text: string, x: number, y: numbe
   g.fillText(text, x, y);
 }
 
-const DEFAULT_LABELS: Partial<Record<Entity['kind'], LabelStyle>> = {
-  polygon: { placement: 'center', size: 10, grow: 1, maxSize: 14, minFeaturePx: 26 },
-  circle: { placement: 'center', size: 10, minFeaturePx: 26 },
-  point: { placement: 'beside', size: 10.5, minScale: 2 },
-  polyline: { placement: 'along', size: 10, minScale: 1.6 },
-  line: { placement: 'along', size: 10, minScale: 1.6 },
-};
-
 /**
- * Entity labels and text. Placement, size and visibility come from the
- * layer's LabelStyle, so this function knows nothing about specific layers.
+ * Entity labels and text. Which ones a frame draws and where comes from the
+ * geometry store (`labels`: visible layer, box in view, text size on
+ * screen, the LabelStyle's scale range and smallest feature; see
+ * ./storeRecords); size, template and colour from the layer's LabelStyle,
+ * so this function knows nothing about specific layers.
  */
 export function drawLabels(
   g: CanvasRenderingContext2D,
   doc: CadDocument,
   cam: Camera,
   pal: CanvasPalette,
-  boundsOf: (e: Entity) => Bounds,
-  dimensionText: (l: DimensionLayout) => string,
-  editingId: number | null = null,
+  spots: Float64Array,
+  dimensionText: (l: Pick<DimensionLayout, 'prefix' | 'unit' | 'value'>) => string,
 ): void {
-  const view = cam.visibleBounds();
   const layers = doc.layers;
   const ink = { fg: pal.fg, 'fg-dim': pal.fgDim, label: pal.label } as const;
   g.save();
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  for (const e of doc.all()) {
-    if (!layers.isVisible(e.layerId)) continue;
-    const b = boundsOf(e);
-    if (b.maxX < view.minX || b.minX > view.maxX || b.maxY < view.minY || b.minY > view.maxY) continue;
-
-    if (e.id === editingId) continue; // the inline editor draws it
-    if (e.kind === 'dimension') {
+  for (let i = 0; i < spots.length; i += LABEL_STRIDE) {
+    const e = doc.get(spots[i]);
+    if (!e) continue;
+    const what = spots[i + 1];
+    const x = spots[i + 2];
+    const y = spots[i + 3];
+    if (what === LABEL.dimension && e.kind === 'dimension') {
       const px = e.height * cam.scale;
-      const l = layoutDimension(e);
-      if (!l || px < 5 || px > 240) continue;
-      const s = cam.worldToScreen(l.textAt);
+      const s = cam.worldToScreen({ x, y });
       g.save();
       g.translate(s.x, s.y);
-      g.rotate((-l.rotation * Math.PI) / 180);
+      g.rotate((-spots[i + 4] * Math.PI) / 180);
       g.font = `500 ${px.toFixed(1)}px ${FONT}`;
       g.textAlign = 'center';
       g.textBaseline = 'alphabetic';
       const color = e.color ?? layers.get(e.layerId)?.style.color;
-      haloText(g, e.text || dimensionText(l), 0, 0, !color || color === 'fg' || color === 'fg-dim' ? pal.label : resolveColor(color, pal), pal.labelHalo);
+      const measured = { value: spots[i + 5], unit: spots[i + 6] ? ('angle' as const) : ('length' as const), prefix: DIMENSION_PREFIX[spots[i + 7]] ?? '' };
+      haloText(g, e.text || dimensionText(measured), 0, 0, !color || color === 'fg' || color === 'fg-dim' ? pal.label : resolveColor(color, pal), pal.labelHalo);
       g.restore();
       continue;
     }
-    if (e.kind === 'text') {
+    if (what === LABEL.text && e.kind === 'text') {
       const px = e.height * cam.scale;
-      if (px < 5 || px > 240) continue;
-      const s = cam.worldToScreen(e.p);
+      const s = cam.worldToScreen({ x, y });
       g.save();
       g.translate(s.x, s.y);
-      g.rotate((-e.rotation * Math.PI) / 180);
+      g.rotate((-spots[i + 4] * Math.PI) / 180);
       g.font = `italic 400 ${px.toFixed(1)}px ${FONT}`;
       g.textAlign = 'left';
       g.textBaseline = 'alphabetic';
@@ -87,45 +76,37 @@ export function drawLabels(
       g.restore();
       continue;
     }
-    if (!e.label) continue;
     const st = layers.get(e.layerId)?.style.label ?? DEFAULT_LABELS[e.kind];
-    if (!st) continue;
-    if (st.minScale !== undefined && cam.scale < st.minScale) continue;
-    if (st.maxScale !== undefined && cam.scale > st.maxScale) continue;
-    if (st.minFeaturePx !== undefined && Math.min(b.maxX - b.minX, b.maxY - b.minY) * cam.scale < st.minFeaturePx) continue;
-
+    if (!st || !e.label) continue;
     const size = Math.min(st.maxSize ?? st.size, st.size + (st.grow ?? 0) * cam.scale);
     const text = st.template ? st.template.replace('{label}', e.label) : e.label;
     const color = ink[st.ink ?? 'label'];
     g.font = `${st.weight ?? 500} ${size.toFixed(1)}px ${FONT}`;
 
-    switch (st.placement) {
-      case 'center': {
-        const s = cam.worldToScreen(entityAnchor(e));
+    switch (what) {
+      case LABEL.center: {
+        const s = cam.worldToScreen({ x, y });
         haloText(g, text, s.x, s.y, color, pal.labelHalo);
         break;
       }
-      case 'corner': {
-        const tl = cam.worldToScreen({ x: b.minX, y: b.maxY });
+      case LABEL.corner: {
+        const tl = cam.worldToScreen({ x, y });
         g.textAlign = 'left';
         haloText(g, text, tl.x + 8, tl.y + 14, color, pal.labelHalo);
         g.textAlign = 'center';
         break;
       }
-      case 'beside': {
-        const s = cam.worldToScreen(entityAnchor(e));
+      case LABEL.beside: {
+        const s = cam.worldToScreen({ x, y });
         g.textAlign = 'left';
         haloText(g, text, s.x + 7, s.y - 7, color, pal.labelHalo);
         g.textAlign = 'center';
         break;
       }
-      case 'along': {
+      case LABEL.along: {
         // Placed a third of the way along, kept upright.
-        const pts = entityVertices(e);
-        if (pts.length < 2) break;
-        const i = Math.min(Math.floor(pts.length * 0.35), pts.length - 2);
-        const a = cam.worldToScreen(pts[i]);
-        const c = cam.worldToScreen(pts[i + 1]);
+        const a = cam.worldToScreen({ x, y });
+        const c = cam.worldToScreen({ x: spots[i + 4], y: spots[i + 5] });
         let ang = Math.atan2(c.y - a.y, c.x - a.x);
         if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
         g.save();
@@ -141,32 +122,26 @@ export function drawLabels(
 }
 
 /**
- * Grip squares on selected entities. Grips closer than 9 px on screen are
- * thinned so dense polylines (contours) stay readable.
+ * Grip squares on selected entities (their grips from the geometry store).
+ * Grips closer than 9 px on screen are thinned so dense polylines
+ * (contours) stay readable.
  */
-export function drawGrips(
-  g: CanvasRenderingContext2D,
-  entities: Entity[],
-  cam: Camera,
-  pal: CanvasPalette,
-  hot: { id: number; index: number } | null = null,
-): void {
-  if (entities.length > 150) return;
+export function drawGrips(g: CanvasRenderingContext2D, sets: readonly GripSet[], cam: Camera, pal: CanvasPalette, hot: { id: number; index: number } | null = null): void {
+  if (sets.length > 150) return;
   g.save();
   g.fillStyle = pal.accent;
   g.strokeStyle = pal.labelHalo;
   g.lineWidth = 1;
-  for (const e of entities) {
+  for (const set of sets) {
     let last: Vec2 | null = null;
-    const grips = entityGrips(e);
-    for (const [i, p] of grips.entries()) {
-      if (hot && hot.id === e.id && hot.index === i) continue;
-      const s = cam.worldToScreen(p);
+    for (let i = 0; i < set.points.length; i++) {
+      if (hot && hot.id === set.id && hot.index === i) continue;
+      const s = cam.worldToScreen(set.points[i]);
       const x = Math.round(s.x);
       const y = Math.round(s.y);
-      if (midGripSegment(e, i) !== null) {
+      if (set.segments[i] >= 0) {
         // Mid grips (add a vertex / bend an arc): small hollow diamonds, hidden on short segments.
-        if (!midGripVisible(e, i, grips, cam)) continue;
+        if (!midGripVisible(set, i, cam)) continue;
         g.save();
         g.fillStyle = pal.labelHalo;
         g.strokeStyle = pal.accent;
@@ -188,8 +163,7 @@ export function drawGrips(
     }
   }
   // The grip being edited ("sıcak tutamaç") is drawn larger in ink colour.
-  const he = hot && entities.find((e) => e.id === hot.id);
-  const hp = he ? entityGrips(he)[hot!.index] : null;
+  const hp = hot ? sets.find((set) => set.id === hot.id)?.points[hot.index] : undefined;
   if (hp) {
     const s = cam.worldToScreen(hp);
     g.fillStyle = pal.fg;
@@ -345,12 +319,11 @@ export function drawNorthArrow(g: CanvasRenderingContext2D, cam: Camera, pal: Ca
 }
 
 /** A mid grip is offered only when its segment is long enough on screen to tell it from the vertices. */
-export function midGripVisible(e: Entity, index: number, grips: readonly Vec2[], cam: Camera): boolean {
-  const seg = midGripSegment(e, index);
-  if (seg === null || (e.kind !== 'polyline' && e.kind !== 'polygon')) return true;
-  const n = e.pts.length;
-  const a = cam.worldToScreen(grips[seg]);
-  const b = cam.worldToScreen(grips[(seg + 1) % n]);
+export function midGripVisible(set: GripSet, index: number, cam: Camera): boolean {
+  const seg = set.segments[index];
+  if (!(seg >= 0)) return true;
+  const a = cam.worldToScreen(set.points[seg]);
+  const b = cam.worldToScreen(set.points[(seg + 1) % set.vertices]);
   return Math.hypot(b.x - a.x, b.y - a.y) >= 28;
 }
 

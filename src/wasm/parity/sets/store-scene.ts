@@ -18,13 +18,17 @@ import { entity } from './p5-entities';
 export const SNAP_KINDS: SnapKind[] = ['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection', 'perpendicular', 'tangent', 'nearest'];
 const v = (x: number, y: number): Vec2 => ({ x, y });
 
+/** Layers of every state; some carry label styles of every placement, the rest fall back to the kind's default. */
 export const SCENE_LAYERS: LayerInit[] = [
-  { id: 'a', name: 'A' },
-  { id: 'b', name: 'Yalnız kenar', style: { pickInterior: false } },
-  { id: 'kilitli', name: 'Kilitli', locked: true },
+  { id: 'a', name: 'A', style: { label: { placement: 'center', size: 10, minFeaturePx: 20 } } },
+  { id: 'b', name: 'Yalnız kenar', style: { pickInterior: false, label: { placement: 'along', size: 9, minScale: 0.5, maxScale: 30 } } },
+  { id: 'kilitli', name: 'Kilitli', locked: true, style: { label: { placement: 'corner', size: 9 } } },
   { id: 'gizli', name: 'Gizli', visible: false },
-  { id: 'grup', name: 'Grup', children: [{ id: 'g1', name: 'G1' }, { id: 'g2', name: 'G2', style: { pickInterior: false } }] },
+  { id: 'grup', name: 'Grup', children: [{ id: 'g1', name: 'G1', style: { label: { placement: 'beside', size: 9, minScale: 2 } } }, { id: 'g2', name: 'G2', style: { pickInterior: false } }] },
 ];
+
+/** Screen scales (px per metre) from an overview to a close-up. */
+export const SCENE_SCALES = [0.05, 0.3, 1, 3, 10, 40];
 /** Layers objects land on; 'yok' is not in the tree at all. */
 const ON: string[] = ['a', 'a', 'a', 'b', 'kilitli', 'gizli', 'g1', 'g2', 'yok'];
 /** Layer nodes an edit may hide or lock. */

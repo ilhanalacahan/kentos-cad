@@ -161,6 +161,21 @@ export class CoreStore {
     typed(() => this.raw.setLayers(json));
   }
 
+  /** Label rules by kind for layers without a label style. */
+  setLabelDefaults(json: string): void {
+    typed(() => this.raw.setLabelDefaults(json));
+  }
+
+  /** What the overlay draws in the view: eight numbers per record (geometry-core store/labels.rs). */
+  labels(minX: number, minY: number, maxX: number, maxY: number, scale: number, editing: number | null): Float64Array {
+    return typed(() => this.raw.labels(minX, minY, maxX, maxY, scale, editing !== null, editing ?? 0));
+  }
+
+  /** Grips of these objects: `id, count, vertices`, then `x, y, segment` per grip. */
+  grips(ids: Float64Array): Float64Array {
+    return typed(() => this.raw.grips(ids));
+  }
+
   /** Ids in the document's order. */
   ids(): Float64Array {
     return typed(() => this.raw.ids());

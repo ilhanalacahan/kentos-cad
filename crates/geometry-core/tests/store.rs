@@ -117,6 +117,9 @@ fn the_store_gives_the_typescript_pick_index_answers() {
     store
         .set_layers_json(&serde_json::to_string(&file["layers"]).unwrap())
         .expect("layers");
+    store
+        .set_label_defaults_json(&serde_json::to_string(&file["labelDefaults"]).unwrap())
+        .expect("label defaults");
     let cases = file["cases"].as_array().expect("cases");
     assert!(cases.len() > 500, "{} cases", cases.len());
     let mut failures = Vec::new();
@@ -149,6 +152,11 @@ fn the_store_gives_the_typescript_pick_index_answers() {
             "inRect" => json!(store.in_rect(&rect(&a[0]), a[1].as_bool().unwrap())),
             "overlapping" => json!(store.overlapping(&rect(&a[0]), except(&a[1])).iter().map(|it| it.id).collect::<Vec<_>>()),
             "edgesIn" => json!(store.edges_in(&rect(&a[0]), except(&a[1])).iter().map(edge).collect::<Vec<_>>()),
+            "labels" => json!(store.labels(&rect(&a[0]), num(&a[1]), a[2].as_f64())),
+            "grips" => {
+                let ids: Vec<f64> = a[0].as_array().unwrap().iter().map(num).collect();
+                json!(store.grips(&ids))
+            }
             op => panic!("unknown op {op}"),
         };
         if let Err(e) = same(&got, &c["expect"], abs, rel, &label) {

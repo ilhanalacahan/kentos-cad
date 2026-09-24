@@ -1,11 +1,12 @@
 import { DisposableStore } from '../core/disposable';
 import type { CadDocument } from '../model/document';
-import { entityBounds, type Entity } from '../model/entities';
+import type { Entity } from '../model/entities';
 import type { Bounds, Vec2 } from '../model/geometry';
 import type { Edge } from '../model/geom/intersect';
 import type { LayerNode, LayerStore } from '../model/layers';
 import { CoreStore } from '../wasm/core';
 import { packEntities } from '../wasm/pack';
+import { DEFAULT_LABELS, labelRule, readGrips, type GripSet } from './storeRecords';
 
 export type SnapKind = 'endpoint' | 'midpoint' | 'center' | 'node' | 'quadrant' | 'intersection' | 'perpendicular' | 'tangent' | 'nearest';
 
@@ -30,12 +31,15 @@ export const SNAP_LABEL: Record<SnapKind, string> = {
 /** The core's snap kinds by bit number (crates/geometry-core/src/store/snap.rs). */
 const SNAP_BITS: readonly SnapKind[] = ['endpoint', 'midpoint', 'center', 'node', 'quadrant', 'intersection', 'perpendicular', 'tangent', 'nearest'];
 
+type LayerRow = { id: string; visible: boolean; locked: boolean; pickInterior: boolean; label?: ReturnType<typeof labelRule> };
+
 /** Every layer node with its flags resolved through its ancestors, as the store reads them. */
-export function layerTable(layers: LayerStore): { id: string; visible: boolean; locked: boolean; pickInterior: boolean }[] {
-  const out: { id: string; visible: boolean; locked: boolean; pickInterior: boolean }[] = [];
+export function layerTable(layers: LayerStore): LayerRow[] {
+  const out: LayerRow[] = [];
   const walk = (nodes: readonly LayerNode[]) => {
     for (const n of nodes) {
-      out.push({ id: n.id, visible: layers.isVisible(n.id), locked: layers.isLocked(n.id), pickInterior: n.style.pickInterior !== false });
+      const label = n.style.label ? labelRule(n.style.label) : undefined;
+      out.push({ id: n.id, visible: layers.isVisible(n.id), locked: layers.isLocked(n.id), pickInterior: n.style.pickInterior !== false, ...(label ? { label } : {}) });
       walk(n.children);
     }
   };
@@ -43,8 +47,12 @@ export function layerTable(layers: LayerStore): { id: string; visible: boolean; 
   return out;
 }
 
+/** The label defaults by kind, as the store reads them. */
+const LABEL_DEFAULTS = JSON.stringify(Object.fromEntries(Object.entries(DEFAULT_LABELS).map(([kind, st]) => [kind, labelRule(st)])));
+
 /**
- * Spatial queries: picking, object snap, window selection, boundaries. The
+ * Spatial queries: picking, object snap, window selection, boundaries,
+ * and what the overlay draws (labels, grips). The
  * Rust geometry store answers them (docs/adr/0008, S1: an R-tree and the
  * rules that were here, in the document's order); this keeps its copy of
  * the objects in step. Removals go at once; puts wait for the next query
@@ -61,12 +69,10 @@ export class PickIndex {
   private reload = true;
   private layersDirty = true;
   private timer: ReturnType<typeof setTimeout> | undefined;
-  /** Boxes for the overlay's labels (they move to the store next). */
-  private bounds = new Map<number, Bounds>();
 
   constructor(doc: CadDocument) {
     this.doc = doc;
-    this.d.add(doc.events.on('changed', () => this.bounds.clear()));
+    this.store.setLabelDefaults(LABEL_DEFAULTS);
     this.d.add(doc.events.on('touched', ({ ids }) => this.touch(ids)));
     this.d.add(
       doc.events.on('reset', () => {
@@ -147,10 +153,20 @@ export class PickIndex {
     return Array.from(this.store.ids());
   }
 
-  boundsOf(e: Entity): Bounds {
-    let b = this.bounds.get(e.id);
-    if (!b) this.bounds.set(e.id, (b = entityBounds(e)));
-    return b;
+  /**
+   * What the overlay draws in `view` at `scale` px/m, in the document's
+   * order (LABEL_STRIDE numbers per record, ./storeRecords); `editingId` is
+   * left out (the inline editor draws it).
+   */
+  labels(view: Bounds, scale: number, editingId: number | null): Float64Array {
+    this.sync();
+    return this.store.labels(view.minX, view.minY, view.maxX, view.maxY, scale, editingId);
+  }
+
+  /** Grips of these objects (unknown ids left out), in the given order. */
+  grips(ids: Iterable<number>): GripSet[] {
+    this.sync();
+    return readGrips(this.store.grips(Float64Array.from(ids)));
   }
 
   /** Visible entities whose bounds overlap `r`. */

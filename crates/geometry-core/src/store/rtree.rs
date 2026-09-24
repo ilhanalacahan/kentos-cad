@@ -81,6 +81,11 @@ impl PackedTree {
         PackedTree { levels, items }
     }
 
+    /// The box around every item (`None` for an empty tree).
+    pub fn bounds(&self) -> Option<&Bounds> {
+        self.levels.last().and_then(|top| top.first())
+    }
+
     /// Appends the items whose boxes overlap `q` (touching counts), in no particular order.
     pub fn search(&self, q: &Bounds, out: &mut Vec<u32>) {
         let Some(top) = self.levels.len().checked_sub(1) else {

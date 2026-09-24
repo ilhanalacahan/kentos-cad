@@ -7,9 +7,11 @@
 import { writeFileSync } from 'node:fs';
 import { it } from 'vitest';
 import { layerTable } from '../../src/viewport/picking';
+import { DEFAULT_LABELS, labelRule } from '../../src/viewport/storeRecords';
 import { Gen, TOLERANCE, toJson } from '../../src/wasm/parity/harness';
+import { tsGrips, tsLabels } from '../../src/wasm/parity/reference/overlay';
 import { TsPickIndex } from '../../src/wasm/parity/reference/picking';
-import { SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneKinds, sceneRect } from '../../src/wasm/parity/sets/store-scene';
+import { SCENE_SCALES, SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneKinds, sceneRect } from '../../src/wasm/parity/sets/store-scene';
 
 /** Cursor positions recorded, and the largest answer kept (a window over the whole scene lists every edge). */
 const CURSORS = 160;
@@ -46,6 +48,12 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript PickIndex into the 
     add(`kutu ${i}`, 'overlapping', [r, except], [...ts.overlapping(r, except ?? undefined)].map((e) => e.id));
     const small = sceneRect(g, p, [0.1, 3, 20]);
     add(`kutu ${i}`, 'edgesIn', [small, except], ts.edgesIn(small, except ?? undefined));
+    const view = sceneRect(g, p, [20, 200]);
+    const scale = g.pick(SCENE_SCALES);
+    const editing = g.chance(0.2) ? g.pick(ids) : null;
+    add(`görünüm ${i}`, 'labels', [view, scale, editing], tsLabels(doc, view, scale, editing));
+    const selected = ids.filter(() => g.chance(0.02));
+    add(`seçim ${i}`, 'grips', [selected], tsGrips(doc, selected));
   }
   const file = {
     format: 'kentos.geometry-store',
@@ -53,6 +61,7 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript PickIndex into the 
     tolerance: TOLERANCE,
     crs: { kind: 'projected', unit: 'metre', note: 'Koordinatlar metre cinsinden bir projeksiyon düzlemindedir; tolerans bu birim içindir (fixtures/geometry/v1/cases.json ile aynı).' },
     layers: layerTable(doc.layers),
+    labelDefaults: Object.fromEntries(Object.entries(DEFAULT_LABELS).map(([kind, st]) => [kind, labelRule(st)])),
     entities: [...doc.all()],
     cases,
   };

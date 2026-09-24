@@ -5,9 +5,11 @@ import { translation } from '../../model/geom/affine';
 import { transformEntity } from '../../model/ops/transform';
 import { createSampleProject } from '../../model/sampleProject';
 import { PickIndex } from '../../viewport/picking';
+import { readGrips } from '../../viewport/storeRecords';
 import { Gen, sameResult, TOLERANCE, toJson } from './harness';
+import { tsGrips, tsLabels } from './reference/overlay';
 import { TsPickIndex } from './reference/picking';
-import { SCENE_LAYER_IDS, SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneEntity, sceneKinds, sceneRect } from './sets/store-scene';
+import { SCENE_LAYER_IDS, SCENE_SCALES, SCENE_TOLERANCES, sceneCursor, sceneDocument, sceneEntity, sceneKinds, sceneRect } from './sets/store-scene';
 
 /**
  * The Rust geometry store against the TypeScript PickIndex it replaced
@@ -49,6 +51,20 @@ function compare(g: Gen, doc: CadDocument, ts: TsPickIndex, rs: PickIndex): stri
     same('overlapping', rs.overlapping(r, except).map((e) => e.id), [...ts.overlapping(r, except)].map((e) => e.id)) ??
     same('edgesIn', rs.edgesIn(r, except), ts.edgesIn(r, except))
   );
+}
+
+/** What the overlay draws in a random view at a random scale, and the grips of a random selection. */
+function compareOverlay(g: Gen, doc: CadDocument, rs: PickIndex): string | null {
+  const view = sceneRect(g, sceneCursor(g, doc), [20, 200, 5000]);
+  const scale = g.pick(SCENE_SCALES);
+  const ids = [...doc.all()].map((e) => e.id);
+  const editing = ids.length && g.chance(0.2) ? g.pick(ids) : null;
+  const selected = [...ids.filter(() => g.chance(0.05)), ...(g.chance(0.2) ? [999_999] : [])];
+  const same = (what: string, got: unknown, want: unknown) => {
+    const r = sameResult(toJson(got), toJson(want), TOLERANCE, what);
+    return r ? `${r}\n    görünüm ${JSON.stringify(view)}, ölçek ${scale}` : null;
+  };
+  return same('labels', Array.from(rs.labels(view, scale, editing)), tsLabels(doc, view, scale, editing)) ?? same('grips', rs.grips(selected), readGrips(Float64Array.from(tsGrips(doc, selected))));
 }
 
 /** A random edit through the document's API (or its layers). */
@@ -122,7 +138,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
     const g = new Gen(20260924);
     const failures: string[] = [];
     for (let i = 0; i < ROUNDS && failures.length < 5; i++) {
-      const r = compare(g, doc, ts, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs);
       if (r) failures.push(r);
     }
     rs.dispose();
@@ -143,7 +159,7 @@ describe('Rust geometry store ↔ TypeScript PickIndex', () => {
         failures.push(`sıra ${i}. turda ayrıldı: ${got.length} / ${order.length} nesne`);
         break;
       }
-      const r = compare(g, doc, ts, rs);
+      const r = compare(g, doc, ts, rs) ?? compareOverlay(g, doc, rs);
       if (r) failures.push(r);
     }
     rs.dispose();

@@ -12,6 +12,7 @@
 //! query then applies the exact test the TypeScript applied, in the
 //! document's order, so the tree only makes it faster.
 
+pub mod labels;
 mod pack;
 pub mod pick;
 mod rtree;
@@ -25,12 +26,14 @@ use crate::geometry::Bounds;
 use rtree::{PackedTree, overlaps};
 
 /// What queries need from an object's layer (`LayerStore.isVisible`,
-/// `isLocked`, `style.pickInterior`), ancestors included.
+/// `isLocked`, `style.pickInterior`, `style.label`), ancestors included.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayerFlags {
     pub visible: bool,
     pub locked: bool,
     pub pick_interior: bool,
+    /// The layer's label style; `None` takes the kind's default.
+    pub label: Option<labels::LabelRule>,
 }
 
 /// A layer the table does not list behaves as in TypeScript: visible, unlocked, interior picking on.
@@ -38,6 +41,7 @@ const UNLISTED: LayerFlags = LayerFlags {
     visible: true,
     locked: false,
     pick_interior: true,
+    label: None,
 };
 
 /// One object: its id, geometry, layer and cached box.
@@ -79,12 +83,17 @@ pub struct Store {
     live: usize,
     layer_ids: HashMap<String, u32>,
     flags: Vec<LayerFlags>,
+    /// Label rules by kind for layers without a label style (see `labels`).
+    label_defaults: [Option<labels::LabelRule>; 5],
     tree: Option<PackedTree>,
     /// Per slot: the tree holds its current object.
     in_tree: Vec<bool>,
     /// Slots outside the tree (changed since the build, or special), scanned by every query.
     loose: Vec<u32>,
     in_loose: Vec<bool>,
+    /// `(order, slot)` in the document's order; entries whose slot has since
+    /// been freed or reused are stale and skipped (compacted at rebuilds).
+    ordered: Vec<(u64, u32)>,
 }
 
 /// An object read from the document's JSON: its id, layer, label and geometry.
@@ -175,6 +184,7 @@ impl Store {
                     }
                 };
                 self.by_id.insert(key, s);
+                self.ordered.push((self.next_order - 1, s));
                 s
             }
         };
@@ -191,21 +201,27 @@ impl Store {
                 self.live -= 1;
             }
         }
+        if self.ordered.len() > 2 * self.live + REBUILD_AFTER {
+            self.compact_order();
+        }
         self.maybe_rebuild();
     }
 
-    /// Empties the store (the layer table stays).
+    /// Empties the store (the layer table and label defaults stay).
     pub fn clear(&mut self) {
         let layers = (
             std::mem::take(&mut self.layer_ids),
             std::mem::take(&mut self.flags),
         );
+        let defaults = self.label_defaults;
         *self = Store::default();
         (self.layer_ids, self.flags) = layers;
+        self.label_defaults = defaults;
     }
 
-    /// Replaces the layer table: `[{ id, visible, locked, pickInterior }]`,
-    /// the flags already resolved with the ancestors (every node of the tree).
+    /// Replaces the layer table: `[{ id, visible, locked, pickInterior, label? }]`,
+    /// the flags already resolved with the ancestors (every node of the
+    /// tree); `label` is the layer's label style, when it has one.
     pub fn set_layers_json(&mut self, text: &str) -> Result<(), String> {
         let Json::Arr(list) = Json::parse(text)? else {
             return Err("katman dizisi bekleniyordu".into());
@@ -220,10 +236,15 @@ impl Store {
             let Json::Str(id) = v.get("id") else {
                 return Err(format!("[{i}].id: metin bekleniyordu"));
             };
+            let label = match v.get("label") {
+                Json::Null => None,
+                r => Some(labels::read_rule(r).map_err(|e| format!("[{i}].label: {e}"))?),
+            };
             let flags = LayerFlags {
                 visible: field("visible")?,
                 locked: field("locked")?,
                 pick_interior: field("pickInterior")?,
+                label,
             };
             let l = self.layer_index(id);
             self.flags[l as usize] = flags;
@@ -312,13 +333,29 @@ impl Store {
         }
         self.tree = Some(PackedTree::build(&entries));
         self.loose = loose;
+        self.compact_order();
+    }
+
+    /// Drops stale `ordered` entries.
+    fn compact_order(&mut self) {
+        let slots = &self.slots;
+        self.ordered
+            .retain(|&(o, s)| slots[s as usize].as_ref().is_some_and(|it| it.order == o));
+    }
+
+    /// The object an `ordered` entry stands for, unless it is stale.
+    fn ordered_item(&self, (order, s): (u64, u32)) -> Option<&Item> {
+        self.slots[s as usize]
+            .as_ref()
+            .filter(|it| it.order == order)
     }
 
     /// Every object, in the document's order.
     fn all_items(&self) -> Vec<&Item> {
-        let mut out: Vec<&Item> = self.slots.iter().flatten().collect();
-        out.sort_unstable_by_key(|it| it.order);
-        out
+        self.ordered
+            .iter()
+            .filter_map(|&e| self.ordered_item(e))
+            .collect()
     }
 
     /// Objects whose box may overlap `q`, and every special one, in the
@@ -328,25 +365,56 @@ impl Store {
         if q.min_x.is_nan() || q.min_y.is_nan() || q.max_x.is_nan() || q.max_y.is_nan() {
             return self.all_items();
         }
+        // A box around the whole tree (an overview) takes every tree item:
+        // walk the document's order once, without searching or sorting.
+        if let Some(root) = self.tree.as_ref().and_then(|t| t.bounds())
+            && q.min_x <= root.min_x
+            && q.min_y <= root.min_y
+            && q.max_x >= root.max_x
+            && q.max_y >= root.max_y
+        {
+            return self
+                .ordered
+                .iter()
+                .filter_map(|&(o, s)| {
+                    let it = self.ordered_item((o, s))?;
+                    (self.in_tree[s as usize] || it.special() || overlaps(&it.bounds, q))
+                        .then_some(it)
+                })
+                .collect();
+        }
         let mut slots = Vec::new();
         if let Some(t) = &self.tree {
             t.search(q, &mut slots);
             slots.retain(|&s| self.in_tree[s as usize]);
         }
-        let mut out: Vec<&Item> = slots
-            .iter()
-            .filter_map(|&s| self.slots[s as usize].as_ref())
-            .collect();
         for &s in &self.loose {
-            let Some(it) = &self.slots[s as usize] else {
-                continue;
-            };
-            if !self.in_tree[s as usize] && (it.special() || overlaps(&it.bounds, q)) {
-                out.push(it);
+            if let Some(it) = &self.slots[s as usize]
+                && !self.in_tree[s as usize]
+                && (it.special() || overlaps(&it.bounds, q))
+            {
+                slots.push(s);
             }
         }
-        out.sort_unstable_by_key(|it| it.order);
-        out
+        // Few candidates are sorted; many (an overview) are picked out while
+        // walking the document's order, which needs no sort.
+        if slots.len() * 8 < self.live {
+            let mut out: Vec<&Item> = slots
+                .iter()
+                .filter_map(|&s| self.slots[s as usize].as_ref())
+                .collect();
+            out.sort_unstable_by_key(|it| it.order);
+            return out;
+        }
+        let mut chosen = vec![false; self.slots.len()];
+        for &s in &slots {
+            chosen[s as usize] = true;
+        }
+        self.ordered
+            .iter()
+            .filter(|&&(_, s)| chosen[s as usize])
+            .filter_map(|&e| self.ordered_item(e))
+            .collect()
     }
 }
 
@@ -439,7 +507,8 @@ mod tests {
             LayerFlags {
                 visible: false,
                 locked: true,
-                pick_interior: false
+                pick_interior: false,
+                label: None
             }
         );
         s.set_layers_json("[]").unwrap();

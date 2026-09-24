@@ -89,6 +89,16 @@ impl GeometryStore {
             .map_err(|e| JsError::new(&format!("Geometri deposu katmanları okuyamadı: {e}")))
     }
 
+    /// Label rules by kind for layers without a label style: `{ polygon, circle, point, polyline, line }`.
+    #[wasm_bindgen(js_name = setLabelDefaults)]
+    pub fn set_label_defaults(&mut self, defaults: &str) -> Result<(), JsError> {
+        self.inner.set_label_defaults_json(defaults).map_err(|e| {
+            JsError::new(&format!(
+                "Geometri deposu etiket varsayılanlarını okuyamadı: {e}"
+            ))
+        })
+    }
+
     #[wasm_bindgen(getter)]
     pub fn size(&self) -> u32 {
         self.inner.len() as u32
@@ -205,6 +215,31 @@ impl GeometryStore {
                 }
                 out
             })
+    }
+
+    /// What the overlay draws in the view at `scale` px/m (eight numbers per
+    /// record, see `Store::labels`); `editing` is left out when `has_editing`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn labels(
+        &self,
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+        scale: f64,
+        has_editing: bool,
+        editing: f64,
+    ) -> Vec<f64> {
+        self.inner.labels(
+            &rect(min_x, min_y, max_x, max_y),
+            scale,
+            has_editing.then_some(editing),
+        )
+    }
+
+    /// Grips of these objects (see `Store::grips`).
+    pub fn grips(&self, ids: &[f64]) -> Vec<f64> {
+        self.inner.grips(ids)
     }
 
     /// Edges of visible objects overlapping the rectangle (see `pack_edges`).

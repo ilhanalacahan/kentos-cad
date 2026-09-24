@@ -15,6 +15,7 @@ interface StoreFile {
   version: 1;
   tolerance: Tolerance;
   layers: unknown[];
+  labelDefaults: unknown;
   entities: unknown[];
   cases: { name: string; op: string; args: unknown[]; expect: unknown }[];
 }
@@ -68,6 +69,10 @@ function answer(s: CoreStore, op: string, a: unknown[]): unknown {
       return Array.from(s.overlapping(r.minX, r.minY, r.maxX, r.maxY, except));
     case 'edgesIn':
       return edges(s.edgesIn(r.minX, r.minY, r.maxX, r.maxY, except));
+    case 'labels':
+      return Array.from(s.labels(r.minX, r.minY, r.maxX, r.maxY, n(1), a[2] as number | null));
+    case 'grips':
+      return Array.from(s.grips(Float64Array.from(a[0] as number[])));
   }
   throw new Error(`bilinmeyen sorgu: ${op}`);
 }
@@ -84,6 +89,7 @@ for (const [path, text] of Object.entries(files)) {
       const s = new CoreStore();
       s.put(JSON.stringify(file.entities));
       s.setLayers(JSON.stringify(file.layers));
+      s.setLabelDefaults(JSON.stringify(file.labelDefaults));
       const failures = file.cases.map((c) => sameResult(toJson(answer(s, c.op, c.args)), c.expect, file.tolerance, `${c.op} ${c.name}`)).filter(Boolean);
       s.dispose();
       expect(failures.slice(0, 5).join('\n')).toBe('');

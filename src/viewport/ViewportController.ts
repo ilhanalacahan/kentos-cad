@@ -5,7 +5,6 @@ import { Signal } from '../core/signal';
 import type { Entity } from '../model/entities';
 import { dimensionLabel, type DimensionLayout } from '../model/geom/dimension';
 import type { Edge } from '../model/geom/intersect';
-import { entityGrips } from '../model/ops/grips';
 import type { Bounds, Vec2 } from '../model/geometry';
 import { parseHex, readCanvasPalette, withAlpha, type CanvasPalette } from '../render/color';
 import { createBackend } from '../render/createBackend';
@@ -246,7 +245,7 @@ export class ViewportController {
   }
 
   /** A dimension's measured value as drawn: prefix and value in project units (length without unit). */
-  dimensionText(l: DimensionLayout): string {
+  dimensionText(l: Pick<DimensionLayout, 'prefix' | 'unit' | 'value'>): string {
     const f = this.ctx.format;
     return dimensionLabel(undefined, l, { length: (m) => f.length(m, false), angle: (a) => f.angle(a) });
   }
@@ -265,22 +264,22 @@ export class ViewportController {
   gripAt(screen: Vec2): { id: number; index: number } | null {
     const { doc, selection } = this.ctx;
     if (selection.size > 150) return null;
+    const editable = [...selection.ids.value].filter((id) => {
+      const e = doc.get(id);
+      return !!e && !doc.layers.isLocked(e.layerId);
+    });
     let found: { id: number; index: number } | null = null;
     let bestD = 6; // px
-    for (const id of selection.ids.value) {
-      const e = doc.get(id);
-      if (!e || doc.layers.isLocked(e.layerId)) continue;
-      const grips = entityGrips(e);
-      for (let index = 0; index < grips.length; index++) {
-        if (!midGripVisible(e, index, grips, this.camera)) continue;
-        const s = this.camera.worldToScreen(grips[index]);
+    for (const set of this.picker.grips(editable))
+      for (let index = 0; index < set.points.length; index++) {
+        if (!midGripVisible(set, index, this.camera)) continue;
+        const s = this.camera.worldToScreen(set.points[index]);
         const d = Math.hypot(s.x - screen.x, s.y - screen.y);
         if (d <= bestD) {
           bestD = d;
-          found = { id, index };
+          found = { id: set.id, index };
         }
       }
-    }
     return found;
   }
 
@@ -855,10 +854,10 @@ export class ViewportController {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, cam.width, cam.height);
     const l0 = import.meta.env.DEV ? performance.now() : 0;
-    drawLabels(g, this.ctx.doc, cam, pal, (e) => this.picker.boundsOf(e), (l) => this.dimensionText(l), this.editingId);
+    drawLabels(g, this.ctx.doc, cam, pal, this.picker.labels(cam.visibleBounds(), cam.scale, this.editingId), (l) => this.dimensionText(l));
     const l1 = import.meta.env.DEV ? performance.now() : 0;
-    const sel = [...this.ctx.selection.ids.value].map((id) => this.ctx.doc.get(id)).filter((e): e is Entity => !!e);
-    drawGrips(g, sel, cam, pal, this.ctx.tools.active.activeGrip?.() ?? null);
+    const selected = this.ctx.selection.ids.value;
+    if (selected.size <= 150) drawGrips(g, this.picker.grips(selected), cam, pal, this.ctx.tools.active.activeGrip?.() ?? null);
     const d0 = import.meta.env.DEV ? performance.now() : 0;
     this.ctx.tools.active.draw?.(g, cam);
     if (import.meta.env.DEV && this.probe) this.probe.overlay = { labels: l1 - l0, tool: performance.now() - d0 };
