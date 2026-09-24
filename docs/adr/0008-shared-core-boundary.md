@@ -210,6 +210,12 @@ Kullanıcının kararları (2026-09-24):
 - **Doğrulama:** Rust'ta yazıcının her türde bit bit gidiş-dönüşü ve TM'de her tür ve afin türünde (öteleme, döndürme, eşit ve eşit olmayan ölçek, iki ayna, bileşik, birim) JSON işlemiyle aynılık, kimlikler her sırada ve bilinmeyen kimlikle. `apps/web/src/wasm/transform.wasm.test.ts` (tohumlu) JSON çağrısıyla bit bit ve alan alan karşılaştırır: kendi deposuyla, düzenlemeler arasında `PickIndex` üzerinden ve 1…n numaralı pano nesneleriyle; `TRANSFORM_ROUNDS=20000` (~800 000 nesne) temiz. `picking.test.ts` canlı ve baştan kurulan deponun `transformEntities` yanıtını karşılaştırır. E2e: taşı (tek geri alma ve yineleme), kopya (kendi öznitelikleriyle), ayna, 2 × 3 dizi ve tek geri alma, Ctrl+V ve geri alma; yazılan noktalarla tam koordinat.
 - **Ölçüm** (`TRANSFORM_BENCH=1 pnpm -C apps/web exec vitest run scripts/perf/transform.test.ts`; Node 22, WASM, iki yol aynı süreçte, 10 000 karışık TM nesnesi, 30 koşu, p50 / p95 ms): dönüşüm 294 / 348 → 18 / 20; taşı komutu (geri alma adımıyla) 317 / 389 → 45 / 52; kopya 304 / 342 → 37 / 63; yapıştır 308 / 357 → 34 / 50; özgün koordinata yapıştır 308 / 357 → 59 / 70. 18 ms'nin 3,9 ms'si çekirdek çağrısı ve sınır, 6,2 ms'si okuma, 4,7 ms'si birleştirme; komutun kalanı çoğunlukla belgenin geri alma adımıdır.
 
+### DXF yazıcısının eğrisi
+
+- `geom::spline::catmull_rom_beziers(pts, closed)`: `catmull_rom`'un çizdiği eğrinin her açıklığının tam kübik Bézier biçimi ve merkezcil düğüm aralığı. DXF yazıcısı (`crates/shared/formats`, ADR 0009 “DXF yazma”) açıklıkları üçlü iç düğümlü kübik B-spline'a dizer: dosyadaki eğri bir uydurma değil, KentOS'un çizdiği eğrinin kendisidir. Açıklık uçları noktaların kendisidir (bit bit).
+- İşlev çağrı tablosunda değildir (JS çağıranı yok), bu yüzden çekirdek paketi değişmedi ve donmuş çağrı dosyası gerekmedi.
+- Testler çizilen eğriyle karşılaştırır (TM'de 1e-8 m; yinelenen noktalı durum başlangıç yakınında, çünkü değerlendirmenin 1e-6'lık düğüm aralığı orada sayı kaybeder), komşu açıklıkların aynı teğetle birleştiğini ve iki noktanın tek düz açıklık olduğunu denetler.
+
 ### Başlatma, worker ve hata
 
 - **Sayfa:** `apps/web/src/main.ts`, `createApp`'tan önce `initCore()` çalıştırır (`WebAssembly.compileStreaming`; tür başlığı yanlışsa baytlardan derler). Yüklenemezse Türkçe hata ve “Yeniden dene” gösterilir.
@@ -249,6 +255,7 @@ Kullanıcının kararları (2026-09-24):
   | Kesişim keneti budaması | 883 KB | 298 KB | 882 317 → 883 087 bayt, gzip 297 662 → 297 912 (+250 bayt): uzak parçanın çiftlerini atlayan döngü ve `crossing_gap` |
   | Sağlam kararlar R1 (yön yüklemi) | 887 KB | 299 KB | 883 626 (dizin düzeninden sonra) → 887 220 bayt, gzip 297 902 → 299 263 (+1,4 KB): uyarlamalı `orient2d` ve `orientation` işlemi |
   | Paketli dönüşüm (R1–R2b'nin üstüne) | 895 KB | 302 KB | `Packer::object` (1,7 KB; her `push` satır içiyken 4,8 KB'tı), `transform_packed`, `PackedObjects` ve metin → u32 karma tablosu: kendi dalında 883 626 → 890 662 bayt, gzip 297 902 → 300 820 (+2,9 KB); R1–R2b ile birlikte 894 506 bayt, gzip 302 107 |
+  | DXF yazıcısı (`catmull_rom_beziers`) | 895 KB | 302 KB | Çağrı tablosunda değil, yalnız biçim crate'i kullanır; çekirdek paketi değişmedi (894 506 bayt) |
 
 ### Doğrulama
 
