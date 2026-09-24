@@ -1,5 +1,5 @@
 //! An entity as a path parameterised by arc length s ∈ [0, L]
-//! (`src/model/ops/path.ts`). Trim, break, divide and measure all work on
+//! (`apps/web/src/model/ops/path.ts`). Trim, break, divide and measure all work on
 //! s values, so every kind that has edges behaves the same.
 
 use crate::api::Op;

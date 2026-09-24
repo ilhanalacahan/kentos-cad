@@ -1,5 +1,5 @@
 //! Labels and grips from the store (`drawLabels`, `drawGrips`,
-//! `src/viewport/overlay.ts`): which texts, dimensions and labels a frame
+//! `apps/web/src/viewport/overlay.ts`): which texts, dimensions and labels a frame
 //! draws and where, and the grips of selected objects. The overlay walked
 //! every object each frame; the store asks its tree for the view and applies
 //! the same tests (visible layer, box in view, text size on screen, the

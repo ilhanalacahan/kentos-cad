@@ -1,4 +1,4 @@
-//! A processing tool run (`RunJob` in `src/processing/job.ts`): what an
+//! A processing tool run (`RunJob` in `apps/web/src/processing/job.ts`): what an
 //! executor needs, with no reference to the page. The server executor will
 //! take snapshot and selection references instead of copied objects
 //! (CLAUDE.md §19).

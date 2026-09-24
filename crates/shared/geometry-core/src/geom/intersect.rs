@@ -1,4 +1,4 @@
-//! Primitive edges and their intersections (`src/model/geom/intersect.ts`).
+//! Primitive edges and their intersections (`apps/web/src/model/geom/intersect.ts`).
 //! Every entity decomposes into these; an arc edge runs from `a0` through
 //! the signed `sweep` (negative = clockwise), so path parameters stay
 //! monotonic along polyline arcs.

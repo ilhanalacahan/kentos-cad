@@ -1,4 +1,4 @@
-//! Constructions behind the drawing tools (`src/model/geom/shapes.ts`):
+//! Constructions behind the drawing tools (`apps/web/src/model/geom/shapes.ts`):
 //! rectangles, regular polygons, AutoCAD's arc modes, revision clouds.
 
 use crate::api::Op;

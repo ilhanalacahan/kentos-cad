@@ -1,5 +1,5 @@
 //! Areas, lengths and bounds of whole shapes (`entityArea`, `entityLength`
-//! and `entityBounds` in `src/model/entities.ts`), for the shapes whose
+//! and `entityBounds` in `apps/web/src/model/entities.ts`), for the shapes whose
 //! definition is exact on both sides. Bulged paths and arcs are bounded by
 //! a tessellated outline in TypeScript; their exact bounds come with the
 //! Rust port of the outline (docs/adr/0002-contracts-fixtures.md).

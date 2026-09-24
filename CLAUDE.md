@@ -85,18 +85,29 @@ yapıyor ve biz bunu verinin anlamını bozmadan nasıl daha iyi yaparız?"**
 
 ## 2. Çalıştırma
 
+**Depo düzeni** (monorepo; ayrıntı §12, hedef §14): kök hem Cargo hem pnpm çalışma alanıdır.
+
+- `apps/web/`: tarayıcı uygulaması (TypeScript, Vite; pnpm paketi `@kentos/web`). §4–§11'deki `model/`, `tools/`, `ui/` gibi klasör adları `apps/web/src/`'ye göredir.
+- `apps/api/`: sunucu (`kentosd`, Axum). İleride `apps/desktop/` (wgpu masaüstü) buraya gelir.
+- `crates/shared/`: platformdan bağımsız Rust kütüphaneleri (`geometry-core`, `contracts`, `formats`); web, sunucu ve masaüstü aynı kodu kullanır. DOM, tarayıcı, veritabanı ve ağ bilmezler.
+- `crates/wasm/`: bu kütüphanelerin tarayıcı bağlayıcıları (`geometry-wasm`, `formats-wasm`); çıktıları `apps/web/src/wasm/pkg` ve `apps/web/src/io/pkg`'dir.
+- `crates/server/`: yalnız sunucunun kütüphaneleri (`postgres`, `application`).
+- `fixtures/`: Rust ve TypeScript testlerinin paylaştığı sürümlü dosyalar; `scripts/`: kökten çalışan ortak araçlar (WASM derleme denetimi, Python referans üreticileri); `docs/`: belgeler ve ölçümler.
+
+Komutlar kökten çalıştırılır; web komutları `apps/web`'e iletilir (`pnpm -C apps/web …` ile doğrudan da çalışır).
+
 ```bash
 pnpm install
 pnpm dev                  # Vite geliştirme sunucusu
 pnpm build                # tsc (tip denetimi) + vite build
 pnpm test                 # Vitest birim testleri (geometri, işlemler, belge, biçimlendirici)
 pnpm e2e                  # Başsız Chrome'da uçtan uca duman testi (kendi Vite sunucusunu açar)
-npx tsc --noEmit -p .     # yalnızca tip denetimi
+pnpm typecheck            # yalnızca tip denetimi (apps/web: tsc --noEmit)
 pnpm rust:test            # Rust çalışma alanı: cargo test + clippy (-D warnings)
 pnpm wasm                 # WASM paketi kaynak değiştiyse derlenir (dev/test/build/e2e bunu kendileri çalıştırır)
-pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → src/wasm/pkg (depoya girmez)
-pnpm rust:wasm:formats    # dosya biçimlerinin WASM paketi → src/io/pkg (depoya girmez; yalnız içe/dışa aktarmada yüklenir)
-pnpm test:rust            # rust:test + WASM paketi + src/wasm ve src/io testleri (çağrı ve depo fixture'ları, bağımsız referans, biçimler)
+pnpm rust:wasm            # geometri çekirdeğinin WASM paketi → apps/web/src/wasm/pkg (depoya girmez)
+pnpm rust:wasm:formats    # dosya biçimlerinin WASM paketi → apps/web/src/io/pkg (depoya girmez; yalnız içe/dışa aktarmada yüklenir)
+pnpm test:rust            # rust:test + WASM paketi + apps/web/src/wasm ve apps/web/src/io testleri (çağrı ve depo fixture'ları, bağımsız referans, biçimler)
 pnpm db:setup             # kentosd db-setup + migrate + dev-seed (yerel PostGIS'te kentos_cad, iki rol, örnek kurum ve üç hesap: ayse, mehmet, zeynep)
 pnpm api                  # kentosd serve: 127.0.0.1:8787 (veritabanı yoksa yalnızca /v1/health)
 pnpm kentosd -- <komut>   # yönetim: tenant add|list, user add|password, member add|list, project deleted|restore, migrate, dev-seed
@@ -104,10 +115,10 @@ pnpm e2e:cloud            # gerçek sunucu ve veritabanıyla bulut akışı (gir
 pnpm perf:interaction     # etkileşim ölçümü (parsel-50k, hat-1m): seçme, kenet, buda önizlemesi, kaydırma, katman kurma → docs/perf/ (§9.4)
 ```
 
-- **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini ve proje WebSocket'ini (`/v1/ws`) `vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; yerel çizim sunucuya hiç bağlı değildir.
+- **API bağlantısı:** `vite` ve `vite preview`, `/v1/` isteklerini ve proje WebSocket'ini (`/v1/ws`) `apps/web/vite.config.mjs` içindeki küçük bir eklentiyle `127.0.0.1:KENTOS_API_PORT` (varsayılan 8787) adresine iletir. API çalışmıyorsa sessizce 503 döner. Durum çubuğu “Sunucu: bağlı / yok / uyumsuz” gösterir; yerel çizim sunucuya hiç bağlı değildir.
 - **Sunucu ayarları** (`kentosd`, önce ortam değişkeni, sonra `.env.local`; `.env.local` depoya girmez, `0600`): `KENTOS_DATABASE_URL` (sunucu rolü), `KENTOS_DATABASE_OWNER_URL` (migration ve yönetim), `KENTOS_PUBLIC_URL` (tarayıcının adresi; WebSocket kaynak denetimi ve OpenID dönüşü, varsayılan `http://localhost:5173`), `KENTOS_COOKIE_SECURE`, `KENTOS_LOCAL_LOGIN`, `KENTOS_EVENT_RETENTION_DAYS` (proje olaylarının saklandığı gün sayısı, 1–3650, varsayılan 7; daha eski imleçli istemci projeyi yeniden açar), OpenID için `KENTOS_OIDC_ISSUER`, `KENTOS_OIDC_CLIENT_ID`, isteğe bağlı `KENTOS_OIDC_CLIENT_SECRET`, `KENTOS_OIDC_AUDIENCE`, `KENTOS_OIDC_LABEL`. Veritabanı testleri `KENTOS_TEST_ADMIN_URL` ile geçici `kentos_cad_test_*` veritabanları açar; sunucu yoksa atlanır, `KENTOS_TEST_DB=required` bunu hata sayar (ADR 0006, 0007).
 
-- **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. **Uygulama geometriyi Rust çekirdeğinden (WASM) alır** (ADR 0008): `pnpm dev`, `test`, `build` ve `e2e` önce `scripts/wasm/ensure.mjs`'i çalıştırır; çekirdeğin kaynakları değiştiyse paket `nice` ile yeniden derlenir (`src/wasm/pkg/.stamp`). Aynı betik dosya biçimleri paketini (`crates/shared/formats`, `crates/wasm/formats-wasm`, `crates/shared/contracts` → `src/io/pkg`) ayrı özet ve damgayla derler: biçimler değişince çekirdek derlenmez; biçimler çekirdeğin halka örneklemesini kullandığı için çekirdek değişince biçim paketi de derlenir; hiçbiri değişmediyse hiçbir şey derlenmez. Bu yüzden Rust araç zinciri bunların hepsi için gereklidir. Sayfa çekirdeği uygulamadan önce başlatır (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
+- **Rust araç zinciri** `rust-toolchain.toml` ile sabittir (wasm32 hedefi dahil); derleme `.cargo/config.toml` ile 4 işle sınırlıdır. WASM paketi için `wasm-bindgen` komutu crate sürümüyle aynı olmalıdır: `cargo install wasm-bindgen-cli --version 0.2.128 --locked`. **Uygulama geometriyi Rust çekirdeğinden (WASM) alır** (ADR 0008): `pnpm dev`, `test`, `build` ve `e2e` önce `scripts/wasm/ensure.mjs`'i çalıştırır; çekirdeğin kaynakları değiştiyse paket `nice` ile yeniden derlenir (`apps/web/src/wasm/pkg/.stamp`). Aynı betik dosya biçimleri paketini (`crates/shared/formats`, `crates/wasm/formats-wasm`, `crates/shared/contracts` → `apps/web/src/io/pkg`) ayrı özet ve damgayla derler: biçimler değişince çekirdek derlenmez; biçimler çekirdeğin halka örneklemesini kullandığı için çekirdek değişince biçim paketi de derlenir; hiçbiri değişmediyse hiçbir şey derlenmez. Bu yüzden Rust araç zinciri bunların hepsi için gereklidir. Sayfa çekirdeği uygulamadan önce başlatır (`apps/web/src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır. Cargo derlerken e2e ya da başka bir ağır iş çalıştırılmaz (ADR 0001).
 
 - **Çizim motoru:** varsayılan WebGL2'dir; WebGPU isteğe bağlıdır.
   - Etkin motor durum çubuğunun sağ alt köşesinde yazar. Tıklayınca motor seçilir: seçim hemen uygulanır (`view.switchBackend`, sayfa yenilenmez) ve `prefs.rendererPreference` ile hatırlanır. Aynı seçim **Görünüm → Çizim motoru** menüsünde ve Uygulama ayarları → Çizim motoru bölümünde de vardır.
@@ -467,7 +478,7 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
 - **Vurgu ayrı katmandır.** Seçim değişince yalnızca `__sel` ve `__hover` yeniden kurulur, belge katmanlarına dokunulmaz.
 - **`ViewportController`:**
   - `requestRender()` GPU'yu ve üst katmanı, `requestOverlay()` yalnızca 2B üst katmanı çizdirir. İkisi de `requestAnimationFrame` içinde birleştirilir.
-  - `stats` son karenin adım sürelerini tutar. `probe` (`ViewportProbe`) yalnız geliştirme derlemesindedir: etkileşim ölçümü (`scripts/perf/interaction.mjs`) `kentos.view.probe`'a boş bir kayıt koyar; her `pointermove` kenet, araç ve toplam süresini, her kare başlangıç anını, `stats` adımlarını ve üst katmandaki etiket ve araç önizlemesi sürelerini ekler. Bütün kullanımlar `import.meta.env.DEV` arkasındadır ve alan `declare` ile tanımlıdır: üretim derlemesi bayt bayt aynı kalır.
+  - `stats` son karenin adım sürelerini tutar. `probe` (`ViewportProbe`) yalnız geliştirme derlemesindedir: etkileşim ölçümü (`apps/web/scripts/perf/interaction.mjs`) `kentos.view.probe`'a boş bir kayıt koyar; her `pointermove` kenet, araç ve toplam süresini, her kare başlangıç anını, `stats` adımlarını ve üst katmandaki etiket ve araç önizlemesi sürelerini ekler. Bütün kullanımlar `import.meta.env.DEV` arkasındadır ve alan `declare` ile tanımlıdır: üretim derlemesi bayt bayt aynı kalır.
   - Olay işleyicisinde asla eşzamanlı çizim yapmayın.
   - **Tek istisna boyut değişimidir:** canvas'ın `width`/`height` değeri değişince tampon temizlenir ve WebGL bağlamı `alpha: false` olduğu için siyah görünür. Çizim bir sonraki kareye bırakılırsa tarayıcı arada bu siyah tamponu gösterir; panel ayırıcısı sürüklenirken ekran yanıp söner. Bu yüzden `resize()` (ResizeObserver içinde, düzenden sonra ve boyamadan önce çalışır) boyut gerçekten değiştiyse hemen `frame()` çağırır. Duman testi sürükleme sırasında ekran akışını kare kare inceleyerek bunu denetler.
 - **Üst katman** (`viewport/overlay.ts`, Canvas2D) şunları çizer: etiketler (`LabelStyle` ile; hangilerinin nerede çizileceğini geometri deposu söyler), tutamaçlar, kenet işareti, artı imleç, ölçek çubuğu, "K" kuzey oku ve araç önizlemeleri. GPU metni (SDF) gelene kadar yazılar buradadır.
@@ -592,7 +603,7 @@ kurallar büyük veriye geçerken kodun yeniden yazılmasını önlemek içindir
 
 ### 8.1 Tamam sayılma listesi (her değişiklik için)
 
-- [ ] `npx tsc --noEmit -p .` temiz, `pnpm build` başarılı.
+- [ ] `pnpm typecheck` temiz, `pnpm build` başarılı.
 - [ ] Katman bağımlılık yönü korunuyor (§4.1).
 - [ ] Yeni durum doğru kapsamda (§4.4).
 - [ ] Yeni eylemler komut olarak kayıtlı, gerekiyorsa kısayolu ve takma adı var, menüde yer alıyor.
@@ -690,7 +701,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `io/apply.test.ts` | Okunan nesnelerin belgeye konması: bin nesne tek geri alma adımı ve tek olay, adla birleşen katman, grupta yeni katmanlar (ikinci içe aktarmada aynı grup), seçilmeyen katmanın dışarıda kalması, kilitli hedefin ve bozuk nesnenin hiçbir şeyi değiştirmeden reddi, çalışan bir modelin grubu açıkken beklemesi |
 | `io/client.test.ts` | Biçim worker'ının sayfa tarafı, sahte worker'la: ilk istekte tek worker, yanıtların kimlikle eşleşmesi, koordinat listesinin kopyayla, DXF'nin kopyasız (daha büyük arabelleğe bakan görünüm kopyayla) gitmesi, yazılan dosya ve raporu, okuyucu hatasında worker'ın kalması, tuzakta ve yüklenemeyen worker'da bekleyenlerin Türkçe iletiyle düşmesi ve yeni worker, gönderilemeyen istek, yarım dakika boşta kapanma, Durdur |
 | `io/coords.test.ts` | Koordinat listesi pencerelerinin yardımcıları: sütun sırasının dosyaya yayılması, seçimin hangi sıraya uyduğu, çizimin noktalarının satırlara dönüşmesi (ad etiketten ya da `Ad` özniteliğinden, Z ve Kod) |
-| `io/formats.wasm.test.ts` | Rust dosya biçimleri WASM derlemesinde (`src/io/pkg`), `fixtures/formats/v1` dosyalarıyla: sözleşme sürümü, Netcad NCN (bit bit koordinat), Windows-1254 ve ondalık virgüllü Türkçe tablo, bozuk satırların numaralı iletileri, yazıp geri okuma; DXF: katman tablosu (renk, gizli, kilitli), tam koordinat, patlatılmış bloklar, rapor, DWG reddi. Paket yoksa atlanır |
+| `io/formats.wasm.test.ts` | Rust dosya biçimleri WASM derlemesinde (`apps/web/src/io/pkg`), `fixtures/formats/v1` dosyalarıyla: sözleşme sürümü, Netcad NCN (bit bit koordinat), Windows-1254 ve ondalık virgüllü Türkçe tablo, bozuk satırların numaralı iletileri, yazıp geri okuma; DXF: katman tablosu (renk, gizli, kilitli), tam koordinat, patlatılmış bloklar, rapor, DWG reddi. Paket yoksa atlanır |
 | `wasm/golden.wasm.test.ts` | Paketin çalışma alanı sürümüyle derlendiği (eski paket kırılır). Golden durumlar ve bağımsız referanslar S3b'den beri `model/geom/golden.test.ts` ve `reference.test.ts`'te uygulamanın yolundan (cephe → WASM) koşar. Paket yoksa atlanır; `pnpm test:rust` derleyip çalıştırır |
 | `style/svg/pathOps.test.ts` | SVG düzenleyicisinin yol işlemleri: kesişen, komşu ve iç içe karelerde birleşim/kesişim/fark/dışlama, delik, boş kesişim, çizgiyle ve daireyle bölme; eğrilerin eğri kalması (iki dairenin birleşimi, daire deliği), even-odd halka ve tek çizgiyle yıldız; yolu kes (düz ve eğri, tam kesim noktası); çizgiyi yola çevirme (düz/kare/yuvarlak uç, sivri/pah/yuvarlak köşe, kapalı halka, kesik desen, az düğümlü eğri) ve içe/dışa öteleme; şekil düzeyinde birleşim, topla/ayır (delikler kalır), dolgulu çizgi, kaybolan şekil; sadeleştir, kapat, aç |
 | `style/svg/nodeOps.test.ts` | Düğüm türleri (okuma, köşe → yumuşak/simetrik/otomatik, otomatiğin komşuyu izlemesi), ortaya düğüm ekleme (eğride ve kapanış parçasında), biçimi koruyarak silme, uçları birleştirme (iki yol, kendi kendini kapatma), düğümde kırma, parça silme, düz/eğri parça, köşe yuvarlama ve pah (yarıçap, komşuya varan kesim, büyük yarıçap, düz devam eden ve uç düğüm, çoklu köşe, eğri kenar, sürükleme uzaklığından yarıçap), hizala ve dağıt |
@@ -716,15 +727,15 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 - `crates/server/application/tests/retention.rs`: olay günlüğünün budanması (bir saatten kısa pencerenin reddi, partiler, iki tenant'ın olayları, proje ufku, ufuktan önceki imlece `ResyncRequired`, sonrasının sürmesi, bütün olayları gitmiş projede açılış imlecinin ufuk olması, olaysız proje, budamadan sonra yeni olaylar, ufukta tenant ayrımı).
 - `crates/server/application/tests/lifecycle.rs`: yeniden adlandırma (proje bilgisi sürümü, olay, editöre ve boş ada ret, eski sürümde çakışma); silme (yalnız yönetici, başka tenant'a 404, listeden kalkma, açma/okuma/yazmada 410, silinmeden önceki komutun günlükten yanıtlanması, kim ve hangi istekle `project.deleted` olayı, ikinci silmenin bir şey değiştirmemesi, nesnelerin ve denetimin kalması), işletmecinin listelemesi ve geri getirmesi; silme ile yazma aynı anda.
 - `apps/api` (`http/tests.rs`, `http/ws_tests.rs`, `oidc/tests.rs`, `cli.rs`, `config.rs`): WebSocket gerçek soket üzerinde (RFC 6455'in gereken kısmını testin kendisi konuşur): budanmış günlükte eski imlece `resyncRequired`, ufuktan kalan olay, en yeni olayın ötesine `resyncRequired`, HTTP olay günlüğünde 410 `resync_required`; saklama süresi ayarının sınırları; istek kimliği, veritabanısız mod, çerezli giriş ve CSRF başlığı, proje/komut/olay yolları ve başka tenant'ın 404'ü; proje silme (proje yöneticisine ve izleyiciye 403, başka tenant'a 404, başlıksız isteğe 403, tekrarı 204, sonrasında açma/okuma/yazmada 410, listede yok, olay günlüğünde var); komut satırında tek başına `--`; sahte sağlayıcıyla OpenID (kod + PKCE, tek kullanımlık state, nonce, audience, HS* reddi, anahtar yenileme sınırı, erişim belirteci).
-- **Bulut uçtan uca** `scripts/e2e/cloud.mjs` (`pnpm e2e:cloud`): gerçek `kentosd` ve geliştirme veritabanı, tarayıcıda `ayse`, HTTP üzerinden ikinci editör `mehmet`: giriş, yükleme, otomatik kayıt (tam koordinat), yeniden yüklemede kalıcılık, canlı değişiklik, çakışma ve çözüm, sunucu dururken bekleyen düzenlemenin geri gelince bir kez kaydı, yeniden bağlanma; açık projenin listeden yeniden adlandırılması (proje yöneticisinde Sil'in devre dışı ve nedenini söylemesi), yönetici `zeynep`'in açık projeyi HTTP'den silmesi (açık tutanda “Proje silindi”, çizim yerinde, sonraki düzenleme cihaz taslağında, 410 ve listede yok), tarayıcıda `zeynep` olarak listeden onaylı silme (Vazgeç odakta). Oluşturduğu “E2E …” projeleri geliştirme veritabanında kalır; sildikleri yalnız işaretlenir.
+- **Bulut uçtan uca** `apps/web/scripts/e2e/cloud.mjs` (`pnpm e2e:cloud`): gerçek `kentosd` ve geliştirme veritabanı, tarayıcıda `ayse`, HTTP üzerinden ikinci editör `mehmet`: giriş, yükleme, otomatik kayıt (tam koordinat), yeniden yüklemede kalıcılık, canlı değişiklik, çakışma ve çözüm, sunucu dururken bekleyen düzenlemenin geri gelince bir kez kaydı, yeniden bağlanma; açık projenin listeden yeniden adlandırılması (proje yöneticisinde Sil'in devre dışı ve nedenini söylemesi), yönetici `zeynep`'in açık projeyi HTTP'den silmesi (açık tutanda “Proje silindi”, çizim yerinde, sonraki düzenleme cihaz taslağında, 410 ve listede yok), tarayıcıda `zeynep` olarak listeden onaylı silme (Vazgeç odakta). Oluşturduğu “E2E …” projeleri geliştirme veritabanında kalır; sildikleri yalnız işaretlenir.
 
 Kurallar:
 
 - `model/geom` ve `model/ops` altındaki her yeni fonksiyon test ile gelir. Sınır durumları (paralel, çakışık, sıfır uzunluk, açı 0/2π geçişi) mutlaka sınanır.
 - Hata düzeltmesi, önce hatayı yeniden üreten bir testle başlar.
-- **Uçtan uca duman testi** `scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi, yerleşik modelin tek geri alma adımıyla çalışması, tasarımcıda girdiye bağlı adımlı modelin kaydedilmesi), Yeni proje (`Ctrl+Alt+N`: ad, sistem, ölçek; kaydedilmemiş değişiklik sorusu ve Vazgeç'in pencereye dönmesi; boş çizimde yazılan çizgi ve ilk kayıtta yerin proje adıyla sorulması), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), dosya alışverişi (bellek içi seçiciyle koordinat listesi içe aktarma: önizlemede Ad Y X Z önerisi ve bozuk satır, başka koordinat sistemi seçilince içe aktarmanın kapanması, tam koordinatlar ve dosya adıyla yeni katman, tek geri alma adımı; seçili noktaların NCN olarak aynı metinle dışa aktarılması; DXF içe aktarmada katman tablosu ve alınmayanların raporu, dosya adlı grupta yeni katmanlar, tam koordinatla patlatılmış bloklar, işareti kaldırılan katmanın dışarıda kalması, içe aktarılan nesnenin hemen seçilebilmesi (geometri deposu), tek geri alma adımı), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
+- **Uçtan uca duman testi** `apps/web/scripts/e2e/smoke.mjs` (`pnpm e2e`): kendi Vite sunucusunu açar, başsız Chrome'u DevTools protokolüyle (`apps/web/scripts/e2e/cdp.mjs`, bağımlılıksız) sürer, gerçek fare ve klavye olayları gönderir ve belgeyi `window.kentos` ile doğrular. Ekran görüntüleri `apps/web/scripts/e2e/out/`'a düşer. Çizim, budama, eğri, ölçü, yazı, tarama, yerinde düzenleme, yay kipli çoklu çizgi, patlat/birleştir, pah, kır, pano, araç kutusu (tüm araçlar kaydırmasız görünür, grup katlama), komut şeridi düğmeleri, fareyle köşe yuvarlama, basılı sağ tıkla tek seferlik kenet, imleç yanında değer girişi, tutamaç menüsü, nesne izleme, panel boyutlandırırken siyah kare çıkmaması (`Page.startScreencast` ile), paralel çizgi ve dik çık (yazılan mesafelerle tam koordinat), alan işlemleri (Alt+B birleştir, Alt+C ile ada bırakan çıkarma, adalı alanın taranması, Shift+B ve çizgilerle sınırlı tarama ile çizgilerin kapattığı bölgeye tıklayarak alan), işlem araçları (İşlemler menüsünden pencere, canlı girdi sayısı ve önizleme, çalıştırma, geçmiş, tek geri alma adımı; ifadeyle seçimde canlı eşleşme sayısı ve seçim, Web Worker'ın sayfayla aynı sonucu vermesi, yerleşik modelin tek geri alma adımıyla çalışması, tasarımcıda girdiye bağlı adımlı modelin kaydedilmesi), Yeni proje (`Ctrl+Alt+N`: ad, sistem, ölçek; kaydedilmemiş değişiklik sorusu ve Vazgeç'in pencereye dönmesi; boş çizimde yazılan çizgi ve ilk kayıtta yerin proje adıyla sorulması), varsayılan motorun WebGL2 olması, durum çubuğundan WebGPU'ya canlı geçiş ve iki motorun aynı sahneyi çizmesi (ızgara kapalı karşılaştırılır; soluk ızgara çizgileri motorlar arasında yalnızca örneklemeyle farklılaşır), dosya alışverişi (bellek içi seçiciyle koordinat listesi içe aktarma: önizlemede Ad Y X Z önerisi ve bozuk satır, başka koordinat sistemi seçilince içe aktarmanın kapanması, tam koordinatlar ve dosya adıyla yeni katman, tek geri alma adımı; seçili noktaların NCN olarak aynı metinle dışa aktarılması; DXF içe aktarmada katman tablosu ve alınmayanların raporu, dosya adlı grupta yeni katmanlar, tam koordinatla patlatılmış bloklar, işareti kaldırılan katmanın dışarıda kalması, içe aktarılan nesnenin hemen seçilebilmesi (geometri deposu), tek geri alma adımı), geri alma akışlarını sınar. Tam değer bekleyen kontrollerde noktalar komut satırından mutlak koordinatla girilir; ekrandan tıklanan nokta piksel yuvarlaması kadar (~0,1 m) sapar. Yeni bir kullanıcı akışı eklendiğinde buraya bir kontrol eklenir.
 - Tıklama noktaları ekrandan tahmin edilmez; dünya koordinatından `camera.worldToScreen` ile hesaplanır.
-- **Etkileşim ölçümü** `scripts/perf/interaction.mjs` (`pnpm perf:interaction`; bir şeyi doğrulamaz, ölçer): kendi Vite sunucusunu ve tek başsız Chrome'u açar (WebGL2 makinenin GPU'sunda, `--use-angle=gl`; SwiftShader'da tek kare saniyeler sürdüğü için onu reddeder), ADR 0005'in `parsel-50k` ve `hat-1m` veri setlerini sayfada tohumlu üretip `doc.replaceWith` ile açar. Gerçek fare hareketleriyle seç (üzerine gelme), çizgi (ilk noktadan sonra kenet) ve buda araçlarında olay başına süreyi 1:1000 ve genel görünümde, orta tuşla kaydırmada kare süresini ve GPU dahil kare aralığını, buda önizlemesinde kare süresini, stil değişikliğinde büyük katmanın yeniden kurulmasını `view.probe` ile toplar. Her koşu sayfayı yeniden açar; 3 koşunun p50/p95/p99'u ve p95 aralığı `docs/perf/interaction-<etiket>.{json,md}`'ye yazılır (`--label baseline` tabanı yazar; başka etiket tabanla karşılaştırılır). Nesne izleme ve bilgi kartı ölçümde kapalıdır (beklemeye bağlıdırlar). Makinede başka ağır süreç çalışırken çalıştırılmaz.
+- **Etkileşim ölçümü** `apps/web/scripts/perf/interaction.mjs` (`pnpm perf:interaction`; bir şeyi doğrulamaz, ölçer): kendi Vite sunucusunu ve tek başsız Chrome'u açar (WebGL2 makinenin GPU'sunda, `--use-angle=gl`; SwiftShader'da tek kare saniyeler sürdüğü için onu reddeder), ADR 0005'in `parsel-50k` ve `hat-1m` veri setlerini sayfada tohumlu üretip `doc.replaceWith` ile açar. Gerçek fare hareketleriyle seç (üzerine gelme), çizgi (ilk noktadan sonra kenet) ve buda araçlarında olay başına süreyi 1:1000 ve genel görünümde, orta tuşla kaydırmada kare süresini ve GPU dahil kare aralığını, buda önizlemesinde kare süresini, stil değişikliğinde büyük katmanın yeniden kurulmasını `view.probe` ile toplar. Her koşu sayfayı yeniden açar; 3 koşunun p50/p95/p99'u ve p95 aralığı `docs/perf/interaction-<etiket>.{json,md}`'ye yazılır (`--label baseline` tabanı yazar; başka etiket tabanla karşılaştırılır). Nesne izleme ve bilgi kartı ölçümde kapalıdır (beklemeye bağlıdırlar). Makinede başka ağır süreç çalışırken çalıştırılmaz.
 - Sıradaki eksikler: `core` (komut arama, kısayol çözümleme).
 
 ### 9.5 Çizim arka uçları (WebGL2 ve WebGPU)
@@ -739,7 +750,7 @@ Kurallar:
 
 WGSL gölgelendiricileri (`render/webgpu/shaders.ts`) GLSL'deki kesik desen ve nokta simgesi mantığının birebir karşılığıdır; birinde yapılan değişiklik ötekine de yapılır. `lib.dom` yalnızca WebGPU bayrak tiplerini bildirir; `GPUBufferUsage` gibi sabitler dosyada belirtimdeki değerleriyle tanımlıdır. `createBackend` tarayıcı desteklemiyorsa WebGL2'ye düşer.
 
-Başsız Chrome'da `--enable-unsafe-webgpu` tek başına yetmez (aygıt ilk gönderimde düşer). `scripts/e2e/cdp.mjs` içindeki `WEBGPU_ARGS` Vulkan/SwiftShader bayraklarını ekler; duman testi iki motorun çizdiği piksel sayısını karşılaştırır.
+Başsız Chrome'da `--enable-unsafe-webgpu` tek başına yetmez (aygıt ilk gönderimde düşer). `apps/web/scripts/e2e/cdp.mjs` içindeki `WEBGPU_ARGS` Vulkan/SwiftShader bayraklarını ekler; duman testi iki motorun çizdiği piksel sayısını karşılaştırır.
 
 ### 9.6 Yeni işlem aracı
 
@@ -755,7 +766,7 @@ Biçimler Rust'tadır, çünkü sunucunun ileride çalışacak içe aktarma işi
    - Aşkın işlevler `libm`'den gelir; native ve WASM aynı bitleri verir (`clippy.toml` std işlevlerini yasaklar).
    - Uygulamanın da hesapladığı geometri (yaylı halkanın noktaları, alan, içerme) `kentos-geometry-core`'dan alınır, kopyalanmaz; `geom.rs`'te yalnız dosya okumaya özgü olan durur.
    - Dosyanın boyutuyla değil, içindekinin çarpımıyla büyüyen iş (iç içe bloklar, diziler, eğri derecesi) sınırlanır ve sınıra varılınca raporlanır.
-2. **WASM sınırı** `crates/wasm/formats-wasm`: dosya bayt, seçenekler ve sonuç JSON olarak geçer. Paket `src/io/pkg`'a derlenir. `io/formatsWorker.ts` onu ilk istekte yükler (`?url` varlığı); `io/client.ts` worker'ı 30 sn boşta kalınca kapatır (büyük dosyanın belleği geri verilir), tuzakta yenisini açar.
+2. **WASM sınırı** `crates/wasm/formats-wasm`: dosya bayt, seçenekler ve sonuç JSON olarak geçer. Paket `apps/web/src/io/pkg`'a derlenir. `io/formatsWorker.ts` onu ilk istekte yükler (`?url` varlığı); `io/client.ts` worker'ı 30 sn boşta kalınca kapatır (büyük dosyanın belleği geri verilir), tuzakta yenisini açar.
 3. **Pencere** `ui/io/`: dosya ve kaynağın bilgileri, seçenekler, önizleme ya da özet, “Bu koordinatlar hangi sistemde?” (`CrsQuestion`), hedef katman. İçe aktarma `io/apply.ts` ile tek geri alma adımıdır. Komut `app/fileExchange.ts`'e yazılır ve pencereyi dinamik içe aktarmayla açar.
 4. **Testler:** Rust birim testleri ve `fixtures/formats/v1/` dosyalarıyla `crates/shared/formats/tests/`; aynı dosyalar WASM'da `io/formats.wasm.test.ts`; akış duman testinde, bellek içi seçiciyle.
 
@@ -847,7 +858,7 @@ Kaynağın SRID'si bilinmiyorsa kullanıcıya sorulur; asla tahmin edilmez. Kayn
 ## 12. Dosya haritası
 
 ```
-src/
+apps/web/src/
   main.ts                    Giriş: stiller + createApp
   app/                       Kompozisyon kökü
     createApp.ts             Servisleri kurar, AppContext'i bağlar, kabuğu takar
@@ -942,22 +953,30 @@ src/
     icons.ts                 Simge seti
   styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları); io.css (dosya alışverişi pencereleri, onlarla birlikte yüklenir)
   wasm/                      Rust çekirdeğinin tarayıcı cephesi: core.ts (başlatma, op() çağrıları, NaN/±∞ geri çevirme, hata bildirimi, tipli toplu girişler: `triangulateMany`, `offsetPathXY`, `hatchLinesXY`, `cornerTexts`; sayı alan küçük ölçüler (`coreDist` …) ve kazıma tamponlu halka ölçüleri (`ringCentroid` …); durum tutan sınıflar: geometri deposu `CoreStore`, yüz dizini `CoreFaceIndex`), pack.ts (nesneleri depo için sayı akışına paketleme), testSetup.ts (Vitest), calls/ (çağrı kümeleri ve tohumlu üreteç, depo sahnesi, toleranslı karşılaştırma, depo fixture'larının ortak okuyucusu `storeCases.ts`, bağımsız referans testi; S3c'ye kadar TS ↔ Rust parity ve eski TS referansları buradaydı), golden, çağrı ve depo fixture testleri; pkg/ `pnpm wasm` ile üretilir, depoya girmez
-crates/
-  contracts/                 Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları)
-  geometry-core/             Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı), store (geometri deposu: R-ağacı, seçme, kenet, paketli okuyucu, işlem sorguları), processing (köşe numaralama, kenar ölçüleri), tools (nokta girişi, nesne izleme, araçların yapı hesapları), triangulate ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, depo, bağımsız referans, sayısal)
-  wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen): çağrı tablosu (opId/callOp, JSON), düz Float64Array ve sayı girişleri, halka ölçüleri için kazıma tamponu, geometri deposu (store.rs) ve yüz dizini (faces.rs)
-  formats/                   Dosya biçimleri (saf; native ve WASM): coords (NCN/TXT/CSV okuma ve yazma), dxf/ (lexer: grup çiftleri; strings: kod sayfası, \U+, %%, MTEXT; entity: grupları modele okuma; hatch: sınır yolları ve desen; emit: dönüşümlerle uygulamanın nesnelerine; aci: renk dizini), geom (dörtte bir dönüşleri tam afin dönüşüm, nesne koordinat sistemi, elips kurulumu, DXF tarama yayları; yaylı halka, alan ve içerme ortak çekirdekten: `kentos-geometry-core`), nurbs (de Boor, toleranslı örnekleme), math (libm, dörtte bir dönüşlerde tam sin/cos), text (UTF-8/16, Windows-1254/1252), num (kesin sayı okuma ve yazma), report; clippy.toml (std aşkın işlevleri yasak); tests/ (fixture dosyaları)
-  formats-wasm/              Biçimlerin tarayıcı sınırı (wasm-bindgen): readCoords, writeCoords, readDxf; dosya bayt, seçenek ve sonuç JSON
-  postgres/                  Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`; `build.rs` yeni dosyada yeniden derletir), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
-  application/               Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı; silinen projeyi geri getirme dahil), cad (Entity ↔ PostGIS satırı), projects, lifecycle (proje silme), changes (`project.changes`), events (olay günlüğü, budama ve ufuk); tests/ (geçici veritabanıyla; common/ ortak yardımcılar)
-apps/api/                    kentosd: `serve` (Axum; http/ auth, projects, ws, error; oidc.rs; hub.rs; saatlik olay budaması), `db-setup`, `migrate`, yönetim komutları (cli.rs), config.rs
+crates/                      Rust kütüphaneleri, rolüne göre (Cargo çalışma alanı, kök Cargo.toml)
+  shared/                    Platformdan bağımsız: web (WASM ile), sunucu ve ileride masaüstü (wgpu) uygulaması aynen kullanır; DOM, tarayıcı, veritabanı ve ağ bilmez
+    geometry-core/           Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı), store (geometri deposu: R-ağacı, seçme, kenet, paketli okuyucu, işlem sorguları), processing (köşe numaralama, kenar ölçüleri), tools (nokta girişi, nesne izleme, araçların yapı hesapları), triangulate ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, depo, bağımsız referans, sayısal)
+    contracts/               Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları); TS üretimi `ts` özelliğinde (varsayılan açık); yalnız Rust tipleri isteyenler `default-features = false` ile bağlanır
+    formats/                 Dosya biçimleri (saf; native ve WASM): coords (NCN/TXT/CSV okuma ve yazma), dxf/ (lexer: grup çiftleri; strings: kod sayfası, \U+, %%, MTEXT; entity: grupları modele okuma; hatch: sınır yolları ve desen; emit: dönüşümlerle uygulamanın nesnelerine; aci: renk dizini), geom (dörtte bir dönüşleri tam afin dönüşüm, nesne koordinat sistemi, elips kurulumu, DXF tarama yayları; yaylı halka, alan ve içerme ortak çekirdekten: `kentos-geometry-core`), nurbs (de Boor, toleranslı örnekleme), math (libm, dörtte bir dönüşlerde tam sin/cos), text (UTF-8/16, Windows-1254/1252), num (kesin sayı okuma ve yazma), report; clippy.toml (std aşkın işlevleri yasak); tests/ (fixture dosyaları)
+  wasm/                      Tarayıcı bağlayıcıları (wasm-bindgen); hesap yapmaz, ortak kütüphaneleri dışa açar
+    geometry-wasm/           Çekirdeğin tarayıcı sınırı (wasm-bindgen): çağrı tablosu (opId/callOp, JSON), düz Float64Array ve sayı girişleri, halka ölçüleri için kazıma tamponu, geometri deposu (store.rs) ve yüz dizini (faces.rs) → `apps/web/src/wasm/pkg`
+    formats-wasm/            Biçimlerin tarayıcı sınırı (wasm-bindgen): readCoords, writeCoords, readDxf; dosya bayt, seçenek ve sonuç JSON → `apps/web/src/io/pkg`
+  server/                    Yalnız sunucu: PostgreSQL/PostGIS ve kullanım durumları
+    postgres/                Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`; `build.rs` yeni dosyada yeniden derletir), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
+    application/             Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı; silinen projeyi geri getirme dahil), cad (Entity ↔ PostGIS satırı), projects, lifecycle (proje silme), changes (`project.changes`), events (olay günlüğü, budama ve ufuk); tests/ (geçici veritabanıyla; common/ ortak yardımcılar)
+apps/                        Çalıştırılabilir uygulamalar
+  api/                       kentosd: `serve` (Axum; http/ auth, projects, ws, error; oidc.rs; hub.rs; saatlik olay budaması), `db-setup`, `migrate`, yönetim komutları (cli.rs), config.rs
+  web/                       Tarayıcı uygulaması (pnpm paketi `@kentos/web`): src/ (yukarıdaki ağaç), index.html, public/, vite.config.mjs (/v1 isteklerini yerel API'ye ileten eklenti, dev ve preview), tsconfig.json, package.json
+    scripts/e2e/             Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo) ve bulut senaryosu (cloud.mjs)
+    scripts/perf/            Build envanteri (bundle.mjs), başlangıç ölçümü (startup.mjs) ve etkileşim ölçümü (interaction.mjs: parsel-50k, hat-1m) → kökteki docs/perf/
+    scripts/fixtures/        Uygulamanın yolundan fixture kaydedicileri (GOLDEN_WRITE=1; record-calls: çağrı kümeleri)
+    scripts/showcase/        Gösterim kataloğunun ekran görüntüleri
+  desktop/                   (ileride) wgpu masaüstü CAD/CBS uygulaması; crates/shared kütüphanelerini doğrudan (native) kullanır
 fixtures/                    İki dilin paylaştığı sürümlü dosyalar: geometry/v1 (golden, bağımsız referans), numeric/v1, document/v1 (.kcad örneği), crs/v1 (CRS kaydı), formats/v1 (koordinat listeleri: NCN, Windows-1254 CSV, bozuk satırlar, UTF-16; DXF: her tür, aynalı nesne koordinat sistemi, iç içe ve dizi bloklar, adalı taramalar, ölçü)
-Cargo.toml, rust-toolchain.toml, .cargo/config.toml   Rust çalışma alanı, sabit araç zinciri, 4 işlik derleme sınırı
-vite.config.mjs              /v1 isteklerini yerel API'ye ileten eklenti (dev ve preview)
-scripts/e2e/                 Başsız Chrome duman testi (cdp.mjs sürücü, smoke.mjs senaryo) ve bulut senaryosu (cloud.mjs)
+Cargo.toml, rust-toolchain.toml, .cargo/config.toml   Rust çalışma alanı (üyeler crates/* ve apps/api), sabit araç zinciri, 4 işlik derleme sınırı
+package.json, pnpm-workspace.yaml   pnpm çalışma alanı (apps/web); kökteki betikler (pnpm dev, test, build, e2e, rust:*, api, db:setup) web komutlarını apps/web'e iletir
 scripts/wasm/ensure.mjs      WASM paketlerini (geometri çekirdeği, dosya biçimleri) kaynak özeti değiştiyse derler (dev/test/build/e2e öncesi)
-scripts/fixtures/            Fixture kaydedicileri (GOLDEN_WRITE=1; record-calls: çağrı kümeleri) ve bağımsız referans üreticileri (Python decimal/fractions)
-scripts/perf/                Build envanteri (bundle.mjs), başlangıç ölçümü (startup.mjs) ve etkileşim ölçümü (interaction.mjs: parsel-50k, hat-1m) → docs/perf/
+scripts/fixtures/            Bağımsız referans üreticileri (Python decimal/fractions; kökten çalıştırılır)
 docs/adr/                    Mimari kararlar (0001 çalışma alanı, 0002 sözleşme ve fixture, 0003 işlem anlamı, 0004 sayısal politika, 0005 performans hedefleri (taslak), 0006 veri katmanı, 0007 kimlik doğrulama, 0008 ortak çekirdek sınırı, 0009 dosya biçimleri)
 docs/perf/                   Ölçüm raporları ve özet (README.md)
 docs/PROCESSING.md           İşlem araçları mimarisi, parametre türleri, çalışma yerleri, modeller, tarif
@@ -971,7 +990,7 @@ docs/STYLE.md                Stil motoru: MPYY araştırması, sembol katmanlar�
 Bu bölüm, `c7450a748c3b0d673ba2676490fedfc339b7cf2a` commit'indeki gerçek
 koda bakılarak 23 Eylül 2026'da güncellendi. Bu commit bir Vite/TypeScript
 tarayıcı uygulamasıdır; Rust crate'i, Cargo workspace, HTTP sunucusu,
-kalıcı proje kaydı ve çoklu tenant henüz yoktur. `src/processing/worker/`
+kalıcı proje kaydı ve çoklu tenant henüz yoktur. `apps/web/src/processing/worker/`
 bir tarayıcı Web Worker'ıdır; sunucu job worker'ı değildir. WebGL2/WebGPU
 arka uçları, stil motoru ve `SceneLayer` sözleşmesi mevcuttur.
 
@@ -1017,18 +1036,18 @@ her CAD kavramının bu tiplere kayıpsız eşleneceğini varsaymayın.
 
 | Mevcut kod                                             | Korunacak davranış                                          | Sunucuya geçiş                                                                                     |
 | ------------------------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `src/model/document.ts`                                | Yerel hızlı edit ve 200 adımlı undo                         | Sunucu kimliği, satır sürümü, beklenen sürümle commit, uzak undo sözleşmesi                        |
-| `src/model/entities.ts`                                | f64 koordinatlar; bulge, delik, elips, spline, ölçü, tarama | Kaynak CAD tanımını sürümle; PostGIS geometri projeksiyonu ile tipli GIS alanları bağla            |
-| `src/core/commands.ts`                                 | Menü/kısayol/komut satırı ortak giriş                       | Kalıcı komut için sürümlü schema, async sonuç, yetki, idempotency                                  |
-| `src/processing/runner.ts` ve `src/processing/worker/` | Bildirimsel araç ve tarayıcı worker'ı                       | Ayrı Rust server executor; işi tüm tarayıcı belgesi yerine dataset/snapshot referansı ile çalıştır |
-| `src/style/*`, `docs/STYLE.md`                         | `.kstil`, MPYY sembolleri, stil derleme                     | Stil belgesini DB'de sürümle; server ve WASM ortak ifade semantiğini fixture ile doğrula           |
-| `src/render/types.ts`, `src/render/webgpu/*`           | Çalışan WebGPU ve WebGL2                                    | Tile streaming, feature ID ve seçili nesne overlay'i; fallback'i koru                              |
-| `src/geo/crs.ts`                                       | SRID kataloğu; atamak/dönüştürmek ayrımı                    | PROJ/PostGIS dönüşümlerini pinlenmiş CRS/grid verisiyle doğrula                                    |
+| `apps/web/src/model/document.ts`                                | Yerel hızlı edit ve 200 adımlı undo                         | Sunucu kimliği, satır sürümü, beklenen sürümle commit, uzak undo sözleşmesi                        |
+| `apps/web/src/model/entities.ts`                                | f64 koordinatlar; bulge, delik, elips, spline, ölçü, tarama | Kaynak CAD tanımını sürümle; PostGIS geometri projeksiyonu ile tipli GIS alanları bağla            |
+| `apps/web/src/core/commands.ts`                                 | Menü/kısayol/komut satırı ortak giriş                       | Kalıcı komut için sürümlü schema, async sonuç, yetki, idempotency                                  |
+| `apps/web/src/processing/runner.ts` ve `apps/web/src/processing/worker/` | Bildirimsel araç ve tarayıcı worker'ı                       | Ayrı Rust server executor; işi tüm tarayıcı belgesi yerine dataset/snapshot referansı ile çalıştır |
+| `apps/web/src/style/*`, `docs/STYLE.md`                         | `.kstil`, MPYY sembolleri, stil derleme                     | Stil belgesini DB'de sürümle; server ve WASM ortak ifade semantiğini fixture ile doğrula           |
+| `apps/web/src/render/types.ts`, `apps/web/src/render/webgpu/*`           | Çalışan WebGPU ve WebGL2                                    | Tile streaming, feature ID ve seçili nesne overlay'i; fallback'i koru                              |
+| `apps/web/src/geo/crs.ts`                                       | SRID kataloğu; atamak/dönüştürmek ayrımı                    | PROJ/PostGIS dönüşümlerini pinlenmiş CRS/grid verisiyle doğrula                                    |
 
 İlk güvenilirlik düzeltmesi: `CadDocument.transact` içindeki `finally`,
 `fn()` hata attığında önceden uygulanmış değişiklikleri de commit edebilir.
 Bunu rollback semantiği ve regresyon testiyle düzeltin. Sunucu transaction'ı
-istemcideki `transact` yerine geçmez. `src/app/commands.ts` içindeki `file.save`
+istemcideki `transact` yerine geçmez. `apps/web/src/app/commands.ts` içindeki `file.save`
 şimdilik yalnızca `dirty=false` yapar; başarılı sunucu commit'i olmadan
 kaydedildi diye göstermeyin.
 
@@ -1043,24 +1062,33 @@ süreçte çalışır; bağlantı havuzu ve sorgu süreleri bütçelenir. Ağır
 hesabı Tokio I/O görevini bloke etmez; sınırlandırılmış CPU havuzu veya
 ayrı worker kullanılır. Stack değişikliği sessizce yapılmaz; ADR gerekir.
 
-Mevcut `src/` ağacını toplu taşımayın. Çalışan dikey dilim ilerledikçe
+Mevcut `apps/web/src/` ağacını toplu taşımayın. Çalışan dikey dilim ilerledikçe
 modüler Cargo workspace ekleyin. İlk kapsam için ayrı Rust **api** ve
 **worker** süreç modları ile ortak uygulama çekirdeği yeterlidir:
 
 ```text
-src/                     mevcut TypeScript arayüzü ve WebGPU/WebGL2
+apps/web/                 TypeScript arayüzü ve WebGPU/WebGL2 (pnpm paketi)
 apps/api/                 Axum: OIDC, feature/command API, TileJSON/MVT, events
 apps/worker/              ağır analiz, import/export, indeks, tile warmup
-crates/shared/contracts/         sürümlü request/response/command; TS tip üretimi
-crates/shared/geometry-core/     saf Rust CAD geometri; native + WASM
-crates/style-core/        sürümlü CAD stil/ifade IR; native + WASM
-crates/server/application/       ortak use case, yetki, işlem ve job sözleşmesi
-crates/server/postgres/          SQLx, PostGIS SQL, migration ve veri repository'si
-crates/tiles/             MVT/TileJSON yayınlama, cache invalidation
-crates/wasm/geometry-wasm/              tarayıcıya dar geometri/stil API'si
+apps/desktop/             (gelecek) wgpu masaüstü CAD/CBS; crates/shared'i native kullanır
+crates/shared/            platformdan bağımsız, web/sunucu/masaüstü ortak kütüphaneler
+  geometry-core/          saf Rust CAD geometri; native + WASM
+  contracts/              sürümlü request/response/command; TS tip üretimi (`ts` özelliği)
+  formats/                dosya biçimleri (DXF, koordinat listeleri)
+  style-core/             sürümlü CAD stil/ifade IR; native + WASM
+crates/wasm/              tarayıcıya dar geometri/stil/biçim API'si (wasm-bindgen)
+crates/server/            yalnız sunucu
+  application/            ortak use case, yetki, işlem ve job sözleşmesi
+  postgres/               SQLx, PostGIS SQL, migration ve veri repository'si
+  tiles/                  MVT/TileJSON yayınlama, cache invalidation
 docs/adr/                 ölçülen mimari kararlar
 benchmarks/               PostGIS/Martin ile karşılaştırılabilir yükler
 ```
+
+`crates/shared` altındaki bir crate Tokio, SQLx, HTTP, DOM, wasm-bindgen ve
+wgpu'ya bağımlı olamaz; tarayıcıya `crates/wasm`, sunucuya `crates/server` ve
+`apps/api`, masaüstüne `apps/desktop` üzerinden açılır (dizin düzeni
+2026-09-24'te kullanıcı kararıyla bu gruplara ayrıldı).
 
 Saf Rust çekirdek Tokio, SQLx, HTTP, DOM ve WebGPU'ya bağımlı değildir.
 UI, CLI, chat ve MCP aynı `application` kullanım durumlarına gider; HTTP,
@@ -1468,12 +1496,12 @@ bundle ayrımı. Sadece klasör açmak başlangıç JS'ini küçültmez; yalnız
 
 Bu commit'te `StyleManager`, `LayerStyleDialog`, `SymbolDesigner` ve
 `ModelDesigner` dinamik import ile açılıyor; bunları tekrar "henüz yok"
-diye raporlamayın. Ancak `src/app/createApp.ts` uygulama başında demo/
-showcase, sistem stil kitaplığı ve işlem penceresini; `src/ui/dock/RightDock.ts`
+diye raporlamayın. Ancak `apps/web/src/app/createApp.ts` uygulama başında demo/
+showcase, sistem stil kitaplığı ve işlem penceresini; `apps/web/src/ui/dock/RightDock.ts`
 görünür olmasa bile `ProcessingPanel`i statik import/oluşturma yoluyla
-yüklüyor. `src/style/system/mpyy/index.ts` içindeki `import.meta.glob`
+yüklüyor. `apps/web/src/style/system/mpyy/index.ts` içindeki `import.meta.glob`
 `eager: true` bütün MPYY sayfa tanımlarını ilk grafiğe alıyor.
-`src/main.ts` stil/model/processing CSS'ini baştan yüklüyor.
+`apps/web/src/main.ts` stil/model/processing CSS'ini baştan yüklüyor.
 `createBackend.ts` her iki renderer'ı import ediyor; varsayılan WebGL2
 oturumunda WebGPU kodunun ayrı chunk olmasını ölçerek değerlendirin.
 

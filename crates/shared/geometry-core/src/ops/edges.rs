@@ -1,4 +1,4 @@
-//! An entity as primitive edges (`src/model/ops/edges.ts`): a new kind takes
+//! An entity as primitive edges (`apps/web/src/model/ops/edges.ts`): a new kind takes
 //! part in intersection, trimming, extending and snapping by giving its edges.
 
 use crate::api::Op;

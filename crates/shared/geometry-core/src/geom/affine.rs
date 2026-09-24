@@ -1,4 +1,4 @@
-//! 2D affine transforms `[a, b, c, d, e, f]` (`src/model/geom/affine.ts`):
+//! 2D affine transforms `[a, b, c, d, e, f]` (`apps/web/src/model/geom/affine.ts`):
 //! x' = a·x + c·y + e, y' = b·x + d·y + f.
 
 use crate::api::Op;

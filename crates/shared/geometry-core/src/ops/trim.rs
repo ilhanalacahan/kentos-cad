@@ -1,5 +1,5 @@
 //! Quick trim and extend, AutoCAD-style: every other visible edge is a
-//! boundary (`src/model/ops/trim.ts`). The target is a path parameterised by
+//! boundary (`apps/web/src/model/ops/trim.ts`). The target is a path parameterised by
 //! arc length; cuts are the s values where boundaries cross it.
 
 use crate::api::Op;

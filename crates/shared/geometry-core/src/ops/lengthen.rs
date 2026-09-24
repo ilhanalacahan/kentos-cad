@@ -1,4 +1,4 @@
-//! Uzat-kısalt, AutoCAD LENGTHEN (`src/model/ops/lengthen.ts`): a line, an
+//! Uzat-kısalt, AutoCAD LENGTHEN (`apps/web/src/model/ops/lengthen.ts`): a line, an
 //! arc or an open polyline gets a new total length, changed at one end.
 //! Shortening cuts the path there (arcs exactly); lengthening continues the
 //! end segment along its direction or on its own circle.

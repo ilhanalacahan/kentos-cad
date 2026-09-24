@@ -1,4 +1,4 @@
-//! Drawing objects and their geometry (`src/model/entities.ts`): the 13
+//! Drawing objects and their geometry (`apps/web/src/model/entities.ts`): the 13
 //! kinds, and the helpers every tool and view uses (vertices, outlines,
 //! bounds, anchors, lengths, areas). An entity keeps the fields the core
 //! does not interpret (id, layer, colour, attributes, label, symbol) as they

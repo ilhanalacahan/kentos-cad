@@ -1,6 +1,6 @@
 //! A copy of the drawing's objects for the hot paths (docs/adr/0008, S1):
 //! picking, object snap and window selection ask it on every pointer move
-//! instead of walking every object in TypeScript (`src/viewport/picking.ts`
+//! instead of walking every object in TypeScript (`apps/web/src/viewport/picking.ts`
 //! is its thin face). It follows the document by object: puts (new objects
 //! go last, known ones keep their place) and removals, and whole reloads.
 //! It keeps the document's order because results that tie (two parcels

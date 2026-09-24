@@ -1,4 +1,4 @@
-//! Object snap tracking, "nesne izleme" (`src/viewport/objectTracking.ts`).
+//! Object snap tracking, "nesne izleme" (`apps/web/src/viewport/objectTracking.ts`).
 //! Points acquired by resting the cursor on a snap emit alignment lines
 //! (horizontal/vertical, plus polar steps when polar tracking is on). The
 //! cursor locks onto the nearest line, or onto the crossing of two lines

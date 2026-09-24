@@ -1,5 +1,5 @@
 //! Planar arrangement of straight and circular edges: steps 1–3 of the
-//! overlay (`src/model/geom/arrangement.ts`, see overlay.rs).
+//! overlay (`apps/web/src/model/geom/arrangement.ts`, see overlay.rs).
 //!
 //!   1. Every edge is cut where it meets another (crossings, touches,
 //!      overlaps), giving pieces that only meet at their ends.

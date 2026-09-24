@@ -1,5 +1,5 @@
 //! The golden cases shared with the TypeScript core (`fixtures/geometry/v1`,
-//! checked on the TS side by `src/model/geom/golden.test.ts`): the Rust port
+//! checked on the TS side by `apps/web/src/model/geom/golden.test.ts`): the Rust port
 //! must reproduce every recorded result within the file's tolerance.
 
 // Test harness code, not the core: the std float methods are fine here.

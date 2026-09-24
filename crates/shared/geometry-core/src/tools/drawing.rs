@@ -1,4 +1,4 @@
-//! The drawing tools' constructions (`src/tools/shapeTools.ts`,
+//! The drawing tools' constructions (`apps/web/src/tools/shapeTools.ts`,
 //! `curveTools.ts`, `ellipseTool.ts`, `constructionTools.ts`, `pathTool.ts`,
 //! `annotateTools.ts`, `markupTools.ts`): directions and angles, the
 //! typed-radius polygon, the arc continuation, circle and ellipse helpers,

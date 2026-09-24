@@ -6,7 +6,7 @@
 //! - Numbers parse with `str::parse::<f64>` (correctly rounded) and are
 //!   written in their shortest round-trip form, so values cross bit for bit.
 //! - NaN and ±∞ are written as the strings `"#NaN"`, `"#Inf"` and `"#-Inf"`
-//!   (`src/wasm/core.ts` turns them back into numbers, and writes them so
+//!   (`apps/web/src/wasm/core.ts` turns them back into numbers, and writes them so
 //!   in arguments). A bare `null` where a number is required reads as NaN.
 //! - A missing object field reads as `null`; `Option` fields that are
 //!   `None` are left out, as TypeScript leaves out undefined properties.

@@ -1,4 +1,4 @@
-//! Object snap on the store (`PickIndex.snap`, `src/viewport/picking.ts`):
+//! Object snap on the store (`PickIndex.snap`, `apps/web/src/viewport/picking.ts`):
 //! endpoints, midpoints, centres, nodes, quadrants, intersections,
 //! perpendicular and tangent points from the last point, nearest. At equal
 //! distance the more meaningful kind wins; "nearest" only when nothing else

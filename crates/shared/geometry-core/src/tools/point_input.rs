@@ -1,5 +1,5 @@
-//! Point input (`src/tools/coordinateInput.ts`, `src/tools/tracking.ts`,
-//! `src/tools/pointCalc.ts`): typed relative, polar and distance input, the
+//! Point input (`apps/web/src/tools/coordinateInput.ts`, `apps/web/src/tools/tracking.ts`,
+//! `apps/web/src/tools/pointCalc.ts`): typed relative, polar and distance input, the
 //! ortho and polar cursor, and the point calculator's own arithmetic around
 //! the surveying constructions (`geom::survey`).
 

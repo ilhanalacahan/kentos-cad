@@ -1,4 +1,4 @@
-//! The geometry kernel (`src/model/geom`), one Rust module per TypeScript file.
+//! The geometry kernel (`apps/web/src/model/geom`), one Rust module per TypeScript file.
 
 pub mod affine;
 pub mod arc;

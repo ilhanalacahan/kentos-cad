@@ -1,5 +1,5 @@
 //! Surveying point constructions, "Koordinat hesap makinası"
-//! (`src/model/geom/survey.ts`): abscissa along A→B, ordinate square to it
+//! (`apps/web/src/model/geom/survey.ts`): abscissa along A→B, ordinate square to it
 //! and positive to the right; horizontal angles clockwise.
 
 use crate::api::Op;

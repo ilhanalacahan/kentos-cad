@@ -1,4 +1,4 @@
-//! Fillet and chamfer (`src/model/ops/fillet.ts`): two lines joined by a
+//! Fillet and chamfer (`apps/web/src/model/ops/fillet.ts`): two lines joined by a
 //! tangent arc or a straight cut, and the same at a corner of a path.
 
 use crate::api::Op;

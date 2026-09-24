@@ -1,4 +1,4 @@
-//! Join (`src/model/ops/join.ts`): lines, arcs and open polylines whose ends
+//! Join (`apps/web/src/model/ops/join.ts`): lines, arcs and open polylines whose ends
 //! meet become polylines with arc segments; a chain that returns to its
 //! start becomes a closed polygon. Entities that connect to nothing are
 //! left out.

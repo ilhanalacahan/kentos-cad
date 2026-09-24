@@ -1,4 +1,4 @@
-//! Entity operations (`src/model/ops`), one Rust module per TypeScript file.
+//! Entity operations (`apps/web/src/model/ops`), one Rust module per TypeScript file.
 
 pub mod areas;
 pub mod breaking;

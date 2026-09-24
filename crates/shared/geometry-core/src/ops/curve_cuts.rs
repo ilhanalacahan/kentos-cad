@@ -1,5 +1,5 @@
 //! Trim, break, extend and offset for the curves that are not paths of
-//! segments and circular arcs (`src/model/ops/curveCuts.ts`): ellipses (cut
+//! segments and circular arcs (`apps/web/src/model/ops/curveCuts.ts`): ellipses (cut
 //! in parameter space, pieces stay elliptical arcs) and construction lines
 //! (pieces become rays or lines, as AutoCAD does).
 

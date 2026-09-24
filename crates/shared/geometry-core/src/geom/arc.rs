@@ -1,4 +1,4 @@
-//! Angles, circles and arcs (`src/model/geom/arc.ts`).
+//! Angles, circles and arcs (`apps/web/src/model/geom/arc.ts`).
 
 use crate::api::Op;
 use crate::jsmath::{TAU, atan2, cos, js_hypot, js_max, sin, tan};

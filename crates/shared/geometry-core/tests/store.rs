@@ -1,6 +1,6 @@
 //! The geometry store against the frozen answers of the TypeScript
 //! PickIndex it replaced (`fixtures/geometry/v1/store-v1.json`, recorded by
-//! `scripts/fixtures/record-store.test.ts`; docs/adr/0008, S1): picking,
+//! `apps/web/scripts/fixtures/record-store.test.ts`; docs/adr/0008, S1): picking,
 //! edge picking, snapping, window and crossing selection, enclosing shapes,
 //! overlapping objects, boundary edges, labels and grips on a fixed scene,
 //! the tool previews and totals (trim, extend, ghosts, stretch ghosts,
@@ -8,7 +8,7 @@
 //! expressions' geometry values; and what the processing tools ask
 //! (`store-processing.json`, S4): the box test, corner numbering and
 //! edge-length labels by id. The WASM build runs the same files
-//! (`src/wasm/store.wasm.test.ts`).
+//! (`apps/web/src/wasm/store.wasm.test.ts`).
 
 // Test harness code, not the core: the std float methods are fine here.
 #![allow(clippy::disallowed_methods)]

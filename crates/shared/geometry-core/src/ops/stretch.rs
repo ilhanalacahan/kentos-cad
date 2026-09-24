@@ -1,4 +1,4 @@
-//! Stretch, "Esnet" (`src/model/ops/stretch.ts`): vertices inside the
+//! Stretch, "Esnet" (`apps/web/src/model/ops/stretch.ts`): vertices inside the
 //! crossing window move by (dx, dy), the rest stay; None when nothing of
 //! the entity lies in the window.
 

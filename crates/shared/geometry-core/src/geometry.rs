@@ -1,4 +1,4 @@
-//! Points, bounds, rings and bearings (`src/model/geometry.ts`), ported
+//! Points, bounds, rings and bearings (`apps/web/src/model/geometry.ts`), ported
 //! operation for operation (docs/adr/0008).
 
 use crate::api::Op;

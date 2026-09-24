@@ -1,4 +1,4 @@
-//! Polyline arc segments in the DXF "bulge" form (`src/model/geom/bulge.ts`):
+//! Polyline arc segments in the DXF "bulge" form (`apps/web/src/model/geom/bulge.ts`):
 //! segment pts[i] → pts[i+1] carries bulge = tan(θ/4), θ its included
 //! angle, positive counter-clockwise; 0 is a straight segment.
 

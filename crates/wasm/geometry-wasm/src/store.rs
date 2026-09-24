@@ -1,6 +1,6 @@
 //! The geometry store across the boundary (docs/adr/0008, S1): objects go
 //! in as JSON (puts, removals, the layer table), queries take numbers and
-//! give back flat arrays of numbers. `src/viewport/picking.ts` holds one per
+//! give back flat arrays of numbers. `apps/web/src/viewport/picking.ts` holds one per
 //! view; the clipboard has its own.
 
 use kentos_geometry_core::Vec2;
@@ -68,7 +68,7 @@ impl GeometryStore {
             .map_err(|e| JsError::new(&format!("Geometri deposu nesneleri okuyamadı: {e}")))
     }
 
-    /// Adds or replaces packed objects (`src/wasm/pack.ts`): the numbers and
+    /// Adds or replaces packed objects (`apps/web/src/wasm/pack.ts`): the numbers and
     /// a JSON array of the strings they point at.
     #[wasm_bindgen(js_name = putPacked)]
     pub fn put_packed(&mut self, nums: &[f64], strings: &str) -> Result<u32, JsError> {

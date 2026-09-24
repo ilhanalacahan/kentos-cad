@@ -1,4 +1,4 @@
-//! Corner numbering (`src/processing/builtin/numbering.ts`, "Köşe noktalarını
+//! Corner numbering (`apps/web/src/processing/builtin/numbering.ts`, "Köşe noktalarını
 //! numarala"): the order a ring is walked in, one number per location across
 //! many shapes (neighbouring parcels share their common corners, points
 //! already on the target layer keep theirs), the outward direction at a

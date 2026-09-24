@@ -53,7 +53,7 @@ fn points(out: &mut Vec<f64>, pts: &[Vec2]) {
 }
 
 /// A ring, turned to counter-clockwise (`Some(true)`) or clockwise by its
-/// signed area as `oriented` in `src/style/geometry.ts` turned it; `own`:
+/// signed area as `oriented` in `apps/web/src/style/geometry.ts` turned it; `own`:
 /// these are the object's own points (sent as a reference).
 fn ring(out: &mut Vec<f64>, pts: &[Vec2], own: bool, ccw: Option<bool>) {
     let turn = ccw.is_some_and(|ccw| (signed_area(pts) > 0.0) != ccw);

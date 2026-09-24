@@ -1,4 +1,4 @@
-//! Ear-clipping triangulation of a ring with holes (`src/render/triangulate.ts`),
+//! Ear-clipping triangulation of a ring with holes (`apps/web/src/render/triangulate.ts`),
 //! ported operation for operation (docs/adr/0008). Holes are first joined to
 //! the outer ring by bridges (Eberly, "Triangulation by Ear Clipping"), giving
 //! one weakly simple ring for the ear clipper.

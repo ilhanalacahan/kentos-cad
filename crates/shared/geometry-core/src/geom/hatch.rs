@@ -1,4 +1,4 @@
-//! Hatch lines clipped to a ring and its holes (`src/model/geom/hatch.ts`):
+//! Hatch lines clipped to a ring and its holes (`apps/web/src/model/geom/hatch.ts`):
 //! even–odd rule, lines on world-anchored multiples of the spacing so
 //! neighbouring hatches line up across shared boundaries.
 

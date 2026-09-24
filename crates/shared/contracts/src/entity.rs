@@ -1,4 +1,4 @@
-//! Drawing objects (`Entity` in `src/model/entities.ts`), version 1.
+//! Drawing objects (`Entity` in `apps/web/src/model/entities.ts`), version 1.
 
 use std::collections::BTreeMap;
 

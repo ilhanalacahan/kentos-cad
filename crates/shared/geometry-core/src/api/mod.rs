@@ -2,7 +2,7 @@
 //! by the name of its TypeScript counterpart. Arguments arrive as a JSON
 //! array (positional, `undefined` written as `null`), the result leaves as
 //! JSON (`json` keeps NaN and ±∞). The WASM crate exposes this table to
-//! `src/wasm/core.ts`, and the golden fixtures run through it natively, so
+//! `apps/web/src/wasm/core.ts`, and the golden fixtures run through it natively, so
 //! both targets are checked on the very path the app takes. Hot paths
 //! (snapping, picking, layer geometry) have typed entry points instead.
 

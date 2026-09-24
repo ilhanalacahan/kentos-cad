@@ -1,4 +1,4 @@
-//! Explode (`src/model/ops/explode.ts`): a compound entity breaks into simple
+//! Explode (`apps/web/src/model/ops/explode.ts`): a compound entity breaks into simple
 //! ones. Paths become lines and arcs (holes included), a spline a polyline
 //! through its curve, a dimension lines, an arc and its text, a patterned
 //! hatch its lines. The dimension's value text comes in already formatted

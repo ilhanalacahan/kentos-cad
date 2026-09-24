@@ -1,4 +1,4 @@
-//! Placement of edge-length labels, "kenar ölçüleri" (`src/model/ops/edgeLabels.ts`):
+//! Placement of edge-length labels, "kenar ölçüleri" (`apps/web/src/model/ops/edgeLabels.ts`):
 //! centred on each edge, lifted outside a ring (left of an open path) by a
 //! gap proportional to the text height; arcs labelled with their length.
 

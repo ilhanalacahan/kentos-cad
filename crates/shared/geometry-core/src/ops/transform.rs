@@ -1,5 +1,5 @@
 //! A similarity transform (move, rotate, uniform scale, mirror) applied to
-//! any entity (`src/model/ops/transform.ts`). The result keeps the id and
+//! any entity (`apps/web/src/model/ops/transform.ts`). The result keeps the id and
 //! every other field; mirrored text stays readable (MIRRTEXT = 0).
 
 use crate::api::Op;

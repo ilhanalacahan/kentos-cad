@@ -1,6 +1,6 @@
 //! Circles tangent to two edges with a given radius ("Teğet, teğet,
 //! yarıçap") and to three edges ("Teğet, teğet, teğet"; Apollonius)
-//! (`src/model/geom/tangentCircle.ts`). Lines count as infinite, arcs as
+//! (`apps/web/src/model/geom/tangentCircle.ts`). Lines count as infinite, arcs as
 //! their full circle; the solution whose tangent points are nearest the
 //! picked points wins.
 

@@ -7,6 +7,7 @@
     "wasm": "node scripts/wasm/ensure.mjs",
     "dev": "pnpm -C apps/web dev",
     "build": "pnpm -C apps/web build",
+    "typecheck": "pnpm -C apps/web exec tsc --noEmit -p .",
     "preview": "pnpm -C apps/web preview",
     "test": "pnpm -C apps/web test",
     "test:watch": "pnpm -C apps/web test:watch",

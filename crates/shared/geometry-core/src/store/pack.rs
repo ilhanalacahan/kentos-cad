@@ -3,7 +3,7 @@
 //! parcels is 26 MB and builds a tree of millions of small values before a
 //! single object is read; the packed form is one run of numbers and a short
 //! list of strings (layer ids, texts), read straight into shapes.
-//! `src/wasm/pack.ts` writes it. Every number is a float64, so ids and
+//! `apps/web/src/wasm/pack.ts` writes it. Every number is a float64, so ids and
 //! coordinates arrive bit for bit (−0 and NaN included).
 //!
 //! Per object: `id, layer, label, kind`, then the kind's fields:

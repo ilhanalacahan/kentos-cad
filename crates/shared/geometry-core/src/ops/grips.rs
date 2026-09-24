@@ -1,4 +1,4 @@
-//! Grip points and what moving one means (`src/model/ops/grips.ts`). The
+//! Grip points and what moving one means (`apps/web/src/model/ops/grips.ts`). The
 //! order is stable: `move_grip` reads the index the way `entity_grips` lists it.
 
 use crate::api::Op;

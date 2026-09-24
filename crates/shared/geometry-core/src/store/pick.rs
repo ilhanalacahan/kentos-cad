@@ -1,4 +1,4 @@
-//! Picking and selection on the store (`src/viewport/picking.ts`), ported
+//! Picking and selection on the store (`apps/web/src/viewport/picking.ts`), ported
 //! rule for rule: points and edges before interiors, the smallest area
 //! containing the cursor, window and crossing selection, the smallest
 //! closed shape around a point. Candidates come in the document's order and

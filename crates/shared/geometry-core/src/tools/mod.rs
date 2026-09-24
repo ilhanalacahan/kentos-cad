@@ -2,8 +2,8 @@
 //! (docs/adr/0008, S5): typed point input, the ortho and polar cursor,
 //! object tracking, the point calculator's own arithmetic, and each tool's
 //! constructions (directions, typed-radius polygons, arc bulges, corners,
-//! transforms, dimension arms). The tools in `src/tools` and
-//! `src/viewport` only pick, preview and record; camera and screen pixels
+//! transforms, dimension arms). The tools in `apps/web/src/tools` and
+//! `apps/web/src/viewport` only pick, preview and record; camera and screen pixels
 //! stay there.
 
 pub mod drawing;

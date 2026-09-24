@@ -1,4 +1,4 @@
-//! Area algebra on the overlay engine (`src/model/geom/region.ts`): union,
+//! Area algebra on the overlay engine (`apps/web/src/model/geom/region.ts`): union,
 //! intersection, difference, splitting by lines, and the faces that line
 //! work encloses. Areas are exact (arcs stay arcs) and may have holes.
 

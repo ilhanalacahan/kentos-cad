@@ -1,5 +1,5 @@
 //! The DXF reader on the files in `fixtures/formats/v1/` (each built to
-//! test one feature; the WASM test `src/io/formats.wasm.test.ts` reads the
+//! test one feature; the WASM test `apps/web/src/io/formats.wasm.test.ts` reads the
 //! same files): every entity kind, object coordinate systems, nested and
 //! array inserts, hatches with islands, dimensions, and files that are not
 //! DXF at all. Expected values are worked out by hand from the file.

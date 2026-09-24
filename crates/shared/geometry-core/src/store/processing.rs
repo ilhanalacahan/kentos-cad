@@ -1,7 +1,7 @@
 //! What the processing tools ask the store (docs/adr/0008, S4): the
 //! "visible" scope's box test, corner numbering and edge-length labels of
 //! objects by id. A run builds a store of the objects it reads, in the page
-//! and in the processing worker alike (`src/processing/geometry.ts`), so
+//! and in the processing worker alike (`apps/web/src/processing/geometry.ts`), so
 //! both run this same code; the viewport's store answers the box test.
 
 use super::{Store, padded};

@@ -1,4 +1,4 @@
-//! Parallel copy of an entity (`src/model/ops/offset.ts`): circles and arcs
+//! Parallel copy of an entity (`apps/web/src/model/ops/offset.ts`): circles and arcs
 //! grow or shrink about their centre, paths are offset with mitred corners,
 //! ellipses and construction lines by their own rules.
 

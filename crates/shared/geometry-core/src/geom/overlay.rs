@@ -1,4 +1,4 @@
-//! Planar overlay of straight and circular edges (`src/model/geom/overlay.ts`),
+//! Planar overlay of straight and circular edges (`apps/web/src/model/geom/overlay.ts`),
 //! the engine behind area booleans, splitting and "click inside to make an
 //! area". The arrangement cuts and classifies the pieces; this file chains
 //! the kept pieces into rings, always turning so the result stays on the

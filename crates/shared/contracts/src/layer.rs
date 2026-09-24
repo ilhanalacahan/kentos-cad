@@ -1,4 +1,4 @@
-//! The layer tree and its simple look (`LayerNode`, `LayerStyle` in `src/model/layers.ts`).
+//! The layer tree and its simple look (`LayerNode`, `LayerStyle` in `apps/web/src/model/layers.ts`).
 
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts")]

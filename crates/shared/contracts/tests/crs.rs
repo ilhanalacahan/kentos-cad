@@ -1,5 +1,5 @@
 //! The CRS registry file (`fixtures/crs/v1/registry.json`, written from
-//! `src/geo/crs.ts`, the single source of CRS metadata) checked against EPSG
+//! `apps/web/src/geo/crs.ts`, the single source of CRS metadata) checked against EPSG
 //! facts written out here independently: SRID ↔ zone, ellipsoid, scale
 //! factor and false origin of every system, and the TUREF zone suggestion
 //! (nearest central meridian; on a boundary the western zone).

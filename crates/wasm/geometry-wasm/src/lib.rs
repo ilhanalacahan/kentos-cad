@@ -22,7 +22,7 @@ fn points(xy: &[f64]) -> Vec<Vec2> {
     xy.chunks_exact(2).map(|c| Vec2::new(c[0], c[1])).collect()
 }
 
-/// The id of a core operation by its TypeScript name (`src/wasm/core.ts`
+/// The id of a core operation by its TypeScript name (`apps/web/src/wasm/core.ts`
 /// asks once per operation), or −1 when this build has no such operation.
 #[wasm_bindgen(js_name = opId)]
 pub fn op_id(name: &str) -> i32 {

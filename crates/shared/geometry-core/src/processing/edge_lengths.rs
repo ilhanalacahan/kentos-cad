@@ -1,5 +1,5 @@
 //! Edge-length labels for many shapes at once
-//! (`src/processing/builtin/edgeLengths.ts`, "Kenar uzunluklarını yaz"): every
+//! (`apps/web/src/processing/builtin/edgeLengths.ts`, "Kenar uzunluklarını yaz"): every
 //! edge of lines, polylines and polygons gets its length where
 //! `ops::edge_labels` puts it, and an edge two shapes share is labelled once.
 //! Shared means the same two ends on a millimetre grid and the same length in

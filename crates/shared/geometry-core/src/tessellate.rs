@@ -111,7 +111,7 @@ pub fn ellipse_points(
     (pts, full)
 }
 
-// ── Centripetal Catmull-Rom (the same curve as src/model/geom/spline.ts) ──
+// ── Centripetal Catmull-Rom (the same curve as apps/web/src/model/geom/spline.ts) ──
 
 fn reflect(a: Vec2, b: Vec2) -> Vec2 {
     Vec2::new(2.0 * b.x - a.x, 2.0 * b.y - a.y)

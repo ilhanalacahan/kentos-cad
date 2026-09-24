@@ -1,4 +1,4 @@
-//! Centripetal Catmull-Rom curve through fit points (`src/model/geom/spline.ts`,
+//! Centripetal Catmull-Rom curve through fit points (`apps/web/src/model/geom/spline.ts`,
 //! Barry–Goldman evaluation, α = 0.5).
 
 use crate::api::Op;

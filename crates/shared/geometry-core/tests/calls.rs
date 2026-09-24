@@ -1,7 +1,7 @@
 //! The frozen call fixtures (`fixtures/geometry/v1/calls-*.json`, recorded
 //! from the TypeScript core, docs/adr/0008) through the core's call table,
 //! natively. The WASM build runs the same files through the app's path
-//! (`src/wasm/calls.wasm.test.ts`).
+//! (`apps/web/src/wasm/calls.wasm.test.ts`).
 
 // Test harness code, not the core: the std float methods are fine here.
 #![allow(clippy::disallowed_methods)]

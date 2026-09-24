@@ -1,4 +1,4 @@
-//! Path offsets (`src/model/geom/offset.ts`): mitred corners with a bevel
+//! Path offsets (`apps/web/src/model/geom/offset.ts`): mitred corners with a bevel
 //! past the limit; bulged paths grow or shrink their arcs about the centre.
 
 use crate::api::Op;

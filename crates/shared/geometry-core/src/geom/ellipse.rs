@@ -1,4 +1,4 @@
-//! Ellipses and elliptical arcs in the DXF ELLIPSE form (`src/model/geom/ellipse.ts`):
+//! Ellipses and elliptical arcs in the DXF ELLIPSE form (`apps/web/src/model/geom/ellipse.ts`):
 //! P(t) = c + major·cos t + minor·sin t, minor = major turned +90° × ratio.
 
 use crate::api::Op;

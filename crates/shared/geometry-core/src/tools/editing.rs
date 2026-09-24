@@ -1,5 +1,5 @@
 //! The modify, corner and dimension tools' constructions
-//! (`src/tools/modifyTools.ts`, `arrangeTools.ts`, `cornerTools.ts`,
+//! (`apps/web/src/tools/modifyTools.ts`, `arrangeTools.ts`, `cornerTools.ts`,
 //! `dimensionTool.ts`): rotation and scale parameters, polar array and align
 //! transforms, the corner a fillet or chamfer works on and its pieces, and
 //! the arms of angular and radial dimensions — what those tools computed

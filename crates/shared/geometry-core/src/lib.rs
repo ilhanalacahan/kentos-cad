@@ -1,6 +1,6 @@
 //! Pure analytic CAD geometry, shared by the browser (through `kentos-geometry-wasm`)
 //! and the server. It is a faithful port of the TypeScript core in
-//! `src/model/geom` and `src/model/geometry.ts`: same formulas, same order of
+//! `apps/web/src/model/geom` and `apps/web/src/model/geometry.ts`: same formulas, same order of
 //! operations, same tolerances, so both sides agree on the golden fixtures in
 //! `fixtures/geometry/`. Coordinates are float64 world units (metres);
 //! nothing here knows pixels, documents or I/O.

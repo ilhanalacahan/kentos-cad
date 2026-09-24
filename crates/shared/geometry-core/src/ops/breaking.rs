@@ -1,4 +1,4 @@
-//! Break, "Kır" (`src/model/ops/break.ts`): removes the part between two
+//! Break, "Kır" (`apps/web/src/model/ops/break.ts`): removes the part between two
 //! picked points; with p2 = p1 the object is split there. On closed shapes
 //! the removed part runs counter-clockwise from p1 to p2.
 

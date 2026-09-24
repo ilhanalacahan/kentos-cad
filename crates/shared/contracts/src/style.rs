@@ -1,4 +1,4 @@
-//! The .kstil style file (`StyleFile` in `src/style/file.ts`), version 1.
+//! The .kstil style file (`StyleFile` in `apps/web/src/style/file.ts`), version 1.
 //! Library items stay opaque here until the style core moves to Rust
 //! (`crates/style-core`, CLAUDE.md §14); the TypeScript reader validates them.
 

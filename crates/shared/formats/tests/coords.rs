@@ -1,5 +1,5 @@
 //! Coordinate lists from `fixtures/formats/v1/` (the same files the WASM
-//! test reads, `src/io/formats.wasm.test.ts`): Netcad NCN, a Turkish
+//! test reads, `apps/web/src/io/formats.wasm.test.ts`): Netcad NCN, a Turkish
 //! spreadsheet in Windows-1254 with decimal commas, a list with bad lines,
 //! and Excel's UTF-16 text. Every coordinate is the float64 nearest to the
 //! file's decimal (compared bit for bit with Rust's own literal).

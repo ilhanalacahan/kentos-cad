@@ -1,5 +1,5 @@
 //! The drawing snapshot the TypeScript app writes (recorded as
-//! `fixtures/document/v1/sample.json` from `src/model/snapshotSample.ts`)
+//! `fixtures/document/v1/sample.json` from `apps/web/src/model/snapshotSample.ts`)
 //! reads into the Rust contracts and writes back to the same JSON, every
 //! float64 kept; unknown formats and versions are refused.
 

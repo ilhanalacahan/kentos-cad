@@ -1,4 +1,4 @@
-//! Dimension layout (`src/model/geom/dimension.ts`): extension lines with a
+//! Dimension layout (`apps/web/src/model/geom/dimension.ts`): extension lines with a
 //! gap, the dimension line or arc with oblique ticks, the value readable
 //! left to right. `dimensionLabel` (formatting) stays in TypeScript.
 

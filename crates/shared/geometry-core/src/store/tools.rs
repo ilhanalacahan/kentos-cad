@@ -168,7 +168,7 @@ fn loose_box(it: &Item) -> bool {
 }
 
 /// Paths to stroke for an object's outline, as `strokeGeometry` draws it
-/// (`src/tools/preview.ts`): `flags, n, x0, y0, …` per path, flags 0 open,
+/// (`apps/web/src/tools/preview.ts`): `flags, n, x0, y0, …` per path, flags 0 open,
 /// 1 closed, 2 a marker (points and text: one point, drawn as a square).
 pub fn outline_paths(s: &Shape, out: &mut Vec<f64>) {
     let path = |out: &mut Vec<f64>, flags: f64, pts: &[Vec2]| {

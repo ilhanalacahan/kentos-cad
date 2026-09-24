@@ -1,4 +1,4 @@
-//! Entities ↔ areas for the area tools (`src/model/ops/areas.ts`). Polygons
+//! Entities ↔ areas for the area tools (`apps/web/src/model/ops/areas.ts`). Polygons
 //! and circles convert exactly (a circle is two half-circle bulges); a full
 //! ellipse or a closed spline becomes a fine polygon within 1 mm of the
 //! curve, since an area has only straight and circular edges.

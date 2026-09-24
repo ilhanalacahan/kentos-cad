@@ -1,4 +1,4 @@
-//! Adding and removing path vertices (`src/model/ops/vertex.ts`). An arc
+//! Adding and removing path vertices (`apps/web/src/model/ops/vertex.ts`). An arc
 //! segment split by a new vertex keeps its circle.
 
 use crate::api::Op;

@@ -1,5 +1,5 @@
 //! The file formats in the browser. The formats Web Worker
-//! (`src/io/formatsWorker.ts`) loads this module the first time the user
+//! (`apps/web/src/io/formatsWorker.ts`) loads this module the first time the user
 //! imports or exports a file; it never loads at start-up (CLAUDE.md §20).
 //! Files cross as bytes; options and results as JSON (the contracts in
 //! `kentos_contracts::formats`), whose float64 values serde_json writes as

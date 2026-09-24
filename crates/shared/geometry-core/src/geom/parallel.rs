@@ -1,4 +1,4 @@
-//! Netcad "Paralel çizgi" (`src/model/geom/parallel.ts`): the two sides of an
+//! Netcad "Paralel çizgi" (`apps/web/src/model/geom/parallel.ts`): the two sides of an
 //! axis at a left and a right distance, and the corridor between them as an area.
 
 use crate::api::Op;
