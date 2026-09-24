@@ -111,6 +111,29 @@ case("TM noktadan teğet noktaları", "tangentPoints", [tp, tc, 6],
 # Arc length of a quarter circle and a TM arc through three points (radius from a root).
 case("çeyrek yay uzunluğu (5π)", "arcLength", [{"c": {"x": 0, "y": 0}, "r": 10, "a0": 0, "a1": float(PI / 2)}], format(5 * PI, "f"), "1e-12")
 
+# offsetPath: an axis-aligned TM square pushed out by 0.5 m — the mitred corners are exact.
+sq = [T("0", "0"), T("10", "0"), T("10", "10"), T("0", "10")]
+off = F(1, 2)
+corners = [(-off, -off), (off, -off), (off, off), (-off, off)]
+case("TM karenin dışa ötelemesi", "offsetPath", [[q[0] for q in sq], -0.5, True],
+     # Right of travel on a counter-clockwise ring is outside: offset −0.5.
+     [{"x": D(q[1][0] + dx), "y": D(q[1][1] + dy)} for q, (dx, dy) in zip(sq, corners)], "1e-9")
+
+# hatchLines at 0°, spacing 1 m on the same square: lines on whole northings, ends on the sides.
+from decimal import ROUND_CEILING
+first = N.to_integral_value(rounding=ROUND_CEILING)
+lines = []
+k = first
+while k <= N + 10:
+    lines.append([{"x": D(F(E)), "y": D(F(k))}, {"x": D(F(E + 10)), "y": D(F(k))}])
+    k += 1
+case("TM karesine 0° tarama (1 m)", "hatchLines", [[q[0] for q in sq], 0, 1], {"segments": lines, "capped": False}, "1e-9")
+
+# layoutDimension: an aligned dimension measures the exact distance.
+(da, DA), (db, DB) = T("0", "0"), T("33.3", "-12.25")
+case("TM hizalı ölçü değeri", "layoutDimension", [{"a": da, "b": db, "offset": 2, "height": 1}],
+     {"value": format(sqrt((DB[0] - DA[0]) ** 2 + (DB[1] - DA[1]) ** 2), "f")}, "1e-9")
+
 doc = {
     "format": "kentos.geometry-call-reference",
     "version": 1,

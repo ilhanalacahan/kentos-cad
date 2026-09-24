@@ -20,7 +20,7 @@ for (const [path, text] of Object.entries(files)) {
       expect(file.cases.length).toBeGreaterThan(0);
     });
     it('every case matches', () => {
-      const failures = file.cases.map((c) => sameResult(toJson(callNamed(c.fn, c.args)), c.expect, file.tolerance, `${c.fn}: ${c.name}`)).filter(Boolean);
+      const failures = file.cases.map((c) => sameResult(toJson(callNamed(c.fn, c.args)), c.expect, c.tol ?? file.tolerance, `${c.fn}: ${c.name}`)).filter(Boolean);
       expect(failures.slice(0, 5).join('\n')).toBe('');
     });
   });

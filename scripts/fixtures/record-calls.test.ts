@@ -21,7 +21,8 @@ it.runIf(!!process.env.GOLDEN_WRITE)('records the TypeScript reference into the 
       cases: callsOf(set, KEEP).map((c) => {
         const ts = set.fns[c.fn] as ((...a: unknown[]) => unknown) | undefined;
         if (!ts) throw new Error(`${set.file}: “${c.fn}” için TypeScript işlevi yok`);
-        return { ...c, args: toJson(c.args) as unknown[], expect: toJson(ts(...c.args)) };
+        const tol = set.tolerance?.[c.fn];
+        return { ...c, args: toJson(c.args) as unknown[], expect: toJson(ts(...c.args)), ...(tol ? { tol } : {}) };
       }),
     };
     // One case per line: small files, readable diffs.

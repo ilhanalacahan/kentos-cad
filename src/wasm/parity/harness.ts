@@ -30,6 +30,12 @@ export interface Call {
 export interface CallSet {
   /** Fixture file name under fixtures/geometry/v1. */
   file: string;
+  /**
+   * A wider bound for an operation whose result is sensitive to the last bit
+   * of sin/cos (V8 and libm differ there, docs/adr/0008), with the reason;
+   * the recorder writes it into every case of that operation.
+   */
+  tolerance?: Record<string, Tolerance & { why: string }>;
   /** The TypeScript functions, by operation name (the reference while they exist). */
   fns: Record<string, (...args: never[]) => unknown>;
   named: Call[];
@@ -42,7 +48,7 @@ export interface CallFile {
   version: 1;
   tolerance: Tolerance;
   crs: { kind: 'projected'; unit: 'metre'; note: string };
-  cases: (Call & { expect: unknown })[];
+  cases: (Call & { expect: unknown; tol?: Tolerance & { why: string } })[];
 }
 
 /** Deterministic random numbers (mulberry32): the same seed gives the same calls everywhere. */

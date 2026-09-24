@@ -659,7 +659,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 
 **Rust testleri** (`pnpm rust:test`: `cargo test` + clippy `-D warnings`):
 - `crates/geometry-core/tests/golden.rs`: TS ile aynı golden dosya ve bağımsız referanslar;
-- `tests/calls.rs`: dondurulmuş çağrı fixture'ları çekirdeğin çağrı tablosundan ve bağımsız referans (`reference-calls.json`); `jsmath` (Math.round, sign, min/max, V8 `Math.hypot`), `api` (JSON yazıcı: NaN/±∞, en kısa sayı biçimi; çağrı tablosu);
+- `tests/calls.rs`: dondurulmuş çağrı fixture'ları çekirdeğin çağrı tablosundan (durumun gerekçeli `tol` sınırıyla) ve bağımsız referans (`reference-calls.json`); `jsmath` (Math.round, sign, min/max, V8 `Math.hypot`), `api` (JSON yazıcı: NaN/±∞, en kısa sayı biçimi; çağrı tablosu);
 - `tests/numeric.rs`: §23 yuvarlama, hisse ve dağıtım, Python'la üretilmiş dosyalara karşı;
 - `crates/contracts/tests/document.rs`: .kcad örneğinin gidiş-dönüşü ve reddi;
 - `tests/crs.rs`: CRS kaydının EPSG değerleri;

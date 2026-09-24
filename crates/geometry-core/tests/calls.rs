@@ -92,6 +92,11 @@ fn every_call_fixture_matches_the_typescript_reference() {
                 c["name"].as_str().unwrap()
             );
             let args = serde_json::to_string(&c["args"]).unwrap();
+            // A case may carry a wider, documented bound (sin/cos-sensitive operations).
+            let (abs, rel) = match c.get("tol") {
+                Some(t) => (t["abs"].as_f64().unwrap(), t["rel"].as_f64().unwrap()),
+                None => (abs, rel),
+            };
             let got = run_named(c["fn"].as_str().unwrap(), &args).and_then(|out| {
                 serde_json::from_str::<Value>(&out).map_err(|e| format!("çıktı JSON değil: {e}"))
             });

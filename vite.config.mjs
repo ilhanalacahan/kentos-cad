@@ -61,5 +61,7 @@ function kentosApi() {
 export default defineConfig({
   plugins: [kentosApi()],
   worker: { format: 'es' },
-  test: { setupFiles: ['src/wasm/testSetup.ts'] },
+  // Agents' git worktrees live under .claude/worktrees: neither watched nor tested from here.
+  server: { watch: { ignored: ['**/.claude/**'] } },
+  test: { setupFiles: ['src/wasm/testSetup.ts'], exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'] },
 });

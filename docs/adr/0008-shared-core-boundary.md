@@ -91,12 +91,14 @@ Kullanıcının kararları (2026-09-24):
   |---|---|---|---|
   | 0 (altyapı) | 183 KB | 76 KB | JSON ayrıştırma ve sayı yazma kodu eklendi (önce 37 KB) |
   | P1 (60 işlem) | 302 KB | 112 KB | `opt-level = "s"` yalnız %10 kazandırır |
-  | P2 (+43 işlem) | 388 KB | 135 KB | Argümanlar artık tek bir `Value` yolundan okunuyor (kazanç 1,5 KB); büyümenin asıl kaynağı satır içine açılan geometri ve libm kodu. Fonksiyon başına döküm P3'te çıkarılacak |
+  | P2 (+43 işlem) | 388 KB | 135 KB | Argümanlar artık tek bir `Value` yolundan okunuyor (kazanç 1,5 KB) |
+  | P3 (+10 işlem) | 454 KB | 156 KB | Fonksiyon başına döküm (kod 365 KB): serde 155 KB (serde_json ayrıştırma 53, türetilmiş okuyucular 43, yazıcı 60), her `sort_by` için ayrı sıralama kodu ~25 KB, geometri 74 KB, libm 11 KB, bellek ayırıcı 19 KB |
 
 ### Doğrulama
 
 - **Çağrı kümeleri** (`src/wasm/parity/sets/*.ts`): her modül için adlı sınır durumları (birim testlerinden: paralel, çakışık, sıfır uzunluk, 0/2π, TM koordinatı) ve tohumlu rastgele çağrılar.
 - **Parity testi** (`src/wasm/parity/parity.test.ts`): aynı çağrıyı TS'e ve çekirdeğe verir. İşlem başına 200 rastgele durum kullanır; `PARITY_CASES` bunu artırır.
+  - Sonucu sin/cos'un son bitine duyarlı bir işlem (dünya koordinatında döndürülen tarama çizgileri gibi) kümede gerekçesi yazılı daha geniş bir sınır alır (`tolerance`, ör. `hatchLines`: 2·10⁻⁸ m, TM büyüklüğünde birkaç ulp). Kaydedici bu sınırı durumlara yazar (`tol`); native ve WASM okuyucuları onu kullanır.
   - Bir rastgele çağrının bütün noktaları tek bir çerçevededir (başlangıç yakını ya da TM dilimi). Eksen ve yön vektörleri konum değil vektör olarak üretilir. 4 400 km'yi aşan bir “şekil” çizim değildir ve yalnız son bit farklarını büyütür.
   - Sayılar golden toleransıyla (1e-9 + 1e-14·büyüklük) karşılaştırılır.
   - Metin, mantıksal değer, dizi uzunluğu ve nesne anahtarları tam eşit olmalıdır.
