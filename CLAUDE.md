@@ -790,7 +790,7 @@ Okuma ve yazma worker'da çalışır. Kaynağın SRID'si bilinmiyorsa kullanıc�
   - Canlı olay sinyali tek sunucu sürecinde (çok süreçte 5 sn'lik denetim yakalar; PostgreSQL LISTEN/NOTIFY yok). Olay günlüğü `KENTOS_EVENT_RETENTION_DAYS` gün (varsayılan 7) saklanır ve `kentosd serve` saatte bir budar; komut günlüğü (idempotency) ve denetim kaydı budanmıyor.
   - Yükleme kesilirse proje sunucuda yarım kalır (sürdürülemez).
   - Kurumun OpenID sunucusuyla gerçek deneme yapılmadı (yalnız sahte sağlayıcı).
-- ADR 0005 hedefleri taslak; ağır modül açılışı ve §6.1 etkileşim bütçeleri henüz ölçülmüyor (`docs/perf/README.md`).
+- ADR 0005 hedefleri taslak; ağır modül açılışı henüz ölçülmüyor. §6.1 etkileşim bütçeleri `pnpm perf:interaction` ile ölçülüyor (taban `docs/perf/interaction-baseline.md`, geometri henüz TypeScript'teyken): 81 bin nesnede imleç başına seçme ve kenet p95 9–13 ms (öneri < 2 ms; `PickIndex` her olayda bütün nesneleri geziyor), üst katman etiketleri her karede bütün nesneleri gezdiği için büyük veride karenin çoğunu alıyor, eşyükseltilerde (1 milyon segment) buda önizlemesi kare başına ~0,75 s sürüyor ve genel görünümde kaydırma GPU'da ~21 fps'ye iniyor (`docs/perf/README.md`).
 
 ---
 
