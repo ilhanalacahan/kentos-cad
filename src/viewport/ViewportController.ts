@@ -10,7 +10,7 @@ import type { ExtendResult, TrimResult } from '../model/ops/trim';
 import type { Bounds, Vec2 } from '../model/geometry';
 import { parseHex, readCanvasPalette, withAlpha, type CanvasPalette } from '../render/color';
 import { createBackend } from '../render/createBackend';
-import { buildGrid } from '../render/grid';
+import { buildGrid, gridExtent, type GridExtent } from '../render/grid';
 import { Atlas } from '../render/atlas';
 import { buildSceneLayer } from '../render/sceneBuilder';
 import { buildStyledLayer } from '../render/styledLayer';
@@ -105,7 +105,8 @@ export class ViewportController {
   private builtSymbolScale = 0;
   private symbolTimer = 0;
   private highlightDirty = true;
-  private gridKey = '';
+  /** What the backend's grid was built for (null: it has none); rebuilt only when the view outgrows it. */
+  private grid: GridExtent | null = null;
   private frameQueued = false;
   /** CPU time of the last frame's steps in ms: rebuilding dirty layers, GPU submit, the 2D overlay. */
   stats = { build: 0, render: 0, overlay: 0 };
@@ -201,7 +202,7 @@ export class ViewportController {
       backend.resize(this.size.w, this.size.h, this.dpr);
       this.allDirty = true;
       this.highlightDirty = true;
-      this.gridKey = '';
+      this.grid = null;
       this.glQueued = true;
       this.frame();
       old.dispose();
@@ -371,10 +372,10 @@ export class ViewportController {
 
   /** Re-read canvas colours from CSS (theme switch). */
   refreshPalette(): void {
+    // The grid follows by itself: its extent records the palette it was drawn with.
     this.palette = readCanvasPalette();
     this.allDirty = true;
     this.highlightDirty = true;
-    this.gridKey = '';
     this.requestRender();
   }
 
@@ -870,11 +871,13 @@ export class ViewportController {
       dpr: this.dpr,
     };
     const showGrid = settings.grid.value;
-    const key = showGrid ? `${cam.center.x}|${cam.center.y}|${cam.scale}|${cam.width}|${cam.height}` : 'off';
-    if (key !== this.gridKey) {
-      this.gridKey = key;
-      if (showGrid) this.backend!.upload(buildGrid(view, origin, this.palette));
-      else this.backend!.remove('__grid');
+    if (showGrid) {
+      const grid = gridExtent(cam.visibleBounds(), cam.scale, origin, this.palette, this.grid);
+      if (grid !== this.grid) this.backend!.upload(buildGrid(grid));
+      this.grid = grid;
+    } else if (this.grid) {
+      this.backend!.remove('__grid');
+      this.grid = null;
     }
     const order = doc.layers
       .leaves()

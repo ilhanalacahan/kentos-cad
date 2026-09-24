@@ -6,6 +6,7 @@ import { ProjectSettings, type ProjectSettingsData } from './projectSettings';
 import { emptyBounds, isEmptyBounds, type Bounds, type Vec2 } from './geometry';
 import type { LayerInit, LayerStyle } from './layers';
 import { LayerStore } from './layers';
+import { sameJson } from './sameJson';
 import type { ProjectStyles } from './style';
 
 type Op =
@@ -81,6 +82,15 @@ export class CadDocument {
   homeView: Bounds | null = null;
 
   private entities = new Map<number, Entity>();
+  /**
+   * Each layer's objects in document order (`byLayer`), kept up to date by
+   * every change so rebuilding a layer does not walk the whole drawing.
+   * An object moved to another layer keeps its place in the document, which
+   * may lie anywhere among that layer's objects: such a layer is read again
+   * in document order the next time it is asked for (`reordered`).
+   */
+  private layerIndex = new Map<string, Map<number, Entity>>();
+  private reordered = new Set<string>();
   private anchor: Vec2;
   /**
    * Counts every change to what a saved file holds. A save records the
@@ -158,15 +168,17 @@ export class CadDocument {
     return this.entities.values();
   }
 
+  /** The objects on a layer, in document order. */
   byLayer(layerId: string): Entity[] {
-    const out: Entity[] = [];
-    for (const e of this.entities.values()) if (e.layerId === layerId) out.push(e);
-    return out;
+    if (this.reordered.size) this.reorder();
+    const members = this.layerIndex.get(layerId);
+    return members ? [...members.values()] : [];
   }
 
+  /** Object count per layer; layers without objects are left out. */
   countByLayer(): Map<string, number> {
     const m = new Map<string, number>();
-    for (const e of this.entities.values()) m.set(e.layerId, (m.get(e.layerId) ?? 0) + 1);
+    for (const [id, members] of this.layerIndex) if (members.size) m.set(id, members.size);
     return m;
   }
 
@@ -300,10 +312,7 @@ export class CadDocument {
 
   /** Bulk load without history (file open, sample data). */
   load(list: NewEntity[]): void {
-    for (const init of list) {
-      const entity = { ...init, id: this.nextId++ } as Entity;
-      this.entities.set(entity.id, entity);
-    }
+    for (const init of list) this.put({ ...init, id: this.nextId++ } as Entity);
     this.undoStack = [];
     this.redoStack = [];
     this.syncHistory();
@@ -320,6 +329,9 @@ export class CadDocument {
     if (this.pending || this.group) throw new Error('Açık bir düzenleme varken çizim değiştirilemez.');
     const touched = new Set([...this.entities.values()].map((e) => e.layerId));
     this.entities = new Map(data.entities.map((e) => [e.id, e]));
+    this.layerIndex.clear();
+    this.reordered.clear();
+    for (const e of this.entities.values()) this.members(e.layerId).set(e.id, e);
     this.nextId = data.entities.reduce((m, e) => Math.max(m, e.id), 0) + 1;
     this.anchor = { ...data.origin };
     this.homeView = data.homeView;
@@ -448,13 +460,13 @@ export class CadDocument {
       }
       touched.push(op.type === 'update' ? op.after.id : op.entity.id);
       if (op.type === 'add') {
-        this.entities.set(op.entity.id, op.entity);
+        this.put(op.entity);
         layerIds.add(op.entity.layerId);
       } else if (op.type === 'remove') {
-        this.entities.delete(op.entity.id);
+        this.drop(op.entity.id);
         layerIds.add(op.entity.layerId);
       } else {
-        this.entities.set(op.after.id, op.after);
+        this.put(op.after);
         if (geometryChanged(op.before, op.after)) {
           layerIds.add(op.before.layerId);
           layerIds.add(op.after.layerId);
@@ -464,6 +476,40 @@ export class CadDocument {
     if (layerIds.size) this.events.emit('changed', { layerIds });
     if (attrIds.length) this.events.emit('attrs', { ids: attrIds });
     if (touched.length || layerStyles) this.events.emit('touched', { ids: touched, layerStyles, external: this.external });
+  }
+
+  /** Sets an object in the drawing and in its layer's index. */
+  private put(e: Entity): void {
+    const prev = this.entities.get(e.id);
+    this.entities.set(e.id, e);
+    if (prev && prev.layerId !== e.layerId) {
+      this.layerIndex.get(prev.layerId)?.delete(e.id);
+      this.reordered.add(e.layerId);
+    }
+    // A new id goes to the end of the document and so to the end of its layer; a known one keeps its place.
+    this.members(e.layerId).set(e.id, e);
+  }
+
+  private drop(id: number): void {
+    const e = this.entities.get(id);
+    if (!e) return;
+    this.entities.delete(id);
+    this.layerIndex.get(e.layerId)?.delete(id);
+  }
+
+  private members(layerId: string): Map<number, Entity> {
+    let m = this.layerIndex.get(layerId);
+    if (!m) this.layerIndex.set(layerId, (m = new Map()));
+    return m;
+  }
+
+  /** Reads the layers objects moved into again in document order: one walk of the drawing for all of them. */
+  private reorder(): void {
+    const fresh = new Map<string, Map<number, Entity>>();
+    for (const id of this.reordered) fresh.set(id, new Map());
+    this.reordered.clear();
+    for (const e of this.entities.values()) fresh.get(e.layerId)?.set(e.id, e);
+    for (const [id, m] of fresh) this.layerIndex.set(id, m);
   }
 
   private syncHistory(): void {
@@ -479,9 +525,8 @@ function invert(op: Op): Op {
   return { type: 'update', before: op.after, after: op.before };
 }
 
+/** Whether an edit changed more than attributes: everything else compared as JSON would write it. */
 function geometryChanged(a: Entity, b: Entity): boolean {
   if (a.layerId !== b.layerId || a.color !== b.color || a.label !== b.label) return true;
-  const { attrs: _a, ...ga } = a;
-  const { attrs: _b, ...gb } = b;
-  return JSON.stringify(ga) !== JSON.stringify(gb);
+  return !sameJson(a, b, 'attrs');
 }
