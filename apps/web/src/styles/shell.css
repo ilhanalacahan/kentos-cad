@@ -15,12 +15,17 @@
   flex-direction: column;
   min-width: 0;
 }
-/* Holds the ribbon's place while its chunk loads, so the drawing does not jump. */
+/*
+ * Holds the ribbon's place while its chunk loads, so the drawing does not
+ * jump; stacked like the ribbon so its shadow falls over the drawing.
+ */
 .ribbon-placeholder {
+  position: relative;
+  z-index: 20;
   height: calc(var(--menubar-h) + var(--ribbon-h) + 2px);
   background: var(--c-toolbar);
   border-bottom: 1px solid var(--c-line);
-  box-shadow: inset 0 var(--menubar-h) 0 var(--c-menubar);
+  box-shadow: inset 0 var(--menubar-h) 0 var(--c-menubar), var(--shadow-bar);
 }
 
 .shell__body {
