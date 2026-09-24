@@ -12,15 +12,15 @@ node apps/web/scripts/perf/modules.mjs --label y4 # pnpm build'den sonra: ağır
 
 Ölçüm sırasında makinede başka ağır süreç (Vite, e2e, cargo) çalışmaz.
 
-## Ağır modüllerin açılışı (2026-09-24, style-core Y4)
+## Ağır modüllerin açılışı (2026-09-24, `e0b9168`)
 
 Kaynak: [modules-y4-2026-09-24.md](modules-y4-2026-09-24.md) (ham veri `.json`; betik `apps/web/scripts/perf/modules.mjs`). Üretim derlemesi `vite preview` ile, her modül kendi boş profiliyle; süre komut satırında Enter'dan pencerenin boyandığı kareye kadardır. Bulut konteyneri, başsız Chrome; kabul ölçümü kullanıcının makinesinde yapılır.
 
 | Modül | İlk açılış | İkinci açılış | İlk açılışta indirilen | ADR 0005 önerisi |
 |---|---|---|---|---|
-| Stil yöneticisi | 203 ms | 99 ms | 12,9 KB (gzip JS) | ≤ 400 / ≤ 150 ms |
-| Model tasarımcısı | 113 ms | 36 ms | 11,1 KB (gzip JS) | ≤ 400 / ≤ 150 ms |
-| SVG düzenleyicisi | 158 ms | 46 ms | 51,3 KB gzip JS + 841 KB WASM (sunucu WASM'ı sıkıştırmadı; gzip -9 ile 315,8 KB) | ≤ 400 / ≤ 150 ms |
+| Stil yöneticisi | 220 ms | 107 ms | 12,9 KB (gzip JS) | ≤ 400 / ≤ 150 ms |
+| Model tasarımcısı | 125 ms | 36 ms | 11,1 KB (gzip JS) | ≤ 400 / ≤ 150 ms |
+| SVG düzenleyicisi | 163 ms | 42 ms | 51,3 KB gzip JS + 841 KB WASM (sunucu WASM'ı sıkıştırmadı; gzip -9 ile 315,8 KB) | ≤ 400 / ≤ 150 ms |
 
 ## Etkileşim tabanı (2026-09-24, `c110b15`)
 
