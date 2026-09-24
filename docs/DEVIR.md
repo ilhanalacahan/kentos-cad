@@ -25,17 +25,17 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Ama çalışan geometri hâlâ TypeScript.** Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır. Asıl geçiş S1–S3'tedir.
+- **Geçiş başladı (S1a):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil ve sınır kenarları artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). Öbür çalışan geometri (etiketler, tutamaçlar, araç önizlemeleri, çizim hattı, araçların hesapları) hâlâ TypeScript; geçiş S1b–S5'tedir. Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
   - olay günlüğü budama (migration 0003);
   - etkileşim ölçüm düzeneği (`pnpm perf:interaction`) ve TypeScript tabanı.
-- **Son doğrulama (main, P8 commit'i, bulut konteyneri):**
-  - `npx tsc --noEmit -p .` temiz, `pnpm test` 764 test geçti.
+- **Son doğrulama (main, S1a commit'i, bulut konteyneri):**
+  - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 630 KB, gzip ile 215 KB. ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip.
+- **WASM paketi:** 727 KB, gzip ile 247 KB (S1a'da +32 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1 bitince boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -44,32 +44,19 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 
 ### S1: WASM geometri deposu (en büyük kazanç)
 
-- **`geometry-core::store`:**
-  - belge nesnelerinin kopyası;
-  - katman tablosu (görünür, kilitli, `pickInterior`);
-  - önbellekli sınır kutuları.
-- **PickIndex kuralları birebir taşınır** (`src/viewport/picking.ts`, CLAUDE.md §4.9):
-  - seçme önceliği;
-  - kenet türleri ve öncelikleri;
-  - pencere ve kesişim seçimi.
-- **Sorgular:** `snap`, `hit`, `hitEdge`, `inRect`, `touchesRect`, `enclosing`, `bounds`/`extents`.
-- **Toplu sorgular:**
-  - `anchors` (etiketler), `grips`;
-  - `transformOutlines(ids, affine)` (en çok 400 hayalet), `stretchOutlines`;
-  - `trimPreview`/`extendPreview` (hedef ve görünür sınırlar tek çağrıda);
-  - `measure(ids)` (alan ve uzunluk).
-- **Sınır (ADR 0008):** nesneler JSON ile, noktalar `Float64Array` ile taşınır; serde-wasm-bindgen yok.
-- **Eşitleme:**
-  - `doc.events.touched` (kimlikler) ile yapılır.
-  - `load`, `replaceWith` ve `applyExternal` tam yeniden eşitler.
-  - Pano için ikinci bir depo örneği kullanılır.
-- **Çağıranlar:**
-  - `viewport/picking.ts` ince sarmalayıcı olur.
-  - `viewport/overlay.ts` (etiket, tutamaç), `tools/edgeTools.ts`, `tools/modifyTools.ts`, `tools/editTools.ts` ve `PropertiesPanel` toplamları depoya geçer.
-- **Parity:** aynı örnek projede ve tohumlu imleç konumlarında TS PickIndex ile depo aynı sonucu vermeli.
+- **S1a yapıldı:** `geometry-core::store` (nesnelerin kopyası, katman tablosu, sınır kutuları, Hilbert sıralı R-ağacı, belge sırası), `hit`/`hitEdge`/`snap`/`inRect`/`overlapping`/`enclosing`/`edgesIn`; `viewport/picking.ts` ince yüz oldu. Ayrıntılar ADR 0008 “Geometri deposu”nda.
+  - Eşitleme `touched` ile; `load`/`replaceWith` yeni `reset` olayını yayar. `applyExternal` `touched` yaydığı için tam eşitleme gerekmedi.
+  - Nesneler JSON değil paketli gider (`src/wasm/pack.ts`, `store/pack.rs`): 26 MB JSON WASM'da 5–7 s sürüyordu, paketli 0,1–0,3 s.
+  - Eski TS `PickIndex` `src/wasm/parity/reference/picking.ts`'te parity referansıdır; S3'te silinir. Donmuş yanıtlar `fixtures/geometry/v1/store-v1.json`.
+- **Kalanlar (bu sırayla, her biri ayrı commit):**
+  - **S1b, etiket ve tutamaç:** `drawLabels` her karede bütün nesneleri geziyor; depoya `labels(görünüm, ölçek, düzenlenen)` sorgusu (görünür, görünümde, yazı/ölçü/etiketli nesneler; etiket stilinin `minScale`/`maxScale`/`minFeaturePx` süzgeçleri Rust'ta, katman başına etiket kuralı ve tür varsayılanları `DEFAULT_LABELS` katman tablosuyla gider; yerleşim noktası: `entityAnchor`, köşe, yol boyunca iki köşe; ölçüde yazı yeri, açı, değer, birim ve önek). Kayıtlar düz `Float64Array`; metinler TS'te nesneden okunur. `grips(ids)`: tutamaç noktaları ve orta tutamaç kenarı; `drawGrips`, `gripAt` ve `midGripVisible` bunu kullanır. `PickIndex.boundsOf` (TS önbelleği) kalkar.
+  - **S1c, araç önizlemeleri:** `trimPreview`/`extendPreview` (hedef ve sınırlar tek çağrıda; budamada yalnız hedefin kutusuna değen kenarlar yeterlidir), `transformOutlines(ids, affine)` (en çok 400 hayalet), `stretchOutlines`, `measure(ids)` (`PropertiesPanel` toplamları). Pano için ikinci bir depo örneği.
+  - **S1d, ölçüm ve belgeler:** önce/sonra ölçümü ve ADR 0008.
+- **Ölçüm yöntemi (bulut):** `pnpm perf:interaction` her veri setinde sayfayı yeniden açar ve çalışma dizinindeki kaynağı sunar; ölçüm sürerken kaynak değişirse ölçüm bozulur (bir kez `hat-1m`'de düştü). “Önce” ölçümünü taban commit'in ayrı bir git worktree'sinde (kendi `node_modules` bağı ve WASM paketiyle), “sonra”yı ardından çalışma dizininde alın; ikisi arasında başka ağır iş çalıştırmayın. SwiftShader'da `--allow-swiftshader` gerekir; yalnız ana iş parçacığı süreleri anlamlıdır ve kaydırma senaryosu dakikalar sürer.
+  - Bulutta S1 öncesi kısmi taban (`parsel-50k`, p50, imleç başına): seçme yakın 13,2 ms, genel 18,9; kenet yakın 16,8, genel 22,3; buda kenar seçme 20,3.
 - **Kabul:** tabana göre p95'te gerileme olmamalı.
   - Ölçüm kullanıcının makinesinde yapılır (bkz. §5); bulutta alınan sayı tabanla karşılaştırılamaz.
-  - Ayrıntıları ADR 0008'in “Sıcak yollar” maddesine yazın.
+  - Ayrıntıları ADR 0008'in “Geometri deposu” başlığına yazın.
 
 ### S2: çizim hattı
 

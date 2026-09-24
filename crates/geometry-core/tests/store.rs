@@ -1,0 +1,170 @@
+//! The geometry store against the frozen answers of the TypeScript
+//! PickIndex it replaced (`fixtures/geometry/v1/store-v1.json`, recorded by
+//! `scripts/fixtures/record-store.test.ts`; docs/adr/0008, S1): picking,
+//! edge picking, snapping, window and crossing selection, enclosing shapes,
+//! overlapping objects and boundary edges on a fixed scene. The WASM build
+//! runs the same file (`src/wasm/store.wasm.test.ts`).
+
+// Test harness code, not the core: the std float methods are fine here.
+#![allow(clippy::disallowed_methods)]
+
+use kentos_geometry_core::Vec2;
+use kentos_geometry_core::geom::intersect::Edge;
+use kentos_geometry_core::geometry::Bounds;
+use kentos_geometry_core::store::Store;
+use kentos_geometry_core::store::snap::SnapKind;
+use serde_json::{Value, json};
+
+const FILE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../fixtures/geometry/v1/store-v1.json"
+);
+
+const KINDS: [&str; 9] = [
+    "endpoint",
+    "midpoint",
+    "center",
+    "node",
+    "quadrant",
+    "intersection",
+    "perpendicular",
+    "tangent",
+    "nearest",
+];
+
+/// Numbers within |a − e| ≤ abs + rel·max(|a|, |e|); everything else exactly.
+fn same(actual: &Value, expected: &Value, abs: f64, rel: f64, path: &str) -> Result<(), String> {
+    match (actual, expected) {
+        (Value::Number(a), Value::Number(e)) => {
+            let (a, e) = (a.as_f64().unwrap(), e.as_f64().unwrap());
+            let d = (a - e).abs();
+            if d <= abs + rel * a.abs().max(e.abs()) {
+                Ok(())
+            } else {
+                Err(format!("{path}: {a} ≠ {e} (fark {d})"))
+            }
+        }
+        (Value::Array(a), Value::Array(e)) => {
+            if a.len() != e.len() {
+                return Err(format!("{path}: {} öğe ≠ {} öğe", a.len(), e.len()));
+            }
+            for (i, (x, y)) in a.iter().zip(e).enumerate() {
+                same(x, y, abs, rel, &format!("{path}[{i}]"))?;
+            }
+            Ok(())
+        }
+        (Value::Object(a), Value::Object(e)) => {
+            for k in a.keys().chain(e.keys()) {
+                match (a.get(k), e.get(k)) {
+                    (Some(x), Some(y)) => same(x, y, abs, rel, &format!("{path}.{k}"))?,
+                    (None, _) => return Err(format!("{path}.{k}: eksik")),
+                    (_, None) => return Err(format!("{path}.{k}: fazla")),
+                }
+            }
+            Ok(())
+        }
+        _ if actual == expected => Ok(()),
+        _ => Err(format!("{path}: {actual} ≠ {expected}")),
+    }
+}
+
+fn num(v: &Value) -> f64 {
+    v.as_f64().unwrap_or(f64::NAN)
+}
+
+fn point(v: &Vec2) -> Value {
+    json!({ "x": v.x, "y": v.y })
+}
+
+fn rect(v: &Value) -> Bounds {
+    Bounds {
+        min_x: num(&v["minX"]),
+        min_y: num(&v["minY"]),
+        max_x: num(&v["maxX"]),
+        max_y: num(&v["maxY"]),
+    }
+}
+
+fn except(v: &Value) -> Option<f64> {
+    v.as_f64()
+}
+
+fn edge(e: &Edge) -> Value {
+    match *e {
+        Edge::Seg { a, b } => json!({ "kind": "seg", "a": point(&a), "b": point(&b) }),
+        Edge::Arc { c, r, a0, sweep } => {
+            json!({ "kind": "arc", "c": point(&c), "r": r, "a0": a0, "sweep": sweep })
+        }
+    }
+}
+
+fn opt(id: Option<f64>) -> Value {
+    id.map_or(Value::Null, |x| json!(x))
+}
+
+#[test]
+fn the_store_gives_the_typescript_pick_index_answers() {
+    let file: Value = serde_json::from_str(&std::fs::read_to_string(FILE).expect("store fixture"))
+        .expect("fixture JSON");
+    assert_eq!(file["format"], "kentos.geometry-store");
+    assert_eq!(file["version"], 1);
+    let abs = num(&file["tolerance"]["abs"]);
+    let rel = num(&file["tolerance"]["rel"]);
+    let mut store = Store::new();
+    store
+        .put_json(&serde_json::to_string(&file["entities"]).unwrap())
+        .expect("entities");
+    store
+        .set_layers_json(&serde_json::to_string(&file["layers"]).unwrap())
+        .expect("layers");
+    let cases = file["cases"].as_array().expect("cases");
+    assert!(cases.len() > 500, "{} cases", cases.len());
+    let mut failures = Vec::new();
+    for c in cases {
+        let a = c["args"].as_array().expect("args");
+        let label = format!(
+            "{} {}",
+            c["op"].as_str().unwrap(),
+            c["name"].as_str().unwrap()
+        );
+        let p = || Vec2::new(num(&a[0]), num(&a[1]));
+        let got = match c["op"].as_str().unwrap() {
+            "hit" => opt(store.hit(p(), num(&a[2]))),
+            "hitEdge" => opt(store.hit_edge(p(), num(&a[2])).first().map(|h| h.0)),
+            "snap" => {
+                let mut mask = 0;
+                for k in a[3].as_array().unwrap() {
+                    let i = KINDS.iter().position(|n| k == *n).expect("snap kind");
+                    mask |= SnapKind::ALL[i].bit();
+                }
+                let from = (!a[4].is_null()).then(|| Vec2::new(num(&a[4]["x"]), num(&a[4]["y"])));
+                store.snap(p(), num(&a[2]), mask, from).map_or(Value::Null, |h| {
+                    let kind = KINDS[SnapKind::ALL.iter().position(|k| *k == h.kind).unwrap()];
+                    json!({ "kind": kind, "point": point(&h.point), "entityId": h.id })
+                })
+            }
+            "enclosing" => store.enclosing(p()).map_or(Value::Null, |(id, ring)| {
+                json!({ "id": id, "ring": ring.iter().map(point).collect::<Vec<_>>() })
+            }),
+            "inRect" => json!(store.in_rect(&rect(&a[0]), a[1].as_bool().unwrap())),
+            "overlapping" => json!(store.overlapping(&rect(&a[0]), except(&a[1])).iter().map(|it| it.id).collect::<Vec<_>>()),
+            "edgesIn" => json!(store.edges_in(&rect(&a[0]), except(&a[1])).iter().map(edge).collect::<Vec<_>>()),
+            op => panic!("unknown op {op}"),
+        };
+        if let Err(e) = same(&got, &c["expect"], abs, rel, &label) {
+            failures.push(e);
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} case(s) differ:\n{}",
+        failures.len(),
+        cases.len(),
+        failures
+            .iter()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

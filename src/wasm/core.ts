@@ -1,4 +1,4 @@
-import { callOp, initSync, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
+import { callOp, GeometryStore, initSync, opId, triangulateMany as wasmTriangulateMany } from './pkg/kentos_wasm.js';
 import wasmUrl from './pkg/kentos_wasm_bg.wasm?url';
 
 /**
@@ -118,4 +118,102 @@ export function callNamed(name: string, args: unknown[]): unknown {
  */
 export function triangulateMany(xy: Float64Array, ringSizes: Uint32Array, polyRings: Uint32Array): Uint32Array {
   return typed(() => wasmTriangulateMany(xy, ringSizes, polyRings));
+}
+
+/**
+ * The Rust geometry store (docs/adr/0008, S1): a copy of the drawing's
+ * objects that picking, snapping and selection query on every pointer move.
+ * `src/viewport/picking.ts` keeps one in step with the document. Objects go
+ * in as JSON; queries take numbers and give flat arrays (ids are numbers).
+ * Every call reports a trap as `op` does.
+ */
+export class CoreStore {
+  private readonly raw: GeometryStore;
+
+  constructor() {
+    this.raw = typed(() => new GeometryStore());
+  }
+
+  get size(): number {
+    return typed(() => this.raw.size);
+  }
+
+  /** Adds or replaces objects (a JSON array of entities): new ids go last, known ones keep their place. */
+  put(entitiesJson: string): void {
+    typed(() => this.raw.put(entitiesJson));
+  }
+
+  /** Adds or replaces packed objects (./pack.ts), as `put`. */
+  putPacked(nums: Float64Array, strings: string): void {
+    typed(() => this.raw.putPacked(nums, strings));
+  }
+
+  remove(ids: Float64Array): void {
+    typed(() => this.raw.remove(ids));
+  }
+
+  clear(): void {
+    typed(() => this.raw.clear());
+  }
+
+  /** `[{ id, visible, locked, pickInterior }]` for every layer node, ancestors resolved. */
+  setLayers(json: string): void {
+    typed(() => this.raw.setLayers(json));
+  }
+
+  /** Ids in the document's order. */
+  ids(): Float64Array {
+    return typed(() => this.raw.ids());
+  }
+
+  /** An object as the store holds it (id, layer, label flag, geometry), as JSON; for tests. */
+  itemJson(id: number): string | undefined {
+    return typed(() => this.raw.itemJson(id));
+  }
+
+  /** `[minX, minY, maxX, maxY]`, or empty for an unknown id. */
+  bounds(id: number): Float64Array {
+    return typed(() => this.raw.bounds(id));
+  }
+
+  hit(x: number, y: number, tol: number): number | undefined {
+    return typed(() => this.raw.hit(x, y, tol));
+  }
+
+  /** `id, distance` pairs, nearest first. */
+  hitEdge(x: number, y: number, tol: number): Float64Array {
+    return typed(() => this.raw.hitEdge(x, y, tol));
+  }
+
+  /** `[kind bit number, x, y, id]` or empty; `from` is the command's last point. */
+  snap(x: number, y: number, tol: number, kinds: number, from: { x: number; y: number } | null): Float64Array {
+    return typed(() => this.raw.snap(x, y, tol, kinds, !!from, from?.x ?? 0, from?.y ?? 0));
+  }
+
+  near(x: number, y: number, tol: number): Float64Array {
+    return typed(() => this.raw.near(x, y, tol));
+  }
+
+  overlapping(minX: number, minY: number, maxX: number, maxY: number, except?: number): Float64Array {
+    return typed(() => this.raw.overlapping(minX, minY, maxX, maxY, except !== undefined, except ?? 0));
+  }
+
+  inRect(minX: number, minY: number, maxX: number, maxY: number, crossing: boolean): Float64Array {
+    return typed(() => this.raw.inRect(minX, minY, maxX, maxY, crossing));
+  }
+
+  /** `[id, x0, y0, x1, y1, …]` or empty. */
+  enclosing(x: number, y: number): Float64Array {
+    return typed(() => this.raw.enclosing(x, y));
+  }
+
+  /** Packed edges: `0, ax, ay, bx, by` (segment) or `1, cx, cy, r, a0, sweep` (arc). */
+  edgesIn(minX: number, minY: number, maxX: number, maxY: number, except?: number): Float64Array {
+    return typed(() => this.raw.edgesIn(minX, minY, maxX, maxY, except !== undefined, except ?? 0));
+  }
+
+  /** Frees the Rust side; the store must not be used afterwards. */
+  dispose(): void {
+    this.raw.free();
+  }
 }

@@ -357,7 +357,8 @@ kutusu, kısayol, komut satırı ve bağlam menüsü hep aynı komutu çağırı
   - `changed { layerIds }`: geometri ya da üyelik değişti; GPU tamponu yeniden kurulur.
   - `attrs { ids }`: yalnızca öznitelik değişti; tampon kurulmaz, etiket ve panel yenilenir.
 - **`load()`:** geçmiş tutmadan toplu yükleme yapar (dosya açma).
-- **`touched { ids, layerStyles, external }`:** her uygulanan değişikliğin (düzenleme, geri alma, yineleme, başarısız işlemin geri sarılması, dışarıdan gelen değişiklik) dokunduğu nesneler. Bulut eşitlemesi yalnızca bunları karşılaştırır.
+- **`touched { ids, layerStyles, external }`:** her uygulanan değişikliğin (düzenleme, geri alma, yineleme, başarısız işlemin geri sarılması, dışarıdan gelen değişiklik) dokunduğu nesneler. Bulut eşitlemesi ve geometri deposu yalnızca bunları karşılaştırır.
+- **`reset`:** `load` ve `replaceWith` bütün nesneleri değiştirdi (`touched` gelmez); nesnelerin kopyaları (geometri deposu) baştan kurulur.
 - **`applyExternal({ put, remove, meta })`:** başka bir editörün kaydettiği nesneleri ve proje bilgilerini geri alma adımı yazmadan ve kaydedilmemiş saymadan uygular; bu nesnelere dokunan geri alma adımları silinir (`forgetHistoryOf`), böylece geri alma başkasının değişikliğini sessizce geri çeviremez (§15). Açık bir işlem ya da grup varken reddedilir (`busy`); yeni nesneler `allocateId()` ile numara alır. `markUnsaved()` cihaz taslağı geri konunca belgeyi kaydedilmemiş yapar.
 - **`beginGroup(label)`:** `end()` çağrılana kadar yapılan bütün işlemleri (await arasında da) tek geri alma adımında toplar; `cancel()` yapılanları geri alır ve hiçbir şey kaydetmez. İşlem modelleri bunu kullanır.
 - **`Entity`:** türler `point | line | polyline | polygon | circle | arc | ellipse | spline | xline | ray | text | dimension | hatch`.
@@ -453,14 +454,14 @@ CadDocument ──(changed/state olayları)──► ViewportController.dirtyLay
   - Olay işleyicisinde asla eşzamanlı çizim yapmayın.
   - **Tek istisna boyut değişimidir:** canvas'ın `width`/`height` değeri değişince tampon temizlenir ve WebGL bağlamı `alpha: false` olduğu için siyah görünür. Çizim bir sonraki kareye bırakılırsa tarayıcı arada bu siyah tamponu gösterir; panel ayırıcısı sürüklenirken ekran yanıp söner. Bu yüzden `resize()` (ResizeObserver içinde, düzenden sonra ve boyamadan önce çalışır) boyut gerçekten değiştiyse hemen `frame()` çağırır. Duman testi sürükleme sırasında ekran akışını kare kare inceleyerek bunu denetler.
 - **Üst katman** (`viewport/overlay.ts`, Canvas2D) şunları çizer: etiketler (`LabelStyle` ile), tutamaçlar, kenet işareti, artı imleç, ölçek çubuğu, "K" kuzey oku ve araç önizlemeleri. GPU metni (SDF) gelene kadar yazılar buradadır.
-- **`PickIndex`** (`viewport/picking.ts`):
+- **`PickIndex`** (`viewport/picking.ts`): Rust geometri deposunun (`geometry-core::store`, ADR 0008 “Geometri deposu”) ince yüzüdür. Depo nesnelerin kopyasını, katman tablosunu ve Hilbert sıralı bir R-ağacını tutar, kuralları belge sırasıyla birebir uygular:
   - Seçme önceliği: nokta ve kenar, sonra imleci içeren en küçük çokgen (bina, parsel, ada sırasıyla).
   - Kenetleme türleri: uç, orta, merkez, nokta, çeyrek, kesişim, dik, en yakın. Tercihlerden süzülür (`prefs.snap*`).
   - Kenet önceliği: eşit uzaklıkta uç ve nokta, kesişimden; kesişim, merkezden; merkez, çeyrekten; çeyrek, ortadan; orta, dikten önce gelir. "En yakın" yalnızca başka aday yoksa kullanılır.
   - **Kenet her `pointerdown` ve `pointerup`'ta yeniden hesaplanır.** Fare hareketi olmadan gelen tıklama (kalem, dokunma, hızlı tıklama) eski kenet noktasına yapışmamalıdır.
   - `hitEdge` (yalnızca kenar seçimi) ve `edgesIn` (sınır kenarları) değiştirme araçları içindir. Budama ve uzatma sınır olarak görünür alandaki tüm kenarları kullanır.
   - Pencere seçimi (soldan sağa, tamamen içeride) ve kesişim seçimi (sağdan sola, temas).
-  - Şimdilik sınır kutusu önbelleğiyle doğrusal tarama yapar. API aynı kalacak, iç yapı R-tree'ye geçecek.
+  - Eşitleme: `touched` ile silmeler hemen, eklenen ve değişenler bir sonraki sorguda paketli (`wasm/pack.ts`: noktalar `Float64Array`) gider; `load` ve `replaceWith` `reset` yayar ve her şey yeniden gönderilir. Etiketler için sınır kutuları şimdilik TS'te önbelleklidir.
 
 ### 4.10 Arayüz (`ui/`)
 
@@ -537,7 +538,6 @@ kurallar büyük veriye geçerken kodun yeniden yazılmasını önlemek içindir
 ### 6.3 Bilinen darboğazlar (büyük veri öncesi çözülecek)
 
 - `CadDocument.byLayer()` her katman için bütün varlıkları geziyor → katman başına dizin gerekiyor.
-- `PickIndex` doğrusal tarıyor → R-tree gerekiyor (statik veri için `flatbush`, düzenlenen veri için `rbush` benzeri).
 - Izgara her kamera değişiminde yeni `Float32Array` ayırıyor → önceden ayrılmış tampona `bufferSubData` ile yazılmalı.
 - Üst katman etiketleri her karede bütün varlıkları geziyor → görünür karo ve etiket önbelleği gerekiyor.
 - `LayersPanel` her değişiklikte ağacın tamamını yeniden çiziyor → satır bazlı güncelleme ve sanallaştırma gerekiyor.
@@ -655,6 +655,9 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 | `model/external.test.ts` | Dışarıdan gelen değişiklikler: `touched` olayları (geri alma ve başarısız işlem dahil), geri alma adımı ve kaydedilmemiş işareti yazmadan uygulama, başkasının dokunduğu nesnenin geri alma adımının silinmesi, dokunulmayanların korunması, proje bilgilerinin sessiz uygulanması, açık grupta reddetme |
 | `app/cloud/sync.test.ts` | Bulut otomatik kaydı, sunucunun bellek içi benzeriyle (`fakeServer.ts`): yanıttan sonra “kaydedildi”, geri almayla sıfır gönderim, silip geri alınca aynı kimlikle yeniden açma, ölü ağda ve kaybolan yanıtta iki kez yazmama, çakışmada durma ve iki çözüm yolu, başka editörün değişikliğinin geri alma adımsız gelmesi, yerel değişiklikli nesnede çakışma, yeniden açılışta cihaz taslağı ve kayıp komutun aynı anahtarla gönderilmesi, yeniden açıldıktan sonraki düzenlemenin taslaktan önce gelmesi, proje bilgisi yetkisi, kurala uymayan gelen nesnenin reddi, yolda komutu varken bırakılan projenin sonraki çizime dokunmaması (geç yanıt ve olaylar atlanır, taslak iki değişikliği ve komutu tutar), başka editörün projeyi silmesi (olayla `deleted` durumu, önceki olayların nesnesi istenmez, sonraki düzenleme gönderilmez ve taslakta kalır, bir kez bildirilir) ve 410 alan komutun aynı duruma geçmesi |
 | `wasm/parity/parity.test.ts` | TypeScript ile Rust çekirdeğinin yan yana karşılaştırması: her çağrı kümesinin adlı sınır durumları ve işlem başına 200 tohumlu rastgele çağrı (`PARITY_CASES` artırır); sayılar golden toleransıyla, metin, uzunluk ve anahtarlar tam (ADR 0008) |
+| `wasm/parity/store.test.ts` | Geometri deposu ile eski TS `PickIndex`'in (`parity/reference/picking.ts`) yan yana karşılaştırması: örnek projede ve gizli/kilitli/yalnız kenar/ağaçta olmayan katmanlı rastgele sahnede aynı imleç, tolerans, kenet türü ve kutularla seçme, kenar seçme (süzgeçli), kenet, pencere ve kesişim seçimi, çevreleyen şekil, çakışanlar ve sınır kenarları; turlar arasında düzenleme, geri alma, dış değişiklik, katman durumu ve yeniden yükleme, depo sırasının belgeninkiyle aynılığı |
+| `wasm/store.wasm.test.ts` | Dondurulmuş depo fixture'ı (`fixtures/geometry/v1/store-v1.json`) WASM deposundan |
+| `wasm/pack.test.ts` | Paketli nesnelerin (`wasm/pack.ts`) her türde JSON ile aynı nesneyi kurması; −0 ve NaN'ın korunması |
 | `wasm/calls.wasm.test.ts` | Dondurulmuş çağrı fixture'ları (`fixtures/geometry/v1/calls-*.json`) uygulamanın yolundan (`core.ts` → WASM) |
 | `wasm/triangulate.wasm.test.ts` | Tipli toplu üçgenleme (`triangulateMany`): dizinlerin gösterdiği koordinatların adıyla çağrılan `triangulate` ile bit bit aynı olması, basit halkada üçgen alanlarının toplamının halkanın alanına eşitliği, veriden büyük boyutların kırpılması |
 | `wasm/parity/reference.test.ts` | Adıyla çağrılan işlemlerin bağımsız referansa (`reference-calls.json`, Python kesirleri ve 60 basamaklı kökler) göre doğruluğu: Rust (WASM) ve TS, her durumun hata sınırı içinde |
@@ -666,6 +669,7 @@ Komut, kısayol, araç kutusu düğmesi ve F1 listesi kendiliğinden oluşur.
 
 **Rust testleri** (`pnpm rust:test`: `cargo test` + clippy `-D warnings`):
 - `crates/geometry-core/tests/golden.rs`: TS ile aynı golden dosya ve bağımsız referanslar;
+- `tests/store.rs`: geometri deposu dondurulmuş TS yanıtlarına karşı (`store-v1.json`); depo birim testleri: belge sırası, R-ağacı, paketli okuyucu;
 - `tests/calls.rs`: dondurulmuş çağrı fixture'ları çekirdeğin çağrı tablosundan (durumun gerekçeli `tol` sınırıyla) ve bağımsız referans (`reference-calls.json`); `jsmath` (Math.round, sign, min/max, V8 `Math.hypot`), `api` (JSON yazıcı: NaN/±∞, en kısa sayı biçimi; çağrı tablosu);
 - `tests/numeric.rs`: §23 yuvarlama, hisse ve dağıtım, Python'la üretilmiş dosyalara karşı;
 - `crates/contracts/tests/document.rs`: .kcad örneğinin gidiş-dönüşü ve reddi;
@@ -839,7 +843,7 @@ src/
     symbolPreview.ts         Sembollerin Canvas2D önizlemesi (aynı çizim ilkelleri): kitaplık resimleri, tasarımcı, lejant
     webgl2/styled*.ts        Stilli toplulukların GLSL gölgelendiricileri ve çizicisi
     webgpu/styled*.ts        Aynısının WGSL karşılığı
-  viewport/                  Kamera, ViewportController, PickIndex, üst katman çizimi
+  viewport/                  Kamera, ViewportController, PickIndex (geometri deposunun yüzü ve eşitlemesi), üst katman çizimi
   tools/                     Tool sözleşmesi, ToolManager, katalog, koordinat girişi, imleç kısıtlaması (tracking)
     drawTools.ts             PointInputTool ailesi: çizgi, nokta, sil
     pathTool.ts              Çoklu çizgi, kapalı alan, parsel, ölçüm (yay seçenekleriyle)
@@ -887,10 +891,10 @@ src/
     dialogs.ts               Kısayol listesi ve Hakkında
     icons.ts                 Simge seti
   styles/                    tokens, base, shell, controls, panels, settings, processing, model, style, svgedit (SVG düzenleyicisinin düzenleme araçları)
-  wasm/                      Rust çekirdeğinin tarayıcı cephesi: core.ts (başlatma, op() çağrıları, NaN/±∞ geri çevirme, hata bildirimi, tipli toplu girişler: `triangulateMany`), testSetup.ts (Vitest), parity/ (TS ↔ Rust çağrı kümeleri, karşılaştırma), golden ve çağrı fixture testleri; pkg/ `pnpm wasm` ile üretilir, depoya girmez
+  wasm/                      Rust çekirdeğinin tarayıcı cephesi: core.ts (başlatma, op() çağrıları, NaN/±∞ geri çevirme, hata bildirimi, tipli toplu girişler: `triangulateMany`, geometri deposu `CoreStore`), pack.ts (nesneleri depo için sayı akışına paketleme), testSetup.ts (Vitest), parity/ (TS ↔ Rust çağrı kümeleri, karşılaştırma; reference/ eski TS PickIndex), golden, çağrı ve depo fixture testleri; pkg/ `pnpm wasm` ile üretilir, depoya girmez
 crates/
   contracts/                 Sürümlü sözleşmeler (Entity, katman, ayarlar, .kcad, .kstil, RunJob, Health, komut zarfı, §23 sayısal) → TS tipleri; tests/ (.kcad ve CRS dosyaları)
-  geometry-core/             Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı) ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, bağımsız referans, sayısal)
+  geometry-core/             Saf analitik geometri (f64), jsmath (JavaScript sayı anlamı, libm), api (çağrı tablosu, JSON yazıcı), store (geometri deposu: R-ağacı, seçme, kenet, paketli okuyucu), triangulate ve §23 sayısal politika (rust_decimal); clippy.toml (std aşkın işlevleri yasak); tests/ (golden, çağrı fixture'ları, depo, bağımsız referans, sayısal)
   wasm/                      Çekirdeğin tarayıcı sınırı (wasm-bindgen): çağrı tablosu (opId/callOp, JSON) ve düz Float64Array girişleri
   postgres/                  Havuzlar, tenant kapsamlı işlem (`Db::scoped`), migration'lar (`migrations/`; `build.rs` yeni dosyada yeniden derletir), `db-setup`, geçici test veritabanları (`testing`), `.env.local` okuma
   application/               Kullanım durumları: identity (yerel giriş, oturum), tenancy (rol, yetki, erişim), admin (komut satırı; silinen projeyi geri getirme dahil), cad (Entity ↔ PostGIS satırı), projects, lifecycle (proje silme), changes (`project.changes`), events (olay günlüğü, budama ve ufuk); tests/ (geçici veritabanıyla; common/ ortak yardımcılar)

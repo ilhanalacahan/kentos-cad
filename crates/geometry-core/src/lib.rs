@@ -29,6 +29,7 @@ pub mod jsmath;
 pub mod measure;
 pub mod numeric;
 pub mod ops;
+pub mod store;
 pub mod tessellate;
 pub mod triangulate;
 pub mod vec2;

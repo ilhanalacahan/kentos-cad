@@ -32,6 +32,12 @@ interface DocumentEvents {
    * came from the server and must not be sent back.
    */
   touched: { ids: number[]; layerStyles: boolean; external: boolean };
+  /**
+   * Objects were bulk-loaded or the whole drawing replaced (`load`,
+   * `replaceWith`); no `touched` follows. Copies of the objects (the
+   * geometry store, docs/adr/0008) rebuild from scratch.
+   */
+  reset: undefined;
 }
 
 /** The project's metadata another editor may have changed (applied by `applyExternal`). */
@@ -281,6 +287,7 @@ export class CadDocument {
     this.undoStack = [];
     this.redoStack = [];
     this.syncHistory();
+    this.events.emit('reset', undefined);
     this.events.emit('changed', { layerIds: new Set(list.map((e) => e.layerId)) });
   }
 
@@ -305,6 +312,7 @@ export class CadDocument {
     this.syncHistory();
     for (const e of data.entities) touched.add(e.layerId);
     for (const l of this.layers.leaves()) touched.add(l.id);
+    this.events.emit('reset', undefined);
     this.events.emit('changed', { layerIds: touched });
     this.edits++;
     this.dirty.set(false);

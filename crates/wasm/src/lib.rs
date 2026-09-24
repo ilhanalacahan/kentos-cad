@@ -11,6 +11,8 @@ use kentos_geometry_core::measure::{Ring, polygon_area, polygon_perimeter};
 use kentos_geometry_core::triangulate::triangulate_many;
 use wasm_bindgen::prelude::*;
 
+pub mod store;
+
 fn points(xy: &[f64]) -> Vec<Vec2> {
     xy.chunks_exact(2).map(|c| Vec2::new(c[0], c[1])).collect()
 }
