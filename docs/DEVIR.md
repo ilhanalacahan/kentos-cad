@@ -25,7 +25,8 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - Her işlem TypeScript ile 20 000 rastgele durumda aynı sonucu veriyor.
   - Donmuş fixture'lar (`fixtures/geometry/v1/calls-p0…p8`) native ve WASM'da geçiyor.
   - P8 ilk tipli toplu girişi getirdi: `triangulateMany(xy, ringSizes, polyRings)` (`src/wasm/core.ts`), üçgen başına üç köşe dizini döner. S2'de `sceneBuilder` ve `styledSink` bunu kullanacak (ADR 0008 “Tipli toplu girişler”).
-- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a'da `model/ops` ve üst düzey `model/geom` (bindirme, alan cebiri, paralel, ölçmecilik, şekiller, teğet daire, öteleme, tarama, ölçü) çekirdeğin ince cephelerine döndü, TS algoritmaları silindi. Kalan TS geometrisi ilkel modüllerdir (S3b) ve araçların satır içi hesaplarıdır (S5). Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **Geçiş başladı (S1a–S2):** seçme, kenar seçme, kenet, pencere seçimi, çevreleyen şekil, sınır kenarları, etiket kararları, tutamaçlar, buda ve uzat önizlemesi ve sonucu, taşıma/kopyalama/esnetme/yapıştırma hayaletleri, seçim toplamları, katman kurulurken çizilen geometri, dolguların üçgenlenmesi ve çizimdeki ifadelerin geometri değerleri artık Rust geometri deposundan geliyor (`viewport/picking.ts` → `geometry-core::store`). S3a'da `model/ops` ve üst düzey `model/geom` (bindirme, alan cebiri, paralel, ölçmecilik, şekiller, teğet daire, öteleme, tarama, ölçü) çekirdeğin ince cephelerine döndü, TS algoritmaları silindi. Kalan TS geometrisi ilkel modüllerdir (S3b). Uygulama çekirdeği açılışta yükler (`src/wasm/core.ts`), worker derlenmiş modülü ilk işiyle alır.
+- **S5 yapıldı:** araçların ve nesne izlemenin satır içi hesapları (nokta girişi, orto/kutupsal imleç, nesne izleme, nokta hesabının kendi aritmetiği, araçların yapı hesapları; 39 işlem) `geometry-core::tools`'tan geliyor (`src/tools/constructions.ts`, ADR 0008 “Araç ve görünüm hesapları (S5)”).
 - **Aynı gün main'e girenler:**
   - Yeni proje (`file.new`);
   - bulut projesini yeniden adlandırma ve yumuşak silme (migration 0002);
@@ -35,7 +36,7 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
   - `npx tsc --noEmit -p .` temiz, `pnpm test` geçti.
   - `cargo test --workspace` ve `cargo clippy --workspace --all-targets -- -D warnings` temiz (veritabanı testleri sır olmadığı için atlandı).
   - `pnpm e2e`: WebGPU'ya ait üç denetim dışında hepsi geçti; o üçü taban commit'te de (747d942) aynı biçimde düşüyor (bkz. §5, bulut konteyneri).
-- **WASM paketi:** 784 KB, gzip ile 267 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; S1d'de boyuta bakılmalı (std `HashMap`, sıralama örnekleri).
+- **WASM paketi:** 845 KB, gzip ile 283 KB (S1a'da +32, S1b'de +5, S1c'de +8, S2'de +3, S3a'da +4, S5'te +16 KB gzip). ADR 0005 taslağındaki başlangıç sınırı 300 KB gzip; 17 KB kaldı (§6 madde 8).
 - **Ölçüm tabanı** (kullanıcının makinesi):
   - 81 000 nesnede seçme ve kenet: fare hareketi başına 9–13 ms (hedef < 2 ms).
   - 1 milyon parçalı eşyükseltide budama önizlemesi: kare başına ~0,75 s.
@@ -81,15 +82,13 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 - `processing/features.ts` sınırları, `numbering`, `edgeLengths` ve ifade ölçüleri çekirdekten gelir.
 - `processing/worker/worker.test.ts` ve e2e worker denetimi geçmeli.
 
-### S5: araç ve görünümdeki satır içi hesaplar
+### S5: araç ve görünümdeki satır içi hesaplar (yapıldı)
 
-- Belgeye yazılan ya da CAD kararı veren hesaplar çekirdeğe taşınır:
-  - `tools/coordinateInput.ts` (göreli, kutupsal);
-  - `viewport/objectTracking.ts` (hiza, hiza boyunca mesafe);
-  - `tools/pointCalc.ts`;
-  - araçlardaki nokta kurma hesapları.
-- Bulmak için `src/tools`, `src/viewport` ve `src/ui` içinde `Math.(sin|cos|atan2|hypot|sqrt)` aranır.
-- Yalnız kamera ve ekran pikseli hesabı TypeScript'te kalır. Kalanların listesi ADR 0008'e yazılır.
+- **Yapıldı:** nokta girişi (`coordinateInput.ts`: göreli, kutupsal, imleç yönünde), orto ve kutupsal imleç (`tracking.ts` → `constrainCursor`), nesne izleme (`viewport/objectTracking.ts`), nokta hesabının kendi aritmetiği ve araçların yapı hesapları (yarıçapla düzgün çokgen, yay devamı, açıortay, çoklu çizgi yay parçaları, köşe yuvarla ve pah, döndür, ölçekle, kutupsal dizi, hizala, ölçü kolları, halka …) `geometry-core::tools`'ta; araçlar `src/tools/constructions.ts` ile çağırır. Derin koşu temiz, `calls-s5-*.json` donduruldu. Kutupsal dizide TM'deki bir kırılganlık iki tarafta düzeltildi. TS'te kalanların listesi ve gerekçesi ADR 0008'de.
+- **Doğrulama (S5 dalı):** `npx tsc --noEmit -p .` ve `pnpm test` temiz, `pnpm rust:test` (clippy dahil) temiz, `pnpm e2e`'de yalnız WebGPU'nun bilinen üç denetimi düştü.
+- **Kalan:**
+  - Araçların çağırdığı ilkel model işlevleri (`dist`, `angleDeg` …) S3b'de o modüllerle birlikte cepheye döner (`survey` S3a'da döndü); eski TS referansları (`src/wasm/parity/reference/{pointInput,objectTracking,drawing,editing}.ts`) S3c'de silinir.
+  - Yazılan değerlerin tek IEEE işlemiyle yeniden ifadesi (derece → radyan, kâğıt mm → metre, `hedef − temel`, uzat-kısalt farkı) ve dikdörtgen dizinin ötelemeleri (tek çarpım; büyük bir dizinin önizlemesi her karede binlerce ötelemeyi JSON'dan geçirirdi) bilerek TS'te kaldı; komutlar sunucuya gidince (CLAUDE.md §18) komut zarfıyla birlikte yeniden bakılır. Kullanıcı aksini isterse küçük işlemlerle taşınır.
 
 ### S6: belgeler ve ölçüm raporu
 
@@ -192,4 +191,4 @@ güncel tutun; biten maddeyi silin, yeni kararı ekleyin.
 5. ADR 0005 (performans hedefleri) hâlâ taslak; onay bekliyor.
 6. Tipli öznitelik alanlarının tasarım onayı. Önerilen: katman başına şema; türler metin, tam sayı, ondalık, mantıksal, tarih ve sabit liste.
 7. Gerçek OpenID denemesi için kurumun OpenID sunucusu bilgileri (issuer, client id).
-8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına yaklaşıyor (S3a'da 267 KB; S5 ile ~280 KB). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.
+8. WASM paketi ADR 0005 taslağındaki 300 KB gzip başlangıç sınırına yaklaşıyor (S3a'da 267 KB, S5 ile 283 KB). Seçenekler: işlev adları bölümünü üretim paketinden atmak (S1 sonunda −18 KB gzip; bedeli tuzakta yığın izinde ad yerine numara), sınırı değiştirmek ya da ağır işlemleri ayrı pakete bölmek.

@@ -1,4 +1,4 @@
-import { CoreFaceIndex, op } from '../../wasm/core';
+import { CoreFaceIndex, op, writeArgs } from '../../wasm/core';
 import type { Entity } from '../entities';
 import type { Vec2 } from '../geometry';
 import type { Edge } from './intersect';
@@ -66,12 +66,12 @@ function wrap(core: CoreFaceIndex): FaceIndex {
 }
 
 export function faceIndex(lines: readonly Source[]): FaceIndex {
-  return wrap(CoreFaceIndex.of(JSON.stringify(lines)));
+  return wrap(CoreFaceIndex.of(writeArgs(lines)));
 }
 
 /** Faces of the line work of entities (their `lineSource`), built in one step in the core. */
 export function entityFaceIndex(entities: readonly Entity[]): FaceIndex {
-  return wrap(CoreFaceIndex.ofEntities(JSON.stringify(entities)));
+  return wrap(CoreFaceIndex.ofEntities(writeArgs(entities)));
 }
 
 /** The face of the line work around `p` (see FaceIndex.at). */

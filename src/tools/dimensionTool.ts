@@ -1,11 +1,11 @@
 import type { AppContext } from '../app/context';
 import type { Entity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
-import { normAngle } from '../model/geom/arc';
-import { DIMENSION_STYLE_LABEL, dimensionOffsetAt, layoutDimension, linearAngleFor, sectorArms, signedOffset, type DimensionGeom, type DimensionStyle } from '../model/geom/dimension';
+import { DIMENSION_STYLE_LABEL, dimensionOffsetAt, layoutDimension, linearAngleFor, signedOffset, type DimensionGeom, type DimensionStyle } from '../model/geom/dimension';
 import { closestOnEdge, lineLine, type Edge } from '../model/geom/intersect';
 import { entityEdges } from '../model/ops/edges';
 import type { ViewTransform } from '../viewport/Camera';
+import { edgeArms, radialDimension, vertexArms } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokeGeometry, strokePath } from './preview';
@@ -46,11 +46,6 @@ function circleAt(e: Entity, p: Vec2): { c: Vec2; r: number } | null {
   }
   return best ? { c: best.e.c, r: best.e.r } : null;
 }
-
-const unit = (s: Seg): Vec2 => {
-  const l = dist(s.a, s.b);
-  return { x: (s.b.x - s.a.x) / l, y: (s.b.y - s.a.y) / l };
-};
 
 /**
  * Ölçü: aligned (two points and the line's place), linear ΔY/ΔX (the
@@ -246,36 +241,24 @@ export class DimensionTool extends PointInputTool {
       default: {
         const circle = this.circle;
         if (!circle) return null;
-        const l = dist(circle.c, loc);
-        const u = l > 1e-9 ? { x: (loc.x - circle.c.x) / l, y: (loc.y - circle.c.y) / l } : { x: 1, y: 0 };
-        const b = { x: circle.c.x + u.x * circle.r, y: circle.c.y + u.y * circle.r };
-        return { a: circle.c, b, offset: Math.max(0, l - circle.r), height, style: this.mode };
+        const { b, offset } = radialDimension(circle.c, circle.r, loc);
+        return { a: circle.c, b, offset, height, style: this.mode };
       }
     }
   }
 
-  /** Vertex and arm points for an angular dimension whose arc goes through `loc`. */
+  /**
+   * Vertex and arm points for an angular dimension whose arc goes through
+   * `loc`: from p1 to p2 counter-clockwise or the other way round; between
+   * edges, each arm as far as its edge was clicked (at least a little).
+   */
   private armsAt(loc: Vec2): { c: Vec2; a: Vec2; b: Vec2 } | null {
     if (DimensionTool.byVertex) {
       const [c, p1, p2] = this.pts;
-      const t = normAngle(Math.atan2(loc.y - c.y, loc.x - c.x) - Math.atan2(p1.y - c.y, p1.x - c.x));
-      const sweep = normAngle(Math.atan2(p2.y - c.y, p2.x - c.x) - Math.atan2(p1.y - c.y, p1.x - c.x));
-      // The arc goes where it is placed: from p1 to p2 counter-clockwise, or the other way round.
-      return t <= sweep ? { c, a: p1, b: p2 } : { c, a: p2, b: p1 };
+      return vertexArms(c, p1, p2, loc);
     }
     const [e1, e2] = this.edges;
-    const hit = lineLine(e1.a, e1.b, e2.a, e2.b);
-    if (!hit) return null;
-    const c = hit.p;
-    const u1 = unit(e1);
-    const u2 = unit(e2);
-    const [s, e] = sectorArms(c, u1, u2, loc);
-    // Each arm reaches as far as its edge was clicked (at least a little).
-    const reach = (u: Vec2) => {
-      const edge = Math.abs(u.x * u1.y - u.y * u1.x) < 1e-9 ? e1 : e2;
-      return Math.max(dist(c, edge.at), 1e-3);
-    };
-    return { c, a: { x: c.x + s.x * reach(s), y: c.y + s.y * reach(s) }, b: { x: c.x + e.x * reach(e), y: c.y + e.y * reach(e) } };
+    return edgeArms(e1, e2, loc);
   }
 
   private commit(g: DimensionGeom | null): void {

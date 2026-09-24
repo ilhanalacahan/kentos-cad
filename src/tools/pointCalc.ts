@@ -1,8 +1,9 @@
 import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { dist, type Vec2 } from '../model/geometry';
-import { alongLine, clockwiseAngle, distanceIntersection, lineIntersection, polarPoint, sideOffsets, sidePoint } from '../model/geom/survey';
+import { alongLine, clockwiseAngle, distanceIntersection, lineIntersection, sideOffsets, sidePoint } from '../model/geom/survey';
 import type { ViewTransform } from '../viewport/Camera';
+import { alongRatio, calcPolar, midpoint, nearestOf } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { drawTag, strokePath } from './preview';
 import type { Tool, ToolPointer } from './Tool';
@@ -132,10 +133,7 @@ class PointCalcTool implements Tool {
 
   pointerDown(p: ToolPointer): void {
     if (p.button !== 0) return;
-    if (this.candidates.length) {
-      const best = this.candidates.reduce((a, b) => (dist(a, p.world) <= dist(b, p.world) ? a : b));
-      return this.finish(best);
-    }
+    if (this.candidates.length) return this.finish(nearestOf(this.candidates, p.world));
     const need = REFS[this.kind].length;
     if (this.pts.length < need) {
       if (this.pts.length && dist(this.pts.at(-1)!, p.world) < 1e-9) return;
@@ -152,7 +150,7 @@ class PointCalcTool implements Tool {
 
   private whenAllPicked(): void {
     const [a, b, c, d] = this.pts;
-    if (this.kind === 'mid') this.finish({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    if (this.kind === 'mid') this.finish(midpoint(a, b));
     else if (this.kind === 'lines') {
       const x = lineIntersection(a, b, c, d);
       if (x) this.finish(x);
@@ -190,7 +188,7 @@ class PointCalcTool implements Tool {
       case 'along': {
         const ratio = t.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
         if (ratio && +ratio[2] > 0) {
-          this.finish(alongLine(a, b, (dist(a, b) * +ratio[1]) / +ratio[2]));
+          this.finish(alongRatio(a, b, +ratio[1], +ratio[2]));
           return true;
         }
         const n = parseNumber(t);
@@ -200,8 +198,7 @@ class PointCalcTool implements Tool {
       }
       case 'polar': {
         if (!pair) return false;
-        const unit = this.ctx.doc.settings.angleUnit.value === 'deg' ? Math.PI / 180 : Math.PI / 200;
-        this.finish(polarPoint(a, b, +pair[1] * unit, +pair[2]));
+        this.finish(calcPolar(a, b, +pair[1], this.ctx.doc.settings.angleUnit.value, +pair[2]));
         return true;
       }
       default:

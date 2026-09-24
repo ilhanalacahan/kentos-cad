@@ -1,7 +1,8 @@
 import { dist, type Vec2 } from '../model/geometry';
 import { normAngle } from '../model/geom/arc';
-import { ellipseFromAxis, ellipseFromCenter, ellipsePoint, paramAtPolar, tessellateEllipse, type EllipseGeom } from '../model/geom/ellipse';
+import { ellipseFromAxis, ellipseFromCenter, ellipsePoint, majorLength, paramAtPolar, tessellateEllipse, type EllipseGeom } from '../model/geom/ellipse';
 import type { ViewTransform } from '../viewport/Camera';
+import { ellipseParamToward, ellipseRotationHalf, midpoint } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath } from './preview';
@@ -51,13 +52,12 @@ export class EllipseTool extends PointInputTool {
 
   private center(): Vec2 {
     const [p0, p1] = this.pts;
-    return this.fromCenter ? p0 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+    return this.fromCenter ? p0 : midpoint(p0, p1);
   }
 
   /** Parameter at the polar angle of `p` seen from the centre, relative to the major axis. */
   private paramAt(p: Vec2): number {
-    const g = this.geom!;
-    return paramAtPolar(g, Math.atan2(p.y - g.c.y, p.x - g.c.x) - Math.atan2(g.major.y, g.major.x));
+    return ellipseParamToward(this.geom!, p);
   }
 
   protected onPoint(p: Vec2): void {
@@ -85,8 +85,7 @@ export class EllipseTool extends PointInputTool {
           return true;
         }
         // The other axis is the first one seen tilted by the angle: ratio = cos(angle).
-        const a = dist(this.pts[0], this.pts[1]) / (this.fromCenter ? 1 : 2);
-        this.shape(this.ellipseFor(a * Math.cos(n! * DEG)));
+        this.shape(this.ellipseFor(ellipseRotationHalf(this.pts[0], this.pts[1], this.fromCenter, n!)));
       } else if (n! > 0) this.shape(this.ellipseFor(n!));
       this.refreshPrompt();
       return true;
@@ -115,7 +114,7 @@ export class EllipseTool extends PointInputTool {
   }
 
   private commit(g: EllipseGeom): void {
-    const a = Math.hypot(g.major.x, g.major.y);
+    const a = majorLength(g);
     if (this.create({ kind: 'ellipse', ...g })) this.ctx.log.success(`${g.t0 === g.t1 ? 'Elips' : 'Eliptik yay'} eklendi: ${this.ctx.format.length(a, false)} × ${this.ctx.format.length(a * g.ratio)} (yarı eksenler)`);
     this.reset();
   }
@@ -144,7 +143,7 @@ export class EllipseTool extends PointInputTool {
       strokePath(g, view, [this.center(), h], { color: pal.accent, dash: [3, 3] });
       if (e) {
         strokePath(g, view, tessellateEllipse(e), { color: pal.accent, closed: true });
-        const a = Math.hypot(e.major.x, e.major.y);
+        const a = majorLength(e);
         drawTag(g, view.worldToScreen(h), [`Yarı eksenler ${f.length(a, false)} × ${f.length(a * e.ratio)}`], pal.accent, pal.labelHalo);
       }
       return;

@@ -1,6 +1,6 @@
 import type { CrosshairSize } from '../app/state';
 import type { CadDocument } from '../model/document';
-import type { Vec2 } from '../model/geometry';
+import { dist, type Vec2 } from '../model/geometry';
 import type { DimensionLayout } from '../model/geom/dimension';
 import { resolveColor, type CanvasPalette } from '../render/color';
 import type { ToolCursor } from '../tools/Tool';
@@ -364,7 +364,7 @@ export function drawObjectTracking(g: CanvasRenderingContext2D, acquired: readon
     g.globalAlpha = 1;
     const at = cam.worldToScreen(track.point);
     const l = track.lines[0];
-    const text = track.lines.length > 1 ? 'İzleme: kesişim' : `İzleme ${formatLength(Math.hypot(track.point.x - l.origin.x, track.point.y - l.origin.y))} < ${l.angle}°`;
+    const text = track.lines.length > 1 ? 'İzleme: kesişim' : `İzleme ${formatLength(dist(l.origin, track.point))} < ${l.angle}°`;
     g.font = `500 10.5px ${FONT}`;
     g.textBaseline = 'bottom';
     haloText(g, text, Math.round(at.x) + 9, Math.round(at.y) - 7, pal.snap, pal.labelHalo);

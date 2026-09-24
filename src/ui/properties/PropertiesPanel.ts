@@ -2,9 +2,9 @@ import type { AppContext } from '../../app/context';
 import { watchAll } from '../../core/signal';
 import { DIMENSION_STYLE_LABEL, layoutDimension } from '../../model/geom/dimension';
 import { ENTITY_KIND_LABEL, HATCH_PATTERN_LABEL, entityArea, entityLength, type Entity, type HatchPatternType } from '../../model/entities';
-import { bearingGrad, dist } from '../../model/geometry';
+import { angleDeg, bearingGrad, dist } from '../../model/geometry';
 import { sweep } from '../../model/geom/arc';
-import { isFullEllipse } from '../../model/geom/ellipse';
+import { isFullEllipse, majorLength } from '../../model/geom/ellipse';
 import { Panel } from '../dock/Panel';
 import { h, replaceChildren } from '../dom';
 import { geometryClassOf } from '../../style/geometry';
@@ -231,14 +231,14 @@ export class PropertiesPanel extends Panel {
       }
       case 'ellipse': {
         const d = (rad: number) => ((((rad * 180) / Math.PI) % 360 + 360) % 360).toFixed(4);
-        const a = Math.hypot(e.major.x, e.major.y);
+        const a = majorLength(e);
         const full = isFullEllipse(e);
         geo.push(
           num('Merkez Y', e.c.x),
           num('Merkez X', e.c.y),
           num('Büyük yarı eksen', a, 'm'),
           num('Küçük yarı eksen', a * e.ratio, 'm'),
-          { label: 'Eksen açısı', value: d(Math.atan2(e.major.y, e.major.x)), numeric: true, unit: '°' },
+          { label: 'Eksen açısı', value: (((angleDeg({ x: 0, y: 0 }, e.major) % 360) + 360) % 360).toFixed(4), numeric: true, unit: '°' },
           ...(full
             ? [num('Çevre', entityLength(e)!, 'm'), ...area(entityArea(e)!)]
             : [
@@ -254,7 +254,7 @@ export class PropertiesPanel extends Panel {
         geo.push(
           num(e.kind === 'ray' ? 'Başlangıç Y' : 'Geçtiği nokta Y', e.p.x),
           num(e.kind === 'ray' ? 'Başlangıç X' : 'Geçtiği nokta X', e.p.y),
-          { label: 'Doğrultu', value: ((((Math.atan2(e.dir.y, e.dir.x) * 180) / Math.PI) % 360 + 360) % 360).toFixed(4), numeric: true, unit: '°' },
+          { label: 'Doğrultu', value: (((angleDeg({ x: 0, y: 0 }, e.dir) % 360) + 360) % 360).toFixed(4), numeric: true, unit: '°' },
           { label: 'Semt', value: f.bearing(bearingGrad(e.p, { x: e.p.x + e.dir.x, y: e.p.y + e.dir.y }), false), numeric: true, unit: f.angleUnitLabel },
         );
         break;

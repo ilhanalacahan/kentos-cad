@@ -1,8 +1,10 @@
+import { tessellateCircle } from '../model/entities';
 import type { Vec2 } from '../model/geometry';
 import { dist, signedArea } from '../model/geometry';
 import { cornerOfPath } from '../model/ops/fillet';
 import { rectFromCorners, rectFromEdge, rectFromSize, regularPolygon, regularPolygonOnEdge, sideDistance } from '../model/geom/shapes';
 import type { ViewTransform } from '../viewport/Camera';
+import { directionAngle, regularPolygonRadius } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath } from './preview';
@@ -100,7 +102,7 @@ export class RectangleTool extends PointInputTool {
       return;
     }
     if (this.stage === 'rotation') {
-      if (dist(a, p) > 1e-9) RectangleTool.rotation = Math.atan2(p.y - a.y, p.x - a.x);
+      if (dist(a, p) > 1e-9) RectangleTool.rotation = directionAngle(a, p);
       this.stage = 'second';
       return;
     }
@@ -159,7 +161,7 @@ export class RectangleTool extends PointInputTool {
     const pal = this.ctx.view.palette;
     if (this.stage === 'rotation') {
       strokePath(g, view, [a, this.hover], { color: pal.accent, dash: [3, 3] });
-      drawTag(g, view.worldToScreen(this.hover), [`Açı ${fmtDeg(Math.atan2(this.hover.y - a.y, this.hover.x - a.x))}`], pal.accent, pal.labelHalo);
+      drawTag(g, view.worldToScreen(this.hover), [`Açı ${fmtDeg(directionAngle(a, this.hover))}`], pal.accent, pal.labelHalo);
       return;
     }
     if (this.stage !== 'second' && this.stage !== 'side') return;
@@ -292,11 +294,8 @@ export class RegularPolygonTool extends PointInputTool {
       return true;
     }
     if (plain && !this.byEdge && this.pts.length === 1 && n! > 0) {
-      const sides = RegularPolygonTool.sides;
-      const c = this.pts[0];
       // Bottom edge horizontal: the edge middle sits straight below the centre.
-      const a = RegularPolygonTool.inscribed ? -Math.PI / 2 + Math.PI / sides : -Math.PI / 2;
-      this.commit(regularPolygon(c, sides, { x: c.x + Math.cos(a) * n!, y: c.y + Math.sin(a) * n! }, RegularPolygonTool.inscribed ? 'inscribed' : 'circumscribed'));
+      this.commit(regularPolygonRadius(this.pts[0], RegularPolygonTool.sides, n!, RegularPolygonTool.inscribed));
       this.refreshPrompt();
       return true;
     }
@@ -332,9 +331,7 @@ export class RegularPolygonTool extends PointInputTool {
     if (!ring) return;
     const c = this.pts[0];
     if (!this.byEdge) {
-      const r = dist(c, this.hover);
-      const circle = Array.from({ length: 97 }, (_, k) => ({ x: c.x + Math.cos((k / 96) * 2 * Math.PI) * r, y: c.y + Math.sin((k / 96) * 2 * Math.PI) * r }));
-      strokePath(g, view, circle, { color: pal.accent, dash: [2, 4] });
+      strokePath(g, view, tessellateCircle(c, dist(c, this.hover), 96), { color: pal.accent, closed: true, dash: [2, 4] });
       strokePath(g, view, [c, this.hover], { color: pal.accent, dash: [3, 3] });
     }
     strokePath(g, view, ring, { color: pal.accent, closed: true });

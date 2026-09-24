@@ -79,6 +79,20 @@ export function readResult(text: string): unknown {
   return text.includes('"#') ? JSON.parse(text, revive) : JSON.parse(text);
 }
 
+const special = (_key: string, x: unknown) => (typeof x !== 'number' || Number.isFinite(x) ? x : x !== x ? '#NaN' : x > 0 ? '#Inf' : '#-Inf');
+
+/**
+ * Arguments as JSON for the core. JSON.stringify writes NaN and ±∞ as
+ * `null`, which the core would read as NaN (or as a missing optional
+ * argument): a distance of `1 / 0` must stay infinite. `null` in the text
+ * also stands for undefined and null, so only then is it worth the slower
+ * pass that writes the special numbers as "#NaN" / "#Inf" / "#-Inf".
+ */
+export function writeArgs(value: unknown): string {
+  const text = JSON.stringify(value);
+  return text.includes('null') ? JSON.stringify(value, special) : text;
+}
+
 /**
  * A caller for the core operation `name`. `undef`: the TypeScript function
  * returned `undefined` (not `null`) for "nothing".
@@ -93,7 +107,7 @@ export function op<F extends (...args: never[]) => unknown>(name: string, undef 
     }
     let text: string;
     try {
-      text = callOp(id, JSON.stringify(args));
+      text = callOp(id, writeArgs(args));
     } catch (err) {
       fault(err);
       throw err;

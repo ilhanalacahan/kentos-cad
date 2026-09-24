@@ -1,10 +1,16 @@
 import type { Vec2 } from '../model/geometry';
+import { op } from '../wasm/core';
 
 const NUM = String.raw`[-+]?\d+(?:\.\d+)?`;
 const ABS = new RegExp(String.raw`^(${NUM})\s*[,; ]\s*(${NUM})$`);
 const REL = new RegExp(String.raw`^@(${NUM})\s*[,; ]\s*(${NUM})$`);
 const POLAR = new RegExp(String.raw`^@?(${NUM})\s*<\s*(${NUM})$`);
 const DIST = new RegExp(String.raw`^(${NUM})$`);
+
+// The points themselves come from the Rust core (tools/point_input.rs, docs/adr/0008 S5).
+const relativePoint = op<(last: Vec2, dx: number, dy: number) => Vec2>('relativePoint');
+const polarOffset = op<(last: Vec2, distance: number, angle: number) => Vec2>('polarOffset');
+const towardPoint = op<(last: Vec2, cursor: Vec2, distance: number) => Vec2 | null>('towardPoint');
 
 /**
  * Parses command-line point input (decimal point, "," or ";" as separator):
@@ -16,26 +22,16 @@ const DIST = new RegExp(String.raw`^(${NUM})$`);
 export function parsePointInput(text: string, last: Vec2 | null, cursor: Vec2 | null, along?: (distance: number) => Vec2 | null): Vec2 | null {
   const t = text.trim();
   let m = t.match(REL);
-  if (m) return last ? { x: last.x + +m[1], y: last.y + +m[2] } : null;
+  if (m) return last ? relativePoint(last, +m[1], +m[2]) : null;
   m = t.match(POLAR);
-  if (m) {
-    if (!last) return null;
-    const a = (+m[2] * Math.PI) / 180;
-    return { x: last.x + Math.cos(a) * +m[1], y: last.y + Math.sin(a) * +m[1] };
-  }
+  if (m) return last ? polarOffset(last, +m[1], +m[2]) : null;
   m = t.match(ABS);
   if (m) return { x: +m[1], y: +m[2] };
   m = t.match(DIST);
   // A bare number follows an active tracking line first, then the cursor direction.
   const tracked = m && along ? along(+m[1]) : null;
   if (tracked) return tracked;
-  if (m && last && cursor) {
-    const dx = cursor.x - last.x;
-    const dy = cursor.y - last.y;
-    const l = Math.hypot(dx, dy);
-    if (l < 1e-9) return null;
-    return { x: last.x + (dx / l) * +m[1], y: last.y + (dy / l) * +m[1] };
-  }
+  if (m && last && cursor) return towardPoint(last, cursor, +m[1]);
   return null;
 }
 

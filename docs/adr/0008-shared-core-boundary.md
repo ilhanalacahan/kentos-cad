@@ -66,7 +66,7 @@ Kullanıcının kararları (2026-09-24):
 - **Sayılar bit bit geçer:**
   - Sayılar Rust'ın doğru yuvarlayan `str::parse::<f64>` işleviyle okunur; JSON.parse ile aynı float64'ü verir.
   - Sonuçlar en kısa geri dönüşlü biçimde yazılır; NaN, +∞ ve −∞ sırasıyla `"#NaN"`, `"#Inf"`, `"#-Inf"` olur ve `core.ts` bunları sayıya geri çevirir. serde_json bu değerleri `null` yapardı; `null · 2 = 0` sessizce yanlış sonuç verirdi.
-  - JSON.stringify NaN ve ±∞'u `null` yazdığı için, sayı beklenen yerde `null` NaN okunur; TS de NaN'ı taşımaya devam ederdi. Eksik alan `null` sayılır; `None` olan `Option` alanları yazılmaz (TS'in tanımsız özellikleri yazmaması gibi); bilinmeyen alanlar yok sayılır.
+  - JSON.stringify NaN ve ±∞'u `null` yazar. Argümanlarda `core.ts` (`writeArgs`) metinde `null` görünce ikinci bir geçişle bunları da `"#NaN"`, `"#Inf"`, `"#-Inf"` olarak yazar: `1 / 0`'lık bir mesafe çekirdekte de sonsuz kalır (S3a'dan sonra, cepheler TS'teki ±∞'u NaN'a çeviriyordu; `calls.wasm.test.ts`). Sayı beklenen yerde çıplak `null` NaN okunur. Eksik alan `null` sayılır; `None` olan `Option` alanları yazılmaz (TS'in tanımsız özellikleri yazmaması gibi); bilinmeyen alanlar yok sayılır.
   - `JSON.stringify(-0)` `"0"` yazar. Girdideki −0 korunmaz; `.kcad` ve bulut kaydı da bunu zaten korumuyor.
 - **`undefined` ve `null`:** JSON'da `undefined` yoktur. `op(ad, true)`, TS işlevi yokluk için `undefined` döndürüyorsa `null`'u `undefined`'a çevirir. İsteğe bağlı alanlar çekirdekte yazılmaz (`skip_serializing_if`).
 - **Tipli toplu girişler:** kare başına binlerce çağrı yapan yerler JSON tablosundan değil, `Float64Array` giren ve dizi dönen tipli girişlerden geçer (`crates/wasm`, `core.ts`). Tuzak bildirimi `op` ile aynıdır.
@@ -124,6 +124,33 @@ Kullanıcının kararları (2026-09-24):
 - **Tam elipsin yolu kapalıdır (TS'ten gelen hata, S3a'dan sonra):** `pathOf` tam elipsi açık yol sayıyordu; Böl 4 parçada 3 nokta koyuyordu (dairede 4) ve başlangıç noktası eksik kalıyordu. Artık tam elips daire gibi kapalıdır (`edit.test.ts`). Donmuş dosyalarda tam elipsin yolu yoktu, hiçbir durum değişmedi.
 - **Sarım dizini testleri** TS'teki `WindingIndex` ile birlikte Rust'a geçti (`geom/arrangement.rs`): aynı halka ve noktalarda açı toplamıyla aynı sarım sayıları; ışın bir yay ucundan geçince açı toplamına düşüş.
 
+### Araç ve görünüm hesapları (S5)
+
+- **Kapsam:** araçların ve görünümün belgeye yazılan ya da bir CAD kararı veren satır içi hesapları. Her biri önce araçtan birebir saf bir TS işlevine çıkarıldı (davranış aynı), çekirdeğe taşındı, sonra çağıranlar `op(ad)` ile çekirdeğe geçti. Eski TS işlevleri parity referansı olarak `src/wasm/parity/reference/{pointInput,objectTracking,drawing,editing}.ts`'te durur; S3'te silinir.
+- **Çekirdek modülleri** (`geometry-core::tools`, 39 işlem):
+  - `point_input` (`tools/coordinateInput.ts`, `tracking.ts`, `pointCalc.ts`): `relativePoint` (`@dY,dX`), `polarOffset` (`@d<a`), `towardPoint` (tek sayı: imleç yönünde), `constrainCursor` (orto ve kutupsal kilit), `midpoint`, `alongRatio` (a/b oranı), `calcPolar` (açı proje biriminde), `nearestOf` (kenar kesişiminin iki çözümünden tıklanana yakını).
+  - `object_tracking` (`viewport/objectTracking.ts`): `trackAngles`, `trackPoint`, `alongTrack`. TS dosyası yalnız tipleri ve çağırıcıları tutar; `ViewportController` değişmedi.
+  - `drawing` (çizim araçları): `directionAngle`, `regularPolygonRadius` (yazılan yarıçapla, alt kenar yatay), `endTangent` (yayın “Devam”ı), `degDirection`, `circleOnDiameter` (2N), `ellipseParamToward`, `ellipseRotationHalf`, `unitToward`, `xlineDirection` (açıortay dahil), `radialPoint` (dik in'de çembere dikme ayağı, çoklu çizginin merkez seçeneğinde uç), `radiusBulge`, `centreBulge`, `offsetAlong`, `textAngle` (okunur yazı açısı), `donutRings`.
+  - `editing` (değiştirme, köşe ve ölçü araçları): `rotationAngle`, `scaleFactor`, `polarArrayTransforms`, `alignTransform`, `vertexCorner` (çoklu çizgi köşesi), `linesCornerAt`, `pulledDistance` (fareyle çekilen boyun görünüme uygun adımı), `filletRadiusFor`, `filletArc` ve `chamferLine` (“Kırp: hayır”), `vertexArms`, `edgeArms`, `radialDimension`.
+- **Cephe:** `src/tools/constructions.ts` araç işlemlerinin tipli çağırıcılarıdır; nokta girişi `coordinateInput.ts` ve `tracking.ts`'te, nesne izleme `viewport/objectTracking.ts`'te çağrılır. Hepsi JSON tablosundan geçer: imleç hareketi ya da kare başına en çok birkaç çağrı. Aynı makinede (bulut, Node 22, başka işlerle yüklü) çağrı başına `constrainCursor` 5 µs (TS 0,1 µs), `pulledDistance` 4,5 µs, `trackPoint` üç izleme noktası ve 15° adımla 30 µs (TS 65 µs). İmleç kısıtlamasında kenetli ve ilk noktadaki hareketler çekirdeğe hiç gitmez (sonuç zaten imleçtir). Köşe araçları çekirdeğe köşenin geometrisini ve komşu iki köşeyi yollar, nesneyi değil: bir eşyükseltinin binlerce noktası her harekette JSON olmaz.
+- **TS'te kalan yapıştırıcı:**
+  - Araçlar çekirdek işlemlerini ve çekirdekte karşılığı olan model işlevlerini (S3'te cepheye döner) çağırır, sonuçlarını karşılaştırır: hangi uç daha yakın, hangi kenar tıklandı, alan değişti mi, iki nokta çakışıyor mu.
+  - Yazılan bir değerin ya da iki tıklanan noktanın tek IEEE işlemiyle yeniden ifadesi TS'te kalır: derece → radyan, kâğıt mm → metre (çizim ölçeğinde), çap → yarıçap, uzat-kısalt farkı ve yüzdesi, `hedef − temel` yer değiştirmesi (taşı, kopyala, esnet, yapıştır), yazılan yeni açıdan referans açının çıkarılması. IEEE'nin dört işlemi iki dilde bit bit aynıdır; komutlar sunucuya gidince (CLAUDE.md §18) bunlar komut zarfının girdisidir.
+  - Dikdörtgen dizinin ötelemeleri de (her biri tek çarpım: `j·dY`, `i·dX`) bu yüzden araçtadır. Önizleme her karede bütün kopyaların ötelemesini kurar; çekirdekten JSON ile 100 × 100 dizide bu kare başına 5,7 ms sürdü (TS 0,2 ms), 20 × 20'de 0,23 ms.
+  - Parsel numarası ve “Tapu alanı” özniteliğinin iki basamakla yazılması geometri değil veri kuralıdır; §23 politikası gelince ele alınır.
+- **Model işlevine bağlanan satır içi hesaplar:** bir model işlevinin aynısı olanlar o işleve bağlandı: `angleDeg` (yayın gösterilen açısı; yazı, yardımcı çizgi ve özellikler panelindeki açı okumaları), `dist` (alan bölmede çift nokta, izleme okuması), `majorLength` (elips yarı ekseni), `tessellateCircle` (düzgün çokgenin kılavuz çemberi). Bu modüller S3'te çekirdeğe döner.
+- **TS'te kalan trigonometri** (`src/tools`, `src/viewport` ve `src/ui` içinde `Math.(sin|cos|atan2|hypot|sqrt|tan|asin|acos|log10|pow)` araması): yalnız kamera ve ekran pikseli.
+  - **Ekran pikseli:** sürükleme eşikleri (`SelectTool` üç yerde, `modifyTools` ve `editTools` seçim pencereleri, model tasarımcısında `ModelCanvas` ve `modelPalette`); tutamaç yakalama (`ViewportController.gripAt`) ve kenar ortası tutamacının 28 px sınırı (`overlay.midGripVisible`); dik açı işareti (`perpTools.unitScreen`); yol boyunca etiketin ekrandaki açısı (`overlay.drawLabels`); izleme ve kutupsal ışınların ekrana çizimi (`overlay.drawObjectTracking`, `tracking.drawTracking`).
+  - **Kamera:** ölçek çubuğunun yuvarlak uzunluğu (`overlay.drawScaleBar`), yakınlaştırma adımı (`ViewportController`, log2), sonsuz doğru önizlemelerinin görünümü aşan boyu (`constructionTools.strokeInfinite`, `perpTools.drawRef`, `pointCalc`'ın referans doğrusu). Köşe araçlarının adımı görünümden gelir (dört piksel), yuvarlama çekirdektedir.
+  - **Okumaların biçimi:** radyandan dereceye ya da grada çevirme ve `toFixed`; gösterimdir, belgeye dönmez.
+  - **SVG düzenleyicisi** (`src/ui/svgedit/*`): sembol tuvalinin kendi geometrisi; `style-core` işidir (DEVIR “Kapsam dışı”).
+- **Doğrulama:**
+  - Çağrı kümeleri `s5-input` (11 işlem) ve `s5-tools` (28 işlem): adlı sınır durumları (eksenler, tam tur, çakışık noktalar, tam 1e-9 uzaklık, paralel kenarlar, 10'un kuvveti olan toleranslar, TM koordinatları) ve tohumlu rastgele çağrılar. Derin koşu (20 000) temiz geçti. Donmuş dosyalar (`calls-s5-input.json`, `calls-s5-tools.json`) native ve WASM'da geçer.
+  - Kutupsal izleme hizaları rastgele noktalarla üretilir. Üç hizanın bir noktada kesiştiği ızgara durumunda eşit uzaklıktaki kesişimlerden hangisinin seçileceğini sin/cos'un son biti belirlerdi; eksen hizaları tam olduğu için ızgara noktaları yalnız onlarla kullanılır.
+  - `pulledDistance`'ın `log10` ve `pow`'u V8 ile 10'un kuvvetlerinde de aynı çıktı.
+  - Birim testleri: `src/tools/constructions.test.ts` (araç yapıları) ve `src/tools/tracking.test.ts` (imleç kısıtlaması). `coordinateInput.test.ts` ve `objectTracking.test.ts` aynı adlarla artık çekirdeği sınar.
+- **Bulunan kırılganlık (TS de düzeltildi):** kutupsal dizide dönmeyen kopyaların ötelemesi, seçimin ortası TM koordinatında döndürülüp yeniden çıkarılarak bulunuyordu. 4,4 milyonluk sayıların farkı sin/cos'un son bitini ~2·10⁻⁹ m'ye büyütüyordu; 20 000 durumda 2 kez iki taraf ayrıştı. Artık ortanın merkeze göre farkı döndürülür; aynı dizi TM'de ve başlangıç yakınında bit bit aynı ötelemeyi verir (`constructions.test.ts`, `tools::editing` testi).
+
 ### Başlatma, worker ve hata
 
 - **Sayfa:** `src/main.ts`, `createApp`'tan önce `initCore()` çalıştırır (`WebAssembly.compileStreaming`; tür başlığı yanlışsa baytlardan derler). Yüklenemezse Türkçe hata ve “Yeniden dene” gösterilir.
@@ -157,6 +184,7 @@ Kullanıcının kararları (2026-09-24):
   | S1c (araç önizlemeleri) | 760 KB | 260 KB | Buda ve uzat önizlemesi (kenar kutusu ağacı, ışın ve çember süzgeci), hayalet yolları, esnet, toplamlar; hesapların kendisi zaten tablodaydı |
   | S2 (çizim hattı) | 770 KB | 263 KB | Çizilen geometrinin kayıtları, ifadelerin geometri değerleri, `drawnGeometry` işlemi |
   | S3a (cepheler) | 784 KB | 267 KB | Durum tutan `FaceIndex` sınıfı, `offsetPathXY` ve `hatchLinesXY` tipli girişleri, `transformEntities`, `divisionPoints`; işlemlerin kendisi zaten tablodaydı |
+  | S5 (+39 işlem) | 845 KB | 283 KB | Nokta girişi, nesne izleme, araçların yapı hesapları |
 
 ### Doğrulama
 
@@ -187,6 +215,7 @@ Kullanıcının kararları (2026-09-24):
 - **P7'de bulunanlar (TS de düzeltildi):**
   - Sıfır uzunluklu çizgiyi ötelemek TS'te noktasız bir çizgi (`a`, `b` tanımsız) döndürüyordu. Artık iki taraf da “Öteleme sonucu geçerli bir şekil oluşmadı.” der (`ops.test.ts`).
   - `nearestSegment` ortak köşede eşit uzaklıktaki iki kenardan birini yayın ucundaki sin/cos'un son bitine göre seçiyordu; 20 000 durumda 2 kez iki taraf farklı kenarı verdi. Artık 1e-9 m içindeki kenarlar eşit sayılır ve ilki kazanır (`edit.test.ts`).
+- **S5'te bulunan (TS de düzeltildi):** kutupsal dizide dönmeyen kopyaların ötelemesi TM'de sin/cos'un son bitine bağlıydı; ayrıntı “Araç ve görünüm hesapları (S5)” başlığında.
 - **TS'in istisna fırlattığı girdiler:** boş çoklu çizgiyi birleştirmek, olmayan kenara köşe eklemek, kapalı alanda olmayan köşeyi yuvarlamak. Çekirdek de burada hata fırlatır (`Err` → JS istisnası), panik olmaz; kümeler bu girdileri üretmez.
 - **Golden sahipliği:** TS silindikten sonra dosyalar donmuş davranış kilididir. Bilinçli bir davranış değişikliği (ör. §23.3 robust kararlar) dosyayı incelemeyle günceller.
 

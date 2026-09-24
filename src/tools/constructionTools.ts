@@ -1,14 +1,9 @@
-import { dist, type Vec2 } from '../model/geometry';
+import { angleDeg, type Vec2 } from '../model/geometry';
 import type { ViewTransform } from '../viewport/Camera';
+import { unitToward, xlineDirection } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath } from './preview';
-
-const DEG = Math.PI / 180;
-const unit = (a: Vec2, b: Vec2): Vec2 | null => {
-  const l = dist(a, b);
-  return l < 1e-9 ? null : { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
-};
 
 /** Preview of an infinite line: long enough to cross any view. */
 function strokeInfinite(g: CanvasRenderingContext2D, view: ViewTransform, p: Vec2, dir: Vec2, ray: boolean, color: string): void {
@@ -67,28 +62,9 @@ export class XlineTool extends PointInputTool {
     return super.input(text);
   }
 
-  /** Direction of the line through `p` in the current mode (null: not enough input yet). */
+  /** Direction of the line through `p` in the current mode (null: not enough input yet); a bisector is square to opposite arms. */
   private dirFor(p: Vec2): Vec2 | null {
-    switch (this.mode) {
-      case 'horizontal':
-        return { x: 1, y: 0 };
-      case 'vertical':
-        return { x: 0, y: 1 };
-      case 'angle':
-        return { x: Math.cos(XlineTool.angle * DEG), y: Math.sin(XlineTool.angle * DEG) };
-      case 'bisect': {
-        if (this.pts.length < 2) return null;
-        const u = unit(this.pts[0], this.pts[1]);
-        const v = unit(this.pts[0], p);
-        if (!u || !v) return null;
-        const s = { x: u.x + v.x, y: u.y + v.y };
-        const l = Math.hypot(s.x, s.y);
-        // Opposite arms: the bisector is square to them.
-        return l < 1e-12 ? { x: -u.y, y: u.x } : { x: s.x / l, y: s.y / l };
-      }
-      default:
-        return this.pts.length ? unit(this.pts[0], p) : null;
-    }
+    return xlineDirection(this.mode, this.pts, p, XlineTool.angle);
   }
 
   /** Base point of the line to create for a click at p. */
@@ -121,7 +97,7 @@ export class XlineTool extends PointInputTool {
     if (dir && (!needsBase || this.pts.length)) {
       strokeInfinite(g, view, this.baseFor(h), dir, false, pal.accent);
       // A line has no sense of direction: show its angle in 0–180°.
-      const a = (((Math.atan2(dir.y, dir.x) * 180) / Math.PI) % 180 + 180) % 180;
+      const a = ((angleDeg({ x: 0, y: 0 }, dir) % 180) + 180) % 180;
       drawTag(g, view.worldToScreen(h), [`Açı ${a.toFixed(2)}°`], pal.accent, pal.labelHalo);
     }
     this.drawTracking(g, view);
@@ -139,14 +115,14 @@ export class RayTool extends PointInputTool {
 
   protected onPoint(p: Vec2): void {
     if (!this.pts.length) return void this.pts.push(p);
-    const dir = unit(this.pts[0], p);
+    const dir = unitToward(this.pts[0], p);
     if (dir && this.create({ kind: 'ray', p: this.pts[0], dir })) this.ctx.log.success('Işın eklendi.');
   }
 
   override draw(g: CanvasRenderingContext2D, view: ViewTransform): void {
     const h = this.hover;
     if (!h || !this.pts.length) return super.draw(g, view);
-    const dir = unit(this.pts[0], h);
+    const dir = unitToward(this.pts[0], h);
     if (dir) strokeInfinite(g, view, this.pts[0], dir, true, this.ctx.view.palette.accent);
     this.drawTracking(g, view);
   }

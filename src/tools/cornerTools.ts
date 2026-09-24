@@ -1,10 +1,10 @@
 import { entityGeometry, type Entity, type EntityGeometry, type LineEntity, type NewEntity, type PolylineEntity } from '../model/entities';
 import { dist, type Vec2 } from '../model/geometry';
 import { bulgeAt } from '../model/geom/bulge';
-import { lineLine } from '../model/geom/intersect';
 import { chamferLines, cornerOfPath, filletLines } from '../model/ops/fillet';
 import { nearestSegment } from '../model/ops/vertex';
 import type { ViewTransform } from '../viewport/Camera';
+import { chamferLine, filletArc, filletRadiusFor, linesCornerAt, offsetAlong, pulledDistance, vertexCorner, type CornerGeom } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { EdgePickTool } from './edgeTools';
 import { drawTag, strokeGeometry, strokePath } from './preview';
@@ -21,47 +21,29 @@ interface CornerPlan {
 /**
  * A corner that can be rounded or cut: a polyline/polygon vertex between
  * two straight segments, or the meeting point of two lines (their
- * intersection when they do not touch). `u1`/`u2` point along the kept
- * sides, `reach` is how far the shorter side goes.
+ * intersection when they do not touch). Its geometry (`u1`/`u2` along the
+ * kept sides, `reach` of the shorter one, the angle `phi`) comes from the
+ * core; the tool adds the entities and how to apply an operation.
  */
-interface Corner {
-  at: Vec2;
-  u1: Vec2;
-  u2: Vec2;
-  reach: number;
-  /** Angle between the two sides (radians). */
-  phi: number;
+interface Corner extends CornerGeom {
   entities: Entity[];
   plan(op: CornerOp): CornerPlan | { error: string };
 }
 
 const HOVER_PX = 12;
-const unit = (a: Vec2, b: Vec2) => {
-  const l = dist(a, b) || 1;
-  return { x: (b.x - a.x) / l, y: (b.y - a.y) / l };
-};
-const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.y * b.y;
-const angleBetween = (u: Vec2, v: Vec2) => Math.acos(Math.max(-1, Math.min(1, dot(u, v))));
+
+/** The corner's geometry alone, for the core (its entities stay out of the call). */
+const geomOf = (c: Corner): CornerGeom => ({ at: c.at, u1: c.u1, u2: c.u2, reach: c.reach, phi: c.phi });
 
 function pathCorner(e: PolylineEntity, i: number): Corner | null {
   const n = e.pts.length;
   const closed = e.kind === 'polygon';
   if (!closed && (i <= 0 || i >= n - 1)) return null;
   const iPrev = (i - 1 + n) % n;
-  if (Math.abs(bulgeAt(e.bulges, iPrev)) > 1e-12 || Math.abs(bulgeAt(e.bulges, i)) > 1e-12) return null;
-  const at = e.pts[i];
-  const prev = e.pts[iPrev];
-  const next = e.pts[(i + 1) % n];
-  const u1 = unit(at, prev);
-  const u2 = unit(at, next);
-  const phi = angleBetween(u1, u2);
-  if (phi < 1e-6 || Math.PI - phi < 1e-6) return null;
+  const g = vertexCorner(e.pts[iPrev], e.pts[i], e.pts[(i + 1) % n], bulgeAt(e.bulges, iPrev), bulgeAt(e.bulges, i));
+  if (!g) return null;
   return {
-    at,
-    u1,
-    u2,
-    reach: Math.min(dist(at, prev), dist(at, next)),
-    phi,
+    ...g,
     entities: [e],
     plan: (op) => {
       const r = cornerOfPath(e.pts, e.bulges, closed, i, op);
@@ -73,26 +55,10 @@ function pathCorner(e: PolylineEntity, i: number): Corner | null {
 
 /** Corner of two lines; each keeps the side its pick point is on. */
 function linesCorner(l1: LineEntity, p1: Vec2, l2: LineEntity, p2: Vec2): Corner | null {
-  const hit = lineLine(l1.a, l1.b, l2.a, l2.b);
-  if (!hit) return null;
-  const X = hit.p;
-  const side = (l: LineEntity, pick: Vec2) => {
-    const d = unit(l.a, l.b);
-    const u = dot({ x: pick.x - X.x, y: pick.y - X.y }, d) >= 0 ? d : { x: -d.x, y: -d.y };
-    const reach = Math.max(dot({ x: l.a.x - X.x, y: l.a.y - X.y }, u), dot({ x: l.b.x - X.x, y: l.b.y - X.y }, u));
-    return { u, reach };
-  };
-  const s1 = side(l1, p1);
-  const s2 = side(l2, p2);
-  if (s1.reach <= 1e-9 || s2.reach <= 1e-9) return null;
-  const phi = angleBetween(s1.u, s2.u);
-  if (phi < 1e-6 || Math.PI - phi < 1e-6) return null;
+  const g = linesCornerAt(l1.a, l1.b, p1, l2.a, l2.b, p2);
+  if (!g) return null;
   return {
-    at: X,
-    u1: s1.u,
-    u2: s2.u,
-    reach: Math.min(s1.reach, s2.reach),
-    phi,
+    ...g,
     entities: [l1, l2],
     plan: (op) => {
       const r = 'radius' in op ? filletLines(l1, p1, l2, p2, op.radius) : chamferLines(l1, p1, l2, p2, op.d1, op.d2);
@@ -240,14 +206,9 @@ abstract class CornerTool extends EdgePickTool {
     this.refresh();
   }
 
-  /** How far the cursor has been pulled along the nearer side, rounded to a step that suits the zoom. */
+  /** How far the cursor has been pulled along the nearer side, rounded to a step that suits the zoom (four pixels). */
   private pulledDistance(): number {
-    const c = this.corner!;
-    const cur = this.mouse ?? c.at;
-    const v = { x: cur.x - c.at.x, y: cur.y - c.at.y };
-    const t = Math.min(Math.max(dot(v, c.u1), dot(v, c.u2), 0), c.reach);
-    const step = 10 ** Math.floor(Math.log10(Math.max(this.ctx.view.worldTolerance(4), 1e-3)));
-    return Math.min(Math.round(t / step) * step, c.reach);
+    return pulledDistance(geomOf(this.corner!), this.mouse, this.ctx.view.worldTolerance(4));
   }
 
   private pulled(): CornerOp {
@@ -335,7 +296,7 @@ abstract class CornerTool extends EdgePickTool {
     const op = this.pulled();
     const plan = c.plan(op);
     // Where the rounding/cut starts on each side.
-    for (const u of [c.u1, c.u2]) strokePath(g, view, [c.at, { x: c.at.x + u.x * t, y: c.at.y + u.y * t }], { color: pal.snap, width: 2 });
+    for (const u of [c.u1, c.u2]) strokePath(g, view, [c.at, offsetAlong(c.at, u, t)], { color: pal.snap, width: 2 });
     if ('error' in plan) return;
     if (!CornerTool.trimSides) {
       const extra = this.piece(op, c);
@@ -364,7 +325,7 @@ export class FilletTool extends CornerTool {
   }
   protected opForPull(t: number, c: Corner): CornerOp {
     // Pulled distance is where the arc meets the side (tangent length).
-    return { radius: t * Math.tan(c.phi / 2) };
+    return { radius: filletRadiusFor(t, c.phi) };
   }
   protected opForText(text: string): CornerOp | null {
     const n = parseNumber(text);
@@ -383,17 +344,9 @@ export class FilletTool extends CornerTool {
     return 'radius' in op && op.radius > 0 ? `Köşe ${this.ctx.format.length(op.radius)} yarıçapla yuvarlandı.` : 'Çizgiler köşede birleştirildi.';
   }
   protected piece(op: CornerOp, c: Corner): EntityGeometry | null {
-    if (!('radius' in op) || !(op.radius > 0)) return null;
-    // Tangent points at r / tan(φ/2) along each side; centre on the bisector at r / sin(φ/2).
-    const t = op.radius / Math.tan(c.phi / 2);
-    const bis = unit({ x: 0, y: 0 }, { x: c.u1.x + c.u2.x, y: c.u1.y + c.u2.y });
-    const k = op.radius / Math.sin(c.phi / 2);
-    const centre = { x: c.at.x + bis.x * k, y: c.at.y + bis.y * k };
-    const angle = (u: Vec2) => Math.atan2(c.at.y + u.y * t - centre.y, c.at.x + u.x * t - centre.x);
-    const [a0, a1] = [angle(c.u1), angle(c.u2)];
-    // The fillet is the short arc between the tangent points; arcs run counter-clockwise.
-    const ccw = (((a1 - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) < Math.PI;
-    return { kind: 'arc', c: centre, r: op.radius, a0: ccw ? a0 : a1, a1: ccw ? a1 : a0 };
+    // The short arc between the tangent points, counter-clockwise.
+    const arc = 'radius' in op ? filletArc(geomOf(c), op.radius) : null;
+    return arc && { kind: 'arc', ...arc };
   }
 }
 
@@ -434,7 +387,7 @@ export class ChamferTool extends CornerTool {
     return 'd1' in op && (op.d1 > 0 || op.d2 > 0) ? `Pah kırıldı: ${this.text(op)}.` : 'Çizgiler köşede birleştirildi.';
   }
   protected piece(op: CornerOp, c: Corner): EntityGeometry | null {
-    if (!('d1' in op) || !(op.d1 > 0) || !(op.d2 > 0)) return null;
-    return { kind: 'line', a: { x: c.at.x + c.u1.x * op.d1, y: c.at.y + c.u1.y * op.d1 }, b: { x: c.at.x + c.u2.x * op.d2, y: c.at.y + c.u2.y * op.d2 } };
+    const cut = 'd1' in op ? chamferLine(geomOf(c), op.d1, op.d2) : null;
+    return cut && { kind: 'line', ...cut };
   }
 }

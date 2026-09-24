@@ -31,6 +31,7 @@ pub mod numeric;
 pub mod ops;
 pub mod store;
 pub mod tessellate;
+pub mod tools;
 pub mod triangulate;
 pub mod vec2;
 

@@ -1,7 +1,6 @@
 import { entityLength, tessellateCircle, type Entity } from '../model/entities';
-import { dist, type Vec2 } from '../model/geometry';
-import { arcEnd, arcThrough, circleThrough, normAngle, tessellateArc, type ArcGeom } from '../model/geom/arc';
-import { bulgeAt, segmentTangent } from '../model/geom/bulge';
+import { angleDeg, dist, type Vec2 } from '../model/geometry';
+import { arcThrough, circleThrough, normAngle, tessellateArc, type ArcGeom } from '../model/geom/arc';
 import {
   arcStartCenterAngle,
   arcStartCenterChord,
@@ -16,6 +15,7 @@ import { catmullRom } from '../model/geom/spline';
 import { tangentTangentRadius, tangentTangentTangent } from '../model/geom/tangentCircle';
 import { entityEdges } from '../model/ops/edges';
 import type { ViewTransform } from '../viewport/Camera';
+import { circleOnDiameter, degDirection, endTangent } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath } from './preview';
@@ -104,17 +104,14 @@ export class ArcTool extends PointInputTool {
     return true;
   }
 
-  /** End point and travel direction of the newest line, arc or polyline. */
+  /** End point and travel direction of the newest line, arc or polyline (a zero-length line is passed over). */
   private lastEnd(): { p: Vec2; dir: Vec2 } | null {
     const all = [...this.ctx.doc.all()];
     for (let i = all.length - 1; i >= 0; i--) {
       const e = all[i];
-      if (e.kind === 'line' && dist(e.a, e.b) > 1e-9) return { p: e.b, dir: { x: (e.b.x - e.a.x) / dist(e.a, e.b), y: (e.b.y - e.a.y) / dist(e.a, e.b) } };
-      if (e.kind === 'arc') return { p: arcEnd(e), dir: { x: -Math.sin(e.a1), y: Math.cos(e.a1) } };
-      if (e.kind === 'polyline' && e.pts.length >= 2) {
-        const k = e.pts.length;
-        return { p: e.pts[k - 1], dir: segmentTangent(e.pts[k - 2], e.pts[k - 1], bulgeAt(e.bulges, k - 2), true) };
-      }
+      if (e.kind !== 'line' && e.kind !== 'arc' && e.kind !== 'polyline') continue;
+      const end = endTangent(e);
+      if (end) return end;
     }
     return null;
   }
@@ -138,7 +135,7 @@ export class ArcTool extends PointInputTool {
         if (this.sub === 'direction') return arcStartEndDirection(p0, p1, { x: p.x - p0.x, y: p.y - p0.y });
         if (this.sub === 'radius') return arcStartEndRadius(p0, p1, dist(p1, p));
         // Included angle shown by a direction from the start, measured from east.
-        return arcStartEndAngle(p0, p1, (Math.atan2(p.y - p0.y, p.x - p0.x) * 180) / Math.PI);
+        return arcStartEndAngle(p0, p1, angleDeg(p0, p));
       }
     }
   }
@@ -164,7 +161,7 @@ export class ArcTool extends PointInputTool {
         g = this.sub === 'chord' ? arcStartCenterChord(s, c, n) : arcStartCenterAngle(s, c, n);
       } else if (this.mode === 'startEnd') {
         if (this.sub === 'radius') g = arcStartEndRadius(p0, p1, n);
-        else if (this.sub === 'direction') g = arcStartEndDirection(p0, p1, { x: Math.cos((n * Math.PI) / 180), y: Math.sin((n * Math.PI) / 180) });
+        else if (this.sub === 'direction') g = arcStartEndDirection(p0, p1, degDirection(n));
         else g = arcStartEndAngle(p0, p1, n);
       } else return super.input(text);
       this.commit(g);
@@ -306,7 +303,10 @@ export class CircleTool extends PointInputTool {
     this.pts.push(p);
     const [a, b, c] = this.pts;
     if (this.mode === 'center' && b) return this.commit(a, this.diameter ? dist(a, b) / 2 : dist(a, b));
-    if (this.mode === 'two' && b) return this.commit({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist(a, b) / 2);
+    if (this.mode === 'two' && b) {
+      const circle = circleOnDiameter(a, b);
+      return this.commit(circle.c, circle.r);
+    }
     if (this.mode === 'three' && c) {
       const circle = circleThrough(a, b, c);
       if (!circle) {
@@ -387,7 +387,7 @@ export class CircleTool extends PointInputTool {
     const [a, b] = this.pts;
     let circle: { c: Vec2; r: number } | null = null;
     if (this.mode === 'center') circle = { c: a, r: this.diameter ? dist(a, h) / 2 : dist(a, h) };
-    else if (this.mode === 'two') circle = { c: { x: (a.x + h.x) / 2, y: (a.y + h.y) / 2 }, r: dist(a, h) / 2 };
+    else if (this.mode === 'two') circle = circleOnDiameter(a, h);
     else if (b) circle = circleThrough(a, b, h);
     if (!circle) return super.draw(g, view);
     strokePath(g, view, tessellateCircle(circle.c, circle.r, 96), { color: pal.accent, closed: true });

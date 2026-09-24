@@ -5,6 +5,7 @@ import { dist, type Vec2 } from '../model/geometry';
 import { mirror, rotation, scaling, translation, type Affine } from '../model/geom/affine';
 import { transformEntities } from '../model/ops/transform';
 import type { ViewTransform } from '../viewport/Camera';
+import { directionAngle, rotationAngle, scaleFactor } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { drawSelectionBox, drawTag, strokePath, strokePaths } from './preview';
 import type { Tool, ToolPointer } from './Tool';
@@ -12,7 +13,6 @@ import { constrainPoint, drawTracking, pointFromText, type Tracking } from './tr
 
 export const MAX_GHOSTS = 400;
 const deg = (rad: number) => (rad * 180) / Math.PI;
-const angleTo = (a: Vec2, b: Vec2) => Math.atan2(b.y - a.y, b.x - a.x);
 
 // ── Selection-first tools (move, copy, rotate, scale, mirror, array) ───
 
@@ -282,11 +282,11 @@ export class RotateTool extends SelectionFirstTool {
     }
     if (this.refMode && this.refAngle === null) {
       if (!this.refFrom) this.refFrom = p;
-      else if (dist(this.refFrom, p) > 1e-9) this.refAngle = angleTo(this.refFrom, p);
+      else if (dist(this.refFrom, p) > 1e-9) this.refAngle = directionAngle(this.refFrom, p);
       return;
     }
     if (dist(this.base, p) < 1e-9) return;
-    this.rotate(angleTo(this.base, p) - (this.refAngle ?? 0));
+    this.rotate(rotationAngle(this.base, p, this.refAngle ?? 0));
   }
   override input(text: string): boolean {
     const t = text.trim().toLocaleUpperCase('tr-TR');
@@ -320,7 +320,7 @@ export class RotateTool extends SelectionFirstTool {
   private turn(): number | null {
     if (!this.base || !this.hover || dist(this.base, this.hover) < 1e-9) return null;
     if (this.refMode && this.refAngle === null) return null;
-    return angleTo(this.base, this.hover) - (this.refAngle ?? 0);
+    return rotationAngle(this.base, this.hover, this.refAngle ?? 0);
   }
   protected override previewTransforms(): Affine[] {
     const a = this.turn();
@@ -372,7 +372,7 @@ export class ScaleTool extends SelectionFirstTool {
       return;
     }
     if (this.refMode) {
-      if (this.refLength !== null) return this.scale(dist(this.base, p) / this.refLength);
+      if (this.refLength !== null) return this.scale(scaleFactor(this.base, p, this.refLength));
       if (!this.refFrom) this.refFrom = p;
       else if (dist(this.refFrom, p) > 1e-9) this.refLength = dist(this.refFrom, p);
       return;
@@ -381,7 +381,7 @@ export class ScaleTool extends SelectionFirstTool {
       if (dist(this.base, p) > 1e-9) this.ref = p;
       return;
     }
-    this.scale(dist(this.base, p) / dist(this.base, this.ref));
+    this.scale(scaleFactor(this.base, p, dist(this.base, this.ref)));
   }
   override input(text: string): boolean {
     const t = text.trim().toLocaleUpperCase('tr-TR');
@@ -418,8 +418,8 @@ export class ScaleTool extends SelectionFirstTool {
   }
   private factor(): number | null {
     if (!this.base || !this.hover) return null;
-    if (this.refMode) return this.refLength ? dist(this.base, this.hover) / this.refLength : null;
-    return this.ref ? dist(this.base, this.hover) / dist(this.base, this.ref) : null;
+    if (this.refMode) return this.refLength ? scaleFactor(this.base, this.hover, this.refLength) : null;
+    return this.ref ? scaleFactor(this.base, this.hover, dist(this.base, this.ref)) : null;
   }
   protected override previewTransforms(): Affine[] {
     const f = this.factor();
@@ -527,6 +527,8 @@ export class ArrayTool extends SelectionFirstTool {
     this.build(ArrayTool.last.dx, ArrayTool.last.dy);
   }
   private offsets(dx: number, dy: number): Affine[] {
+    // Each offset is one product, the same bits in the core; through it, a large array's preview
+    // would pass thousands of translations as JSON every frame (docs/adr/0008, S5).
     const out: Affine[] = [];
     for (let i = 0; i < this.rows; i++) for (let j = 0; j < this.cols; j++) if (i || j) out.push(translation(j * dx, i * dy));
     return out;

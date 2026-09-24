@@ -1,6 +1,7 @@
 import type { AppContext } from '../app/context';
-import { dist, type Vec2 } from '../model/geometry';
+import { angleDeg, dist, type Vec2 } from '../model/geometry';
 import type { ViewTransform } from '../viewport/Camera';
+import { textAngle } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath } from './preview';
@@ -60,11 +61,8 @@ export class TextTool extends PointInputTool {
     if (this.stage === 'angle') {
       if (!this.angleFrom) return void (this.angleFrom = p);
       if (dist(this.angleFrom, p) < 1e-9) return;
-      let a = (Math.atan2(p.y - this.angleFrom.y, p.x - this.angleFrom.x) * 180) / Math.PI;
-      // Keep text readable: a direction pointing left is turned around.
-      if (a > 90) a -= 180;
-      else if (a <= -90) a += 180;
-      TextTool.angle = a;
+      // Kept readable: a direction pointing left is turned around.
+      TextTool.angle = textAngle(this.angleFrom, p);
       this.angleFrom = null;
       this.stage = 'pos';
       return;
@@ -132,7 +130,7 @@ export class TextTool extends PointInputTool {
     const pal = this.ctx.view.palette;
     if (this.stage === 'angle' && this.angleFrom && this.hover) {
       strokePath(g, view, [this.angleFrom, this.hover], { color: pal.accent, dash: [3, 3] });
-      drawTag(g, view.worldToScreen(this.hover), [`Açı ${((Math.atan2(this.hover.y - this.angleFrom.y, this.hover.x - this.angleFrom.x) * 180) / Math.PI).toFixed(2)}°`], pal.accent, pal.labelHalo);
+      drawTag(g, view.worldToScreen(this.hover), [`Açı ${angleDeg(this.angleFrom, this.hover).toFixed(2)}°`], pal.accent, pal.labelHalo);
       return;
     }
     // Where the text will sit: a box of its height along its angle.

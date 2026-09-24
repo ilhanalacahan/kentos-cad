@@ -1,6 +1,7 @@
 import { entityBounds, type Entity } from '../model/entities';
 import { dist, emptyBounds, type Vec2 } from '../model/geometry';
-import { apply, compose, rotation, scaling, translation, type Affine } from '../model/geom/affine';
+import type { Affine } from '../model/geom/affine';
+import { alignTransform, midpoint, polarArrayTransforms } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { SelectionFirstTool } from './modifyTools';
 
@@ -20,7 +21,7 @@ function centreOf(list: readonly Entity[]): Vec2 {
     b.maxX = Math.max(b.maxX, eb.maxX);
     b.maxY = Math.max(b.maxY, eb.maxY);
   }
-  return { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
+  return midpoint({ x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY });
 }
 
 // ── Kutupsal dizi ──────────────────────────────────────────────────────
@@ -96,18 +97,7 @@ export class PolarArrayTool extends SelectionFirstTool {
     if (!c) return [];
     const { count, fill, rotate } = PolarArrayTool.last;
     // A full turn shares the circle out; a partial fill puts the last copy on the end angle.
-    const step = Math.abs(Math.abs(fill) - 360) < 1e-9 ? fill / count : fill / (count - 1);
-    const ref = centreOf(this.targets());
-    const out: Affine[] = [];
-    for (let k = 1; k < count; k++) {
-      const r = rotation((step * k * Math.PI) / 180, c);
-      if (rotate) out.push(r);
-      else {
-        const to = apply(r, ref);
-        out.push(translation(to.x - ref.x, to.y - ref.y));
-      }
-    }
-    return out;
+    return polarArrayTransforms(c, count, fill, rotate, centreOf(this.targets()));
   }
 
   protected override previewTransforms(): Affine[] {
@@ -179,16 +169,8 @@ export class AlignTool extends SelectionFirstTool {
   }
 
   private transform(pts: readonly Vec2[]): Affine | null {
-    const [s1, d1, s2, d2] = pts;
-    if (!s1 || !d1) return null;
-    if (!s2 || !d2) return translation(d1.x - s1.x, d1.y - s1.y);
-    const ls = dist(s1, s2);
-    const ld = dist(d1, d2);
-    if (ls < 1e-9 || ld < 1e-9) return null;
-    const turn = Math.atan2(d2.y - d1.y, d2.x - d1.x) - Math.atan2(s2.y - s1.y, s2.x - s1.x);
-    const k = AlignTool.scale ? ld / ls : 1;
     // Around s1: scale, turn, then carry s1 onto d1.
-    return compose(translation(d1.x - s1.x, d1.y - s1.y), compose(rotation(turn, s1), scaling(k, s1)));
+    return alignTransform(pts, AlignTool.scale);
   }
 
   private finish(): void {

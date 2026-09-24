@@ -6,6 +6,7 @@ import { closestOnEdge, type Edge } from '../model/geom/intersect';
 import { sideOffsets, sidePoint } from '../model/geom/survey';
 import { entityEdges } from '../model/ops/edges';
 import type { ViewTransform } from '../viewport/Camera';
+import { radialPoint } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { drawTag, strokeGeometry, strokePath } from './preview';
 import { writableLayer } from './targetLayer';
@@ -43,9 +44,7 @@ function footOn(ref: Ref, p: Vec2): Vec2 | null {
     const o = sideOffsets(ref.a, ref.b, p);
     return o ? sidePoint(ref.a, ref.b, o.absis, 0) : null;
   }
-  const { c, r } = ref.edge;
-  const l = dist(c, p);
-  return l < 1e-9 ? null : { x: c.x + ((p.x - c.x) / l) * r, y: c.y + ((p.y - c.y) / l) * r };
+  return radialPoint(ref.edge.c, ref.edge.r, p);
 }
 
 /** Small square at the foot showing the right angle. */

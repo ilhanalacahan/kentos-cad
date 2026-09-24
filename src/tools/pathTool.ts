@@ -1,8 +1,8 @@
 import type { AppContext } from '../app/context';
 import { bearingGrad, dist, type Vec2 } from '../model/geometry';
-import { normAngle } from '../model/geom/arc';
 import { bulgeArc, bulgeOfSweep, bulgePathLength, bulgePathOutline, bulgeRingArea, bulgeThrough, hasBulges, segmentTangent, tangentBulge } from '../model/geom/bulge';
 import type { ViewTransform } from '../viewport/Camera';
+import { centreBulge, offsetAlong, radialPoint, radiusBulge, unitToward } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawTag, strokePath, tint } from './preview';
@@ -91,9 +91,7 @@ export class PathTool extends PointInputTool {
     const s = this.spec;
     const last = this.last;
     if (!this.arcMode || s.kind !== 'centre' || !s.c || !last) return p;
-    const r = dist(s.c, last);
-    const l = dist(s.c, p);
-    return l < 1e-9 ? p : { x: s.c.x + ((p.x - s.c.x) / l) * r, y: s.c.y + ((p.y - s.c.y) / l) * r };
+    return radialPoint(s.c, dist(s.c, last), p) ?? p;
   }
 
   /** Bulge the next segment to `p` would get, or null if impossible (or still waiting for a value). */
@@ -104,21 +102,11 @@ export class PathTool extends PointInputTool {
     switch (s.kind) {
       case 'angle':
         return s.sweep === null ? null : bulgeOfSweep(s.sweep);
-      case 'radius': {
-        if (s.r === null) return null;
-        const c = dist(last, p);
-        if (c > 2 * s.r) return null;
-        const t = this.tangent();
-        // Bend the way the path turns towards p; counter-clockwise when there is no tangent yet.
-        const side = t ? Math.sign(t.x * (p.y - last.y) - t.y * (p.x - last.x)) || 1 : 1;
-        return side * Math.tan(Math.asin(c / (2 * s.r)) / 2);
-      }
-      case 'centre': {
-        if (!s.c) return null;
-        const end = this.endFor(p);
-        const sweep = normAngle(Math.atan2(end.y - s.c.y, end.x - s.c.x) - Math.atan2(last.y - s.c.y, last.x - s.c.x));
-        return sweep > 1e-9 ? bulgeOfSweep(sweep) : null;
-      }
+      case 'radius':
+        // Bends the way the path turns towards p; counter-clockwise when there is no tangent yet.
+        return s.r === null ? null : radiusBulge(last, p, s.r, this.tangent());
+      case 'centre':
+        return s.c ? centreBulge(s.c, last, this.endFor(p)) : null;
       case 'second':
         return s.via ? bulgeThrough(last, s.via, p) : null;
       case 'dir':
@@ -140,8 +128,7 @@ export class PathTool extends PointInputTool {
       if (s.kind === 'centre' && !s.c) return void (s.c = p);
       if (s.kind === 'second' && !s.via) return void (s.via = p);
       if (s.kind === 'dir' && !s.dir) {
-        const l = dist(last, p);
-        if (l > 1e-9) s.dir = { x: (p.x - last.x) / l, y: (p.y - last.y) / l };
+        if (dist(last, p) > 1e-9) s.dir = unitToward(last, p);
         return;
       }
       if (s.kind === 'tangent' && !this.tangent() && !this.arcVia) return void (this.arcVia = p);
@@ -201,7 +188,7 @@ export class PathTool extends PointInputTool {
       const t = this.tangent();
       if (t && n! > 0) {
         this.askLength = false;
-        this.accept({ x: this.last!.x + t.x * n!, y: this.last!.y + t.y * n! });
+        this.accept(offsetAlong(this.last!, t, n!));
       } else this.ctx.log.warn('Uzunluk sıfırdan büyük olmalı.');
       return true;
     }

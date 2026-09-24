@@ -1,7 +1,7 @@
 import type { AppContext } from '../app/context';
 import { Signal } from '../core/signal';
 import { entityGeometry, type Entity, type NewEntity } from '../model/entities';
-import type { Vec2 } from '../model/geometry';
+import { dist, type Vec2 } from '../model/geometry';
 import { entityFaceIndex, intersectAreas, netArea, splitArea, subtractAreas, unionAreas, type Area, type Source } from '../model/geom/region';
 import { areaOfEntity, lineSource, polygonOfArea, polylinesOfPolygon } from '../model/ops/areas';
 import type { ViewTransform } from '../viewport/Camera';
@@ -258,7 +258,7 @@ export class AreaSplitTool extends SelectionFirstTool {
   }
 
   protected point(p: Vec2): void {
-    if (!this.pts.length || Math.hypot(p.x - this.pts[this.pts.length - 1].x, p.y - this.pts[this.pts.length - 1].y) > 1e-9) this.pts.push(p);
+    if (!this.pts.length || dist(this.pts[this.pts.length - 1], p) > 1e-9) this.pts.push(p);
   }
 
   override pointerDown(p: ToolPointer): void {

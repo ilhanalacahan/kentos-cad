@@ -3,14 +3,13 @@ import { dist, signedArea, type Vec2 } from '../model/geometry';
 import { cloudOf } from '../model/geom/shapes';
 import { bulgePathOutline } from '../model/geom/bulge';
 import type { ViewTransform } from '../viewport/Camera';
+import { donutRings } from './constructions';
 import { parseNumber } from './coordinateInput';
 import { PointInputTool } from './drawTools';
 import { drawArea, strokePath, tint } from './preview';
 
 /** Paper sizes (mm) converted to world metres at the project's plot scale. */
 const paper = (ctx: AppContext, mm: number) => (mm / 1000) * ctx.doc.settings.plotScale.value;
-
-const circle = (c: Vec2, r: number, n = 96): Vec2[] => Array.from({ length: n }, (_, i) => ({ x: c.x + Math.cos((i / n) * 2 * Math.PI) * r, y: c.y + Math.sin((i / n) * 2 * Math.PI) * r }));
 
 // ── Halka ──────────────────────────────────────────────────────────────
 
@@ -61,8 +60,7 @@ export class DonutTool extends PointInputTool {
   }
 
   private shape(c: Vec2): { ring: Vec2[]; holes?: Vec2[][] } {
-    const ring = circle(c, DonutTool.outer / 2);
-    return DonutTool.inner > 0 ? { ring, holes: [circle(c, DonutTool.inner / 2)] } : { ring };
+    return donutRings(c, DonutTool.inner, DonutTool.outer);
   }
 
   protected onPoint(p: Vec2): void {
