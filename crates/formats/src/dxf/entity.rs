@@ -28,11 +28,6 @@ pub struct Common {
     pub extrusion: P3,
     pub paper: bool,
     pub invisible: bool,
-    /// Entity handle (group 5): KentOS's hole links point at their outer ring by it.
-    #[allow(dead_code)]
-    pub handle: Option<String>,
-    /// Application data (1001 …) this reader understands: KentOS's own.
-    pub xdata: Vec<(i32, String)>,
 }
 
 #[derive(Clone, Debug)]
@@ -53,11 +48,12 @@ pub enum Kind {
     LwPolyline { pts: Vec<[f64; 2]>, bulges: Vec<f64>, closed: bool, elevation: f64, width: bool },
     Polyline { flags: i64, verts: Vec<Vertex>, elevation: f64, width: bool },
     Spline { flags: i64, degree: i64, knots: Vec<f64>, weights: Vec<f64>, ctrl: Vec<P3>, fit: Vec<P3> },
-    Text { p: P3, p2: Option<P3>, height: f64, rotation: f64, text: String, halign: i64, valign: i64, width: f64, style: String, attrib: bool, hidden: bool },
+    Text { p: P3, p2: Option<P3>, height: f64, rotation: f64, text: String, halign: i64, valign: i64, width: f64, style: String, hidden: bool },
     MText { p: P3, height: f64, attach: i64, xdir: Option<P3>, rotation: Option<f64>, text: String, spacing: f64, style: String },
     /// SOLID and TRACE (object coordinates, corner order 1 2 4 3) or 3DFACE (world, 1 2 3 4).
     Face { pts: [P3; 4], solid: bool },
-    Insert { name: String, p: P3, scale: P3, rotation: f64, cols: i64, rows: i64, dc: f64, dr: f64, attribs: Vec<Parsed> },
+    /// `bad_attribs`: attributes that could not be read (reason, line), reported with the insert.
+    Insert { name: String, p: P3, scale: P3, rotation: f64, cols: i64, rows: i64, dc: f64, dr: f64, attribs: Vec<Parsed>, bad_attribs: Vec<(String, u32)> },
     Hatch(Box<Hatch>),
     /// DIMENSION, ACAD_TABLE and others drawn by an anonymous block.
     Block { block: String, what: &'static str },
@@ -148,22 +144,15 @@ fn reals(list: &[Pair<'_>], code: i32) -> Result<Vec<f64>, Unreadable> {
         .collect()
 }
 
-/// The groups before extended data (1001) and embedded objects (101), and the KentOS extended data.
-fn split_xdata<'g, 'a>(list: &'g [Pair<'a>], dec: Decoder) -> (&'g [Pair<'a>], Vec<(i32, String)>) {
+/// The groups before extended data (1001) and embedded objects (101): what
+/// follows uses the same codes for other things (an embedded object's 10 is
+/// not the entity's point).
+fn own_groups<'g, 'a>(list: &'g [Pair<'a>]) -> &'g [Pair<'a>] {
     let end = list.iter().position(|p| p.code == 1001 || p.code == 101).unwrap_or(list.len());
-    let mut xdata = Vec::new();
-    let mut ours = false;
-    for p in &list[end..] {
-        if p.code == 1001 {
-            ours = p.text().eq_ignore_ascii_case(super::KENTOS_APP);
-        } else if ours && p.code >= 1000 {
-            xdata.push((p.code, dec.string(p.value)));
-        }
-    }
-    (&list[..end], xdata)
+    &list[..end]
 }
 
-pub fn common(list: &[Pair<'_>], dec: Decoder) -> Result<(Common, usize), Unreadable> {
+fn common(list: &[Pair<'_>], dec: Decoder) -> Result<Common, Unreadable> {
     let g = Groups { list, dec };
     let color = match (g.has(420), g.has(62)) {
         (true, _) => Color::True(g.int(420)),
@@ -175,25 +164,19 @@ pub fn common(list: &[Pair<'_>], dec: Decoder) -> Result<(Common, usize), Unread
         _ => Color::ByLayer,
     };
     let layer = g.string(8);
-    Ok((
-        Common {
-            layer: if layer.trim().is_empty() { "0".to_string() } else { layer },
-            color,
-            extrusion: [g.num_or(210, 0.0)?, g.num_or(220, 0.0)?, g.num_or(230, 1.0)?],
-            paper: g.int(67) == 1,
-            invisible: g.int(60) == 1,
-            handle: g.has(5).then(|| g.string(5)),
-            xdata: Vec::new(),
-        },
-        0,
-    ))
+    Ok(Common {
+        layer: if layer.trim().is_empty() { "0".to_string() } else { layer },
+        color,
+        extrusion: [g.num_or(210, 0.0)?, g.num_or(220, 0.0)?, g.num_or(230, 1.0)?],
+        paper: g.int(67) == 1,
+        invisible: g.int(60) == 1,
+    })
 }
 
 /// An entity from its type name and groups; `after` are the VERTEX or ATTRIB entities that followed it.
 pub fn parse(name: &str, line: u32, list: &[Pair<'_>], dec: Decoder, after: Vec<(u32, Vec<Pair<'_>>)>, fit_data_in_hatch_splines: bool) -> Result<Parsed, Unreadable> {
-    let (list, xdata) = split_xdata(list, dec);
-    let (mut common, _) = common(list, dec)?;
-    common.xdata = xdata;
+    let list = own_groups(list);
+    let common = common(list, dec)?;
     let g = Groups { list, dec };
     let kind = match name {
         "LINE" => Kind::Line { a: g.point_or_zero(10)?, b: g.point_or_zero(11)? },
@@ -238,7 +221,7 @@ pub fn parse(name: &str, line: u32, list: &[Pair<'_>], dec: Decoder, after: Vec<
             let mut verts = Vec::new();
             let mut width = g.num_or(40, 0.0)? != 0.0 || g.num_or(41, 0.0)? != 0.0;
             for (_, vl) in &after {
-                let vg = Groups { list: split_xdata(vl, dec).0, dec };
+                let vg = Groups { list: own_groups(vl), dec };
                 width |= vg.num_or(40, 0.0)? != 0.0 || vg.num_or(41, 0.0)? != 0.0;
                 verts.push(Vertex { p: vg.point_or_zero(10)?, bulge: vg.num_or(42, 0.0)?, flags: vg.int(70) });
             }
@@ -262,7 +245,6 @@ pub fn parse(name: &str, line: u32, list: &[Pair<'_>], dec: Decoder, after: Vec<
             valign: if name == "ATTRIB" { g.int(74) } else { g.int(73) },
             width: g.num_or(41, 1.0)?,
             style: g.string(7),
-            attrib: name == "ATTRIB",
             hidden: name == "ATTRIB" && g.int(70) & 1 == 1,
         },
         "MTEXT" => {
@@ -291,9 +273,11 @@ pub fn parse(name: &str, line: u32, list: &[Pair<'_>], dec: Decoder, after: Vec<
         }
         "INSERT" => {
             let mut attribs = Vec::new();
+            let mut bad_attribs = Vec::new();
             for (l, al) in after {
-                if let Ok(a) = parse("ATTRIB", l, &al, dec, Vec::new(), fit_data_in_hatch_splines) {
-                    attribs.push(a);
+                match parse("ATTRIB", l, &al, dec, Vec::new(), fit_data_in_hatch_splines) {
+                    Ok(a) => attribs.push(a),
+                    Err(u) => bad_attribs.push((u.reason, l)),
                 }
             }
             Kind::Insert {
@@ -306,6 +290,7 @@ pub fn parse(name: &str, line: u32, list: &[Pair<'_>], dec: Decoder, after: Vec<
                 dc: g.num_or(44, 0.0)?,
                 dr: g.num_or(45, 0.0)?,
                 attribs,
+                bad_attribs,
             }
         }
         "HATCH" => Kind::Hatch(Box::new(parse_hatch(list, fit_data_in_hatch_splines).map_err(|r| bad(&r))?)),

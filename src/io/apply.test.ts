@@ -83,4 +83,19 @@ describe('applyImport', () => {
     expect(doc.layers.leaves()).toHaveLength(before);
     expect(doc.canUndo.value).toBe(false);
   });
+
+  it('waits for a running model instead of joining its undo step', () => {
+    const doc = makeDoc();
+    const plan = { label: 'DXF: plan.dxf', layers: new Map<string, LayerTarget>([['0', { kind: 'new', name: 'Yeni', style: {}, visible: true, locked: false }]]) };
+    const group = doc.beginGroup('Model');
+    const refused = applyImport(doc, [point('0', 1, 2)], plan);
+    expect(refused).toEqual({ ok: false, error: expect.stringContaining('hâlâ çalışıyor') });
+    // Nothing changed: no object, no new layer; the model's cancel has nothing of the import to take back.
+    expect(doc.size).toBe(0);
+    expect(doc.layers.leaves().map((l) => l.name)).toEqual(['Noktalar', 'Kilitli']);
+    group.cancel();
+    const r = applyImport(doc, [point('0', 1, 2)], plan);
+    expect(r.ok).toBe(true);
+    expect(doc.undo()).toBe('DXF: plan.dxf');
+  });
 });

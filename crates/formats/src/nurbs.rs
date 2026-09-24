@@ -8,6 +8,11 @@ use kentos_contracts::Vec2;
 
 use crate::geom::v;
 
+/// The highest degree evaluated. AutoCAD writes at most 11; each point costs
+/// degree² steps, so a file claiming a degree in the thousands must not stall
+/// the reader.
+pub const MAX_DEGREE: usize = 25;
+
 /// The knot span containing `u` (index i with knots[i] ≤ u < knots[i + 1]; the last span for u at the end).
 fn span(degree: usize, knots: &[f64], n: usize, u: f64) -> usize {
     if u >= knots[n + 1] {
@@ -77,10 +82,11 @@ fn refine(degree: usize, knots: &[f64], ctrl: &[Vec2], w: Option<&[f64]>, tol: f
     }
 }
 
-/// The curve as points, every chord within `tol` of it; None when the knot vector does not fit.
+/// The curve as points, every chord within `tol` of it; None when the knot
+/// vector does not fit or the degree is above `MAX_DEGREE`.
 pub fn sample(degree: usize, knots: &[f64], ctrl: &[Vec2], weights: Option<&[f64]>, tol: f64) -> Option<Vec<Vec2>> {
     let n = ctrl.len().checked_sub(1)?;
-    if degree == 0 || n < degree || knots.len() != ctrl.len() + degree + 1 {
+    if degree == 0 || degree > MAX_DEGREE || n < degree || knots.len() != ctrl.len() + degree + 1 {
         return None;
     }
     if knots.windows(2).any(|k| !(k[1] >= k[0])) || weights.is_some_and(|w| w.len() != ctrl.len() || w.iter().any(|&x| !(x > 0.0))) {
@@ -140,5 +146,10 @@ mod tests {
         assert_eq!(pts.last(), Some(&v(6.0, -2.0)));
         assert!(sample(3, &knots[..8], &ctrl, None, 1e-3).is_none());
         assert!(sample(3, &[0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 1.0, 1.0, 1.0], &ctrl, None, 1e-3).is_none());
+        // A degree above the cap is refused before any work (a consistent knot vector for it included).
+        let many: Vec<Vec2> = (0..=MAX_DEGREE + 1).map(|i| v(i as f64, 0.0)).collect();
+        let clamped: Vec<f64> = std::iter::repeat_n(0.0, MAX_DEGREE + 2).chain(std::iter::repeat_n(1.0, MAX_DEGREE + 2)).collect();
+        assert!(sample(MAX_DEGREE + 1, &clamped, &many, None, 1e-3).is_none());
+        assert!(sample(MAX_DEGREE, &clamped[1..clamped.len() - 1], &many[1..], None, 1e-3).is_some());
     }
 }

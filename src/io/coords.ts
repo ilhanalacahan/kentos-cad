@@ -65,9 +65,6 @@ export const COORD_FORMATS: readonly CoordFormat[] = [
   { id: 'csvComma', label: 'CSV (virgülle)', delimiter: 'comma', extension: '.csv', header: true },
 ];
 
-/** Extensions the import accepts. */
-export const COORD_EXTENSIONS = ['.ncn', '.txt', '.csv', '.xyz', '.dat', '.asc'];
-
 /** Point objects as coordinate list rows: the name is the label, else the "Ad" attribute. */
 export function coordPoints(entities: Iterable<Entity>): CoordPoint[] {
   const out: CoordPoint[] = [];

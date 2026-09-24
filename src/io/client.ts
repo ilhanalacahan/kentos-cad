@@ -54,9 +54,16 @@ export class FormatsClient {
     return json<CoordRead>(await this.request({ op: 'readCoords', bytes: copy, options }, [copy]));
   }
 
-  /** Reads a DXF file; the buffer is handed over to the worker (the caller no longer needs it). */
-  async readDxf(bytes: ArrayBuffer, options: DxfReadOptions): Promise<ImportResult> {
-    return json<ImportResult>(await this.request({ op: 'readDxf', bytes, options }, [bytes]));
+  /**
+   * Reads a DXF file. A large file is not copied: when `bytes` spans its
+   * whole buffer, the buffer is handed over to the worker and `bytes` is
+   * left empty (the caller no longer needs it); a view into a larger buffer
+   * sends a copy of its own bytes.
+   */
+  async readDxf(bytes: Uint8Array, options: DxfReadOptions): Promise<ImportResult> {
+    const whole = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength && bytes.buffer instanceof ArrayBuffer;
+    const buffer = whole ? (bytes.buffer as ArrayBuffer) : bytes.slice().buffer;
+    return json<ImportResult>(await this.request({ op: 'readDxf', bytes: buffer, options }, [buffer]));
   }
 
   async writeCoords(input: CoordWriteInput): Promise<WrittenFile> {

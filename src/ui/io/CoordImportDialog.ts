@@ -44,6 +44,8 @@ class CoordImportDialog {
   private read: CoordRead | null = null;
   private failed: string | null = null;
   private generation = 0;
+  /** A preview read is on its way (the latest one). */
+  private reading = false;
   private importing = false;
   private closed = false;
   private target = NEW;
@@ -76,8 +78,8 @@ class CoordImportDialog {
       footer: [other, this.status, cancel, this.primary],
       onClose: () => {
         this.closed = true;
-        // A read of a large file stops with the window.
-        if (this.importing) formats().cancel();
+        // A read of a large file (the preview or the import) stops with the window.
+        if (this.reading || this.importing) formats().cancel();
       },
     });
     other.addEventListener('click', () => void this.pickAnother());
@@ -94,6 +96,7 @@ class CoordImportDialog {
   /** Reads the file again with the current choices; a late answer to an older read is dropped. */
   private async refresh(): Promise<void> {
     const gen = ++this.generation;
+    this.reading = true;
     this.say('Dosya okunuyor…');
     try {
       const r = await formats().readCoords(this.file.bytes, this.options(false));
@@ -106,6 +109,8 @@ class CoordImportDialog {
       this.read = null;
       this.failed = `Dosya okunamadı: ${message(e)}`;
       this.say('');
+    } finally {
+      if (gen === this.generation) this.reading = false;
     }
     this.render();
   }

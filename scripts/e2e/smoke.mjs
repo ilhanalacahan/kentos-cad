@@ -1014,6 +1014,15 @@ try {
       JSON.stringify(got) === JSON.stringify({ layers: ['0', 'DETAY', 'KAPILAR'], circle: [1000, 2010, 1], point: [996, 2003, 101.5], dizi: 0, added: 8 }),
       JSON.stringify(got),
     );
+    // The geometry store (picking, snapping) hears of the import through its one change event: the circle is picked at once.
+    const picked = await b.eval(`(() => {
+      const k = window.kentos;
+      const circle = [...k.doc.all()].find((e) => e.kind === 'circle' && e.c.x === 1000 && e.c.y === 2010);
+      k.view.camera.fit({ minX: 999, minY: 2009, maxX: 1003, maxY: 2011 });
+      const hit = k.view.pick(k.view.camera.worldToScreen({ x: 1001, y: 2010 }));
+      return !!circle && hit?.id === circle.id;
+    })()`);
+    check('DXF import: an imported object can be picked at once', picked === true, String(picked));
     await b.eval(`window.kentos.commands.execute('edit.undo')`);
     const undone = await b.eval('window.kentos.doc.size');
     await b.eval(`window.kentos.commands.execute('edit.redo')`);

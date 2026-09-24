@@ -230,6 +230,108 @@ fn files_that_are_not_ascii_dxf_say_what_to_do() {
     assert!(err(b"  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n 10\n").contains("dosya bir grup kodundan sonra bitiyor"));
 }
 
+/// A DXF file from its sections, each a list of (code, value) groups.
+fn dxf_of(sections: &[(&str, Vec<(i32, String)>)]) -> Vec<u8> {
+    let mut t = String::new();
+    for (name, groups) in sections {
+        t.push_str(&format!("  0\nSECTION\n  2\n{name}\n"));
+        for (code, value) in groups {
+            t.push_str(&format!("{code:>3}\n{value}\n"));
+        }
+        t.push_str("  0\nENDSEC\n");
+    }
+    t.push_str("  0\nEOF\n");
+    t.into_bytes()
+}
+
+fn groups(list: &[(i32, &str)]) -> Vec<(i32, String)> {
+    list.iter().map(|(c, v)| (*c, v.to_string())).collect()
+}
+
+#[test]
+fn layer_names_are_spelled_as_the_layer_table_spells_them() {
+    // DXF layer names ignore case: two lines on "PARSEL" and "parsel" belong to the table's "Parsel".
+    let tables = groups(&[(0, "TABLE"), (2, "LAYER"), (0, "LAYER"), (2, "Parsel"), (70, "0"), (62, "1"), (6, "CONTINUOUS"), (0, "ENDTAB")]);
+    let mut entities = Vec::new();
+    for layer in ["PARSEL", "parsel"] {
+        entities.extend(groups(&[(0, "LINE"), (8, layer), (10, "0"), (20, "0"), (11, "1"), (21, "1")]));
+    }
+    let r = dxf::read(&dxf_of(&[("TABLES", tables), ("ENTITIES", entities)]), &DxfReadOptions::default()).expect("read");
+    assert_eq!(r.layers.iter().map(|l| (l.name.as_str(), l.color.as_str(), l.count)).collect::<Vec<_>>(), vec![("Parsel", "#FF0000", 2)]);
+    assert!(r.entities.iter().all(|e| matches!(e, Entity::Line(l) if l.base.layer_id == "Parsel")));
+}
+
+#[test]
+fn an_attribute_that_cannot_be_read_is_reported() {
+    let blocks = groups(&[(0, "BLOCK"), (2, "B"), (70, "0"), (10, "0"), (20, "0"), (0, "POINT"), (8, "0"), (10, "1"), (20, "2"), (0, "ENDBLK")]);
+    let entities = groups(&[
+        (0, "INSERT"),
+        (8, "K"),
+        (66, "1"),
+        (2, "B"),
+        (10, "100"),
+        (20, "200"),
+        (0, "ATTRIB"),
+        (8, "K"),
+        (10, "abc"),
+        (20, "0"),
+        (40, "1"),
+        (1, "P-1"),
+        (0, "SEQEND"),
+    ]);
+    let r = dxf::read(&dxf_of(&[("BLOCKS", blocks), ("ENTITIES", entities)]), &DxfReadOptions::default()).expect("read");
+    // The block's point arrives; the broken attribute is named with its line and why.
+    assert!(matches!(r.entities.as_slice(), [Entity::Point(p)] if p.p == v(101.0, 202.0) && p.base.layer_id == "K"));
+    let item = r.report.skipped.iter().find(|s| s.what == "Blok özniteliği (ATTRIB)").expect("reported");
+    assert!(item.reason.contains("sayı okunamadı (grup 10"), "{item:?}");
+    assert_eq!(item.lines.len(), 1);
+}
+
+#[test]
+fn nested_blocks_that_draw_nothing_cannot_stall_the_reader() {
+    // Eleven levels, each inserting the next ten times: 10¹⁰ inserts of a block holding only an
+    // attribute definition. The walk stops at its limit and says so.
+    let mut blocks = Vec::new();
+    for k in 0..10 {
+        blocks.extend(groups(&[(0, "BLOCK"), (2, &format!("L{k}")), (70, "0"), (10, "0"), (20, "0")]));
+        for _ in 0..10 {
+            blocks.extend(groups(&[(0, "INSERT"), (8, "0"), (2, &format!("L{}", k + 1)), (10, "1"), (20, "1")]));
+        }
+        blocks.extend(groups(&[(0, "ENDBLK")]));
+    }
+    blocks.extend(groups(&[(0, "BLOCK"), (2, "L10"), (70, "0"), (10, "0"), (20, "0"), (0, "ATTDEF"), (8, "0"), (0, "ENDBLK")]));
+    let entities = groups(&[(0, "INSERT"), (8, "0"), (2, "L0"), (10, "0"), (20, "0")]);
+    let bytes = dxf_of(&[("BLOCKS", blocks), ("ENTITIES", entities)]);
+    let t0 = std::time::Instant::now();
+    let r = dxf::read(&bytes, &DxfReadOptions { max_entities: 1000 }).expect("read");
+    assert!(t0.elapsed().as_secs() < 5);
+    assert!(r.entities.is_empty());
+    assert!(r.report.skipped.iter().any(|s| s.what == "Blok (INSERT)" && s.reason.contains("8000 nesneden fazlasını dolaştırdı")), "{:?}", r.report.skipped);
+}
+
+#[test]
+fn a_minsert_array_opens_by_columns_and_rows_and_is_capped() {
+    let blocks = groups(&[(0, "BLOCK"), (2, "P"), (70, "0"), (10, "0"), (20, "0"), (0, "POINT"), (8, "0"), (10, "0"), (20, "0"), (0, "ENDBLK")]);
+    let minsert = |cols: &str, rows: &str| groups(&[(0, "INSERT"), (8, "D"), (2, "P"), (10, "0"), (20, "0"), (70, cols), (71, rows), (44, "2"), (45, "5")]);
+    let points = |r: &ImportResult| -> Vec<Vec2> {
+        r.entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Point(p) => Some(p.p),
+                _ => None,
+            })
+            .collect()
+    };
+    let r = dxf::read(&dxf_of(&[("BLOCKS", blocks.clone()), ("ENTITIES", minsert("3", "2"))]), &DxfReadOptions::default()).expect("read");
+    assert_eq!(points(&r), vec![v(0.0, 0.0), v(2.0, 0.0), v(4.0, 0.0), v(0.0, 5.0), v(2.0, 5.0), v(4.0, 5.0)]);
+    // More than 10 000 columns: 10 000 of each row are opened, and the rest is reported.
+    let r = dxf::read(&dxf_of(&[("BLOCKS", blocks), ("ENTITIES", minsert("10001", "2"))]), &DxfReadOptions::default()).expect("read");
+    let pts = points(&r);
+    assert_eq!(pts.len(), 20_000);
+    assert_eq!((pts.iter().filter(|p| p.y == 5.0).count(), pts.iter().map(|p| p.x).fold(0.0, f64::max)), (10_000, 19_998.0));
+    assert!(skipped(&r, "Blok dizisi (MINSERT)").is_some_and(|s| s.contains("10001 × 2")));
+}
+
 #[test]
 fn a_large_file_reads_in_one_pass() {
     let mut text = String::from("  0\nSECTION\n  2\nENTITIES\n");

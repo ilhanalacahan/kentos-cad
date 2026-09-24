@@ -1,14 +1,18 @@
-//! The plane geometry file formats need, written here because this crate
-//! depends on nothing but the contracts (the analytic core lives in
-//! `kentos-geometry-core`, which the formats do not link): 2D affine maps
-//! with exact identity and quarter turns, DXF's object coordinate systems,
-//! an ellipse from any parameterisation (the image of a circle under a
-//! non-uniform map), and arc sampling for boundaries the model keeps as
-//! point rings (hatches: 72 segments per turn, as the app does).
+//! The plane geometry file formats need. What the app itself computes comes
+//! from the shared core (`kentos-geometry-core`, CLAUDE.md §14): a bulged
+//! path as points (the app's hatch rings), ring area and point in ring.
+//! What only a file reader needs is here: 2D affine maps with exact identity
+//! and quarter turns, DXF's object coordinate systems, an ellipse from any
+//! parameterisation (the image of a circle under a non-uniform map), and
+//! arcs of DXF hatch boundaries sampled with the app's step (72 per turn).
 
 use kentos_contracts::Vec2;
+use kentos_geometry_core::Vec2 as CoreVec2;
+use kentos_geometry_core::geom::arc::DEFAULT_STEP;
+use kentos_geometry_core::geom::bulge::bulge_path_outline;
+use kentos_geometry_core::geometry::{point_in_polygon, signed_area};
 
-use crate::math::{atan, atan2, cos, hypot, norm_angle, sin, sin_cos_deg, TAU};
+use crate::math::{atan2, cos, hypot, norm_angle, sin, sin_cos_deg, TAU};
 
 pub const fn v(x: f64, y: f64) -> Vec2 {
     Vec2 { x, y }
@@ -190,13 +194,17 @@ pub fn ellipse_from(c: Vec2, u: Vec2, mut vv: Vec2, mut t0: f64, mut t1: f64, fu
     Some(EllipseParts { c, major: a, ratio, t0, t1 })
 }
 
-/// Segments per full turn when an arc becomes points (the app's hatch boundaries).
-pub const ARC_SEGMENTS: f64 = 72.0;
+/// Segments of an arc of `sweep` radians, by the app's rule (`tessellateArc`,
+/// `bulgePathOutline`): 72 per turn, at least two.
+pub fn arc_steps(sweep: f64) -> usize {
+    (sweep.abs() / DEFAULT_STEP).ceil().max(2.0) as usize
+}
 
 /// Points of an arc after its start: from `a0` turning `sweep` radians
-/// (negative: clockwise), ending exactly at `end` when given.
+/// (negative: clockwise, as DXF hatch edges may run), ending exactly at
+/// `end` when given.
 pub fn arc_points(c: Vec2, r: f64, a0: f64, sweep: f64, end: Option<Vec2>, out: &mut Vec<Vec2>) {
-    let n = ((sweep.abs() / TAU) * ARC_SEGMENTS).ceil().max(1.0) as usize;
+    let n = arc_steps(sweep);
     for i in 1..=n {
         if i == n
             && let Some(e) = end
@@ -209,64 +217,36 @@ pub fn arc_points(c: Vec2, r: f64, a0: f64, sweep: f64, end: Option<Vec2>, out: 
     }
 }
 
-/// A bulged segment a → b (bulge = tan(θ/4), counter-clockwise positive) as
-/// its circle: centre, radius, start angle and signed sweep; None if straight.
-pub fn bulge_arc(a: Vec2, b: Vec2, bulge: f64) -> Option<(Vec2, f64, f64, f64)> {
-    if bulge == 0.0 || !bulge.is_finite() {
-        return None;
-    }
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let l = hypot(dx, dy);
-    if !(l > 0.0) {
-        return None;
-    }
-    let f = (1.0 - bulge * bulge) / (4.0 * bulge);
-    let c = v((a.x + b.x) / 2.0 - f * dy, (a.y + b.y) / 2.0 + f * dx);
-    let r = l * (1.0 + bulge * bulge) / (4.0 * bulge.abs());
-    Some((c, r, atan2(a.y - c.y, a.x - c.x), 4.0 * atan(bulge)))
+/// Points in the shared core's form.
+pub fn to_core(pts: &[Vec2]) -> Vec<CoreVec2> {
+    pts.iter().map(|p| CoreVec2::new(p.x, p.y)).collect()
 }
 
-/// A ring of vertices with bulges as points (arcs sampled), without repeating the first point.
-pub fn bulge_ring_points(pts: &[Vec2], bulges: &[f64]) -> Vec<Vec2> {
-    let n = pts.len();
-    let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        let a = pts[i];
-        let b = pts[(i + 1) % n];
-        out.push(a);
-        if let Some((c, r, a0, sweep)) = bulge_arc(a, b, bulges.get(i).copied().unwrap_or(0.0)) {
-            arc_points(c, r, a0, sweep, Some(b), &mut out);
-            // The end point is the next vertex, pushed on its own turn.
-            out.pop();
-        }
-    }
-    out
+/// Whether a bulge list has an arc, by the core's threshold (a bulge within
+/// 10⁻¹² of zero is a straight segment to the app).
+pub fn has_arcs(bulges: &[f64]) -> bool {
+    kentos_geometry_core::geom::bulge::has_bulges(Some(bulges))
 }
 
-/// Twice the signed area of a ring (positive counter-clockwise), accumulated from the first point.
-pub fn signed_area2(ring: &[Vec2]) -> f64 {
-    let Some(&o) = ring.first() else { return 0.0 };
-    let mut s = 0.0;
-    for i in 1..ring.len().saturating_sub(1) {
-        let (p, q) = (ring[i], ring[i + 1]);
-        s += (p.x - o.x) * (q.y - o.y) - (q.x - o.x) * (p.y - o.y);
-    }
-    s
+/// A vertex path with bulges as points, exactly as the app samples its own
+/// (`polygonRing` → `bulgePathOutline`, in the shared core): a closed path
+/// gives a ring without repeating its first point, an open one ends at its
+/// last vertex.
+pub fn bulge_path_points(pts: &[Vec2], bulges: &[f64], closed: bool) -> Vec<Vec2> {
+    bulge_path_outline(&to_core(pts), Some(bulges), closed, DEFAULT_STEP)
+        .into_iter()
+        .map(|p| v(p.x, p.y))
+        .collect()
 }
 
-/// Even-odd point in ring test.
-pub fn inside(p: Vec2, ring: &[Vec2]) -> bool {
-    let mut odd = false;
-    let n = ring.len();
-    let mut j = n.wrapping_sub(1);
-    for i in 0..n {
-        let (a, b) = (ring[i], ring[j]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
-            odd = !odd;
-        }
-        j = i;
-    }
-    odd
+/// Absolute area of a ring (the shared core's shoelace, taken from its first point).
+pub fn ring_area(ring: &[CoreVec2]) -> f64 {
+    signed_area(ring).abs()
+}
+
+/// Even-odd point in ring test (the shared core's).
+pub fn ring_contains(ring: &[CoreVec2], p: Vec2) -> bool {
+    point_in_polygon(CoreVec2::new(p.x, p.y), ring)
 }
 
 #[cfg(test)]
@@ -322,14 +302,29 @@ mod tests {
     }
 
     #[test]
-    fn bulges_and_rings() {
-        // A half circle from (0,0) to (2,0) bulging down (bulge 1, counter-clockwise).
-        let (c, r, a0, sweep) = bulge_arc(v(0.0, 0.0), v(2.0, 0.0), 1.0).expect("arc");
-        assert!(dist(c, v(1.0, 0.0)) < 1e-15 && (r - 1.0).abs() < 1e-15 && (sweep - PI).abs() < 1e-15);
-        assert!((a0 - PI).abs() < 1e-15);
-        let ring = bulge_ring_points(&[v(0.0, 0.0), v(2.0, 0.0)], &[1.0, 1.0]);
+    fn arcs_are_sampled_with_the_apps_step() {
+        assert_eq!((arc_steps(TAU), arc_steps(-PI / 2.0), arc_steps(1e-6), arc_steps(0.0)), (72, 18, 2, 2));
+        // A clockwise quarter from (1, 0) to (0, −1): 18 points after the start, the last one exact.
+        let mut out = Vec::new();
+        arc_points(v(0.0, 0.0), 1.0, 0.0, -PI / 2.0, Some(v(0.0, -1.0)), &mut out);
+        assert_eq!(out.len(), 18);
+        assert_eq!(out.last(), Some(&v(0.0, -1.0)));
+        assert!(out.iter().all(|p| (hypot(p.x, p.y) - 1.0).abs() < 1e-15 && p.x >= -1e-15 && p.y <= 1e-15));
+    }
+
+    #[test]
+    fn bulged_paths_and_rings_as_the_app_samples_them() {
+        // A circle of two bulged halves (bulge 1: half a turn each), 36 segments per half.
+        let ring = bulge_path_points(&[v(0.0, 0.0), v(2.0, 0.0)], &[1.0, 1.0], true);
         assert_eq!(ring.len(), 72);
-        assert!((signed_area2(&ring) / 2.0 - PI).abs() < 0.01);
-        assert!(inside(v(1.0, 0.5), &ring) && !inside(v(3.0, 0.0), &ring));
+        assert_eq!((ring[0], ring[36]), (v(0.0, 0.0), v(2.0, 0.0)));
+        assert!(ring.iter().all(|p| (hypot(p.x - 1.0, p.y) - 1.0).abs() < 1e-15));
+        let core = to_core(&ring);
+        assert!((ring_area(&core) - PI).abs() < 0.01);
+        assert!(ring_contains(&core, v(1.0, 0.5)) && !ring_contains(&core, v(3.0, 0.0)));
+        // An open path ends at its last vertex; a bulge within 10⁻¹² of zero is straight.
+        let open = bulge_path_points(&[v(0.0, 0.0), v(2.0, 0.0), v(2.0, 5.0)], &[-1.0, 1e-13], false);
+        assert_eq!((open.len(), open.last()), (38, Some(&v(2.0, 5.0))));
+        assert!(has_arcs(&[0.0, -1.0]) && !has_arcs(&[0.0, 1e-13]) && !has_arcs(&[]));
     }
 }

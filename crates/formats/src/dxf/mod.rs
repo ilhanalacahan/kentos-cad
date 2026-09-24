@@ -24,13 +24,12 @@ use entity::P3;
 use lexer::{Lexer, Pair};
 use strings::Decoder;
 
-/// Application name of KentOS's own extended data (1001).
-pub const KENTOS_APP: &str = "KENTOS";
-/// Marks a SPLINE KentOS wrote from its own curve (fit points are exact, no note).
-pub const XDATA_SPLINE: &str = "catmull-rom";
-
 /// Objects read at most, unless the caller says otherwise.
 const DEFAULT_LIMIT: usize = 1_000_000;
+/// Objects visited while blocks are exploded, per object the limit allows:
+/// nested inserts multiply, and a block whose content is all left out
+/// (paper space, attribute definitions) would otherwise be walked without end.
+const VISITS_PER_OBJECT: u64 = 8;
 
 /// The z component of a normalised extrusion (±1 for the common planes).
 pub(crate) fn extrusion_z(n: P3) -> f64 {
@@ -167,7 +166,9 @@ impl<'a> Reader<'a> {
                     let line_type = self.ltypes.get(&ltype.to_uppercase()).copied().unwrap_or_else(|| classify_name(&ltype));
                     let weight = g(370).and_then(|x| parse_int(x.text())).filter(|&w| w > 0).map(|w| w as f64 / 100.0);
                     let def = LayerDef { name: name(), color, visible: aci_ >= 0 && flags & 1 == 0, locked: flags & 4 != 0, line_type, line_weight: weight };
-                    self.lib.layer_colors.insert(def.name.to_uppercase(), def.color.clone());
+                    let key = def.name.to_uppercase();
+                    self.lib.layer_colors.insert(key.clone(), def.color.clone());
+                    self.lib.layer_names.insert(key, def.name.clone());
                     self.layers.push(def);
                 }
                 "LTYPE" => {
@@ -282,7 +283,7 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
         return Err("Bu bir DWG dosyası. DWG kapalı (tescilli) bir biçimdir ve KentOS okuyamaz; dosyayı AutoCAD ya da Netcad'de DXF olarak kaydedip onu açın.".into());
     }
     let limit = if opts.max_entities == 0 { DEFAULT_LIMIT } else { opts.max_entities as usize };
-    let mut out = Out::new(limit);
+    let mut out = Out::new(limit, (limit as u64).saturating_mul(VISITS_PER_OBJECT));
     // Until the header says otherwise: UTF-8 when the bytes are, else Turkish Windows.
     let initial = encoding(bytes, "", "", &mut out);
     let mut rd = Reader {
@@ -375,6 +376,13 @@ pub fn read(bytes: &[u8], opts: &DxfReadOptions) -> Result<ImportResult, String>
     }
     if out.truncated > 0 {
         out.report.skip("Nesne sınırı", &format!("ilk {limit} nesne alındı; kalanlar alınmadı (dosyayı katmanlara bölün)"), 0);
+    }
+    if out.exhausted {
+        out.report.skip(
+            "Blok (INSERT)",
+            &format!("iç içe bloklar {} nesneden fazlasını dolaştırdı; kalan eklemeler açılmadı (blokları AutoCAD'de patlatıp ya da dosyayı bölüp yeniden kaydedin)", out.visit_limit),
+            0,
+        );
     }
     out.report.fact("Sürüm", version_name(&rd.version));
     out.report.fact("Karakter kodlaması", rd.dec.enc.label());

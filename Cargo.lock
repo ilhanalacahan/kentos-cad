@@ -1232,6 +1232,7 @@ name = "kentos-formats"
 version = "0.1.0"
 dependencies = [
  "kentos-contracts",
+ "kentos-geometry-core",
  "libm",
  "serde",
  "serde_json",

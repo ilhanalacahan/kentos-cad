@@ -10,11 +10,14 @@ publish.workspace = true
 # target (native for the server's import job, wasm32 for the browser's
 # formats worker) and never reaches for the file system or the network
 # (CLAUDE.md §14). The objects it reads and writes are the versioned
-# contracts; libm gives both targets the same transcendental functions, so an
-# imported file gets the same coordinates in the browser and on the server
-# (§23.4, docs/adr/0008).
+# contracts; what the app itself computes (a bulged ring as points, ring
+# area, point in ring) comes from the shared geometry core, so an imported
+# hatch is sampled as the app samples its own; libm gives both targets the
+# same transcendental functions, so an imported file gets the same
+# coordinates in the browser and on the server (§23.4, docs/adr/0008, 0009).
 [dependencies]
 kentos-contracts = { path = "../contracts" }
+kentos-geometry-core = { path = "../geometry-core" }
 libm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

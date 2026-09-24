@@ -86,8 +86,8 @@ class DxfImportDialog {
     this.render();
     this.say(`“${this.file.name}” okunuyor…`);
     try {
-      // The buffer goes to the worker as it is (the window does not need the bytes again).
-      const r = await formats().readDxf(this.file.bytes.buffer as ArrayBuffer, { maxEntities: 0 });
+      // The bytes go to the worker without a copy (the window does not need them again).
+      const r = await formats().readDxf(this.file.bytes, { maxEntities: 0 });
       if (gen !== this.generation || this.closed) return;
       this.result = r;
       this.say('');

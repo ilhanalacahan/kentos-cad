@@ -39,9 +39,8 @@ pub fn rgb(index: u8) -> [u8; 3] {
             [ch(r), ch(g), ch(b)]
         }
         _ => {
-            // 250–255: greys from dark to white.
-            let g = 51.0 + 40.8 * f64::from(index - 250);
-            let g = g.floor().clamp(0.0, 255.0) as u8;
+            // 250–255: AutoCAD's greys, from dark to white (not evenly spaced).
+            let g = [51, 80, 105, 130, 190, 255][usize::from(index - 250).min(5)];
             [g, g, g]
         }
     }
@@ -94,6 +93,10 @@ mod tests {
         assert_eq!(rgb(170), [0, 0, 255]);
         assert_eq!(rgb(210), [255, 0, 255]);
         assert_eq!(rgb(250), [51, 51, 51]);
+        assert_eq!(rgb(251), [80, 80, 80]);
+        assert_eq!(rgb(252), [105, 105, 105]);
+        assert_eq!(rgb(253), [130, 130, 130]);
+        assert_eq!(rgb(254), [190, 190, 190]);
         assert_eq!(rgb(255), [255, 255, 255]);
         assert_eq!(color(7), "ink");
         assert_eq!(color(1), "#FF0000");

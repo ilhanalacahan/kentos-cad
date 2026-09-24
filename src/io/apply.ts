@@ -53,6 +53,9 @@ function allNodeIds(nodes: readonly LayerNode[], out = new Set<string>()): Set<s
 }
 
 export function applyImport(doc: CadDocument, entities: readonly ContractEntity[], plan: ImportPlan): Applied {
+  // An open edit or group (a processing model still running) would take the import into its own
+  // undo step, and its cancel would take the import back out with it.
+  if (doc.busy) return { ok: false, error: 'Bir işlem aracı ya da model hâlâ çalışıyor. Bitmesini bekleyip İçe aktar düğmesine yeniden basın.' };
   const taken = allNodeIds(doc.layers.tree);
   const newIds = new Map<string, string>();
   for (const [source, t] of plan.layers) {

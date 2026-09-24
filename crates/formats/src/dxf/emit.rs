@@ -17,13 +17,15 @@ use super::aci;
 use super::entity::{Color, Kind, Parsed, Vertex, P3};
 use super::hatch::{Edge, Hatch, Path};
 use super::strings::{mtext_lines, text_codes};
-use crate::geom::{arc_points, bulge_arc, bulge_ring_points, dist, ellipse_from, finite, inside, ocs_tf, signed_area2, v, Similarity, Tf};
+use crate::geom::{arc_points, arc_steps, bulge_path_points, dist, ellipse_from, finite, has_arcs, ocs_tf, ring_area, ring_contains, to_core, v, Similarity, Tf};
 use crate::math::{atan2, cos, deg, hypot, norm_angle, rad, sin, sin_cos_deg, TAU};
 use crate::nurbs;
 use crate::report::Report;
 
 /// Blocks nest at most this deep (a block that inserts itself is caught earlier).
 const MAX_DEPTH: usize = 24;
+/// Columns and rows of a MINSERT array opened at most.
+const MAX_ARRAY: i64 = 10_000;
 /// Curves sampled into points stay within this of the true curve (1 mm).
 const SAMPLE_TOLERANCE: f64 = 1e-3;
 /// Text width per character in ems, as the app estimates it (entities.ts textBox).
@@ -42,6 +44,8 @@ pub struct Library {
     pub blocks: HashMap<String, Block>,
     /// Upper-case layer name → the layer's colour for BYBLOCK children of inserts on it.
     pub layer_colors: HashMap<String, String>,
+    /// Upper-case layer name → the name as the LAYER table spells it (DXF layer names ignore case).
+    pub layer_names: HashMap<String, String>,
     /// Upper-case text style name → fixed height (0: none).
     pub style_heights: HashMap<String, f64>,
 }
@@ -74,11 +78,26 @@ pub struct Out {
     pub bounds: Option<Bounds>,
     pub limit: usize,
     pub truncated: u32,
+    /// Entities and array cells walked so far, and how many may be.
+    pub visits: u64,
+    pub visit_limit: u64,
+    /// The walk stopped at `visit_limit`.
+    pub exhausted: bool,
 }
 
 impl Out {
-    pub fn new(limit: usize) -> Out {
-        Out { entities: Vec::new(), report: Report::default(), per_layer: HashMap::new(), bounds: None, limit, truncated: 0 }
+    pub fn new(limit: usize, visit_limit: u64) -> Out {
+        Out { entities: Vec::new(), report: Report::default(), per_layer: HashMap::new(), bounds: None, limit, truncated: 0, visits: 0, visit_limit, exhausted: false }
+    }
+
+    /// Counts one step of the walk; false once the walk may go no further.
+    fn visit(&mut self) -> bool {
+        if self.visits >= self.visit_limit {
+            self.exhausted = true;
+            return false;
+        }
+        self.visits += 1;
+        true
     }
 
     fn extend_bounds(&mut self, p: Vec2) {
@@ -185,10 +204,11 @@ impl<'l> Emitter<'l> {
     }
 
     /// The layer an object goes on: children on layer 0 take the insert's layer.
+    /// Spelled as the LAYER table spells it: "parsel" on an entity is the table's "PARSEL".
     fn layer_of(&self, e: &Parsed, ctx: &Ctx) -> String {
         match (&ctx.layer, e.common.layer.as_str()) {
             (Some(l), "0") => l.clone(),
-            _ => e.common.layer.clone(),
+            (_, name) => self.lib.layer_names.get(&name.to_uppercase()).cloned().unwrap_or_else(|| name.to_string()),
         }
     }
 
@@ -203,6 +223,9 @@ impl<'l> Emitter<'l> {
     }
 
     pub fn emit(&mut self, e: &Parsed, ctx: &Ctx) {
+        if !self.out.visit() {
+            return;
+        }
         if e.common.paper {
             self.skip("Kâğıt uzayı nesnesi", "pafta düzenindeki (kâğıt uzayı) nesneler alınmaz; yalnız model uzayı alınır", e.line);
             return;
@@ -253,11 +276,10 @@ impl<'l> Emitter<'l> {
             }
             Kind::Polyline { flags, verts, elevation, width } => self.polyline(ctx, ext, *flags, verts, *elevation, *width, b(), e),
             Kind::Spline { flags, degree, knots, weights, ctrl, fit } => self.spline(ctx, *flags, *degree, knots, weights, ctrl, fit, b(), e),
-            Kind::Text { p, p2, height, rotation, text, halign, valign, width, style, attrib, hidden } => {
+            Kind::Text { p, p2, height, rotation, text, halign, valign, width, style, hidden } => {
                 if *hidden {
                     return self.skip("Görünmez öznitelik (ATTRIB)", "blok özniteliği görünmez olarak işaretli", e.line);
                 }
-                let _ = attrib;
                 self.text(ctx, ext, *p, *p2, *height, *rotation, text, *halign, *valign, *width, style, b(), e);
             }
             Kind::MText { p, height, attach, xdir, rotation, text, spacing, style } => self.mtext(ctx, ext, *p, *height, *attach, *xdir, *rotation, text, *spacing, style, b(), e),
@@ -281,11 +303,14 @@ impl<'l> Emitter<'l> {
                     self.note("3B yüz (3DFACE)", "kapalı alan olarak alındı; Z değerleri alınmadı", e.line);
                 }
             }
-            Kind::Insert { name, p, scale, rotation, cols, rows, dc, dr, attribs } => {
+            Kind::Insert { name, p, scale, rotation, cols, rows, dc, dr, attribs, bad_attribs } => {
                 self.insert(ctx, e, &layer, name, *p, *scale, *rotation, *cols, *rows, *dc, *dr);
                 // Attributes are already placed in the insert's own frame.
                 for a in attribs {
                     self.emit(a, ctx);
+                }
+                for (reason, line) in bad_attribs {
+                    self.skip("Blok özniteliği (ATTRIB)", reason, *line);
                 }
             }
             Kind::Hatch(h) => self.hatch(ctx, ext, h, b(), e),
@@ -406,8 +431,7 @@ impl<'l> Emitter<'l> {
         if pts.len() < 2 {
             return self.skip(&e.name, "iki köşesi yok", e.line);
         }
-        let arcs = bulges.iter().any(|&x| x != 0.0);
-        let (pts, bulges) = match (arcs, m.similarity()) {
+        let (pts, bulges) = match (has_arcs(&bulges), m.similarity()) {
             (_, Some(s)) => {
                 let pts: Vec<Vec2> = pts.iter().map(|p| m.apply(*p)).collect();
                 let bulges: Vec<f64> = if s.mirror { bulges.iter().map(|x| -x).collect() } else { bulges };
@@ -416,7 +440,7 @@ impl<'l> Emitter<'l> {
             (false, None) => (pts.iter().map(|p| m.apply(*p)).collect(), bulges),
             (true, None) => {
                 // A stretched arc is an elliptic arc; the model's paths hold circular arcs only.
-                let ring = if closed { bulge_ring_points(&pts, &bulges) } else { open_path_points(&pts, &bulges) };
+                let ring = bulge_path_points(&pts, &bulges, closed);
                 self.note(&e.name, "yaylı kenarları eşit olmayan ölçekle eklendiği için noktalara bölündü", e.line);
                 let n = ring.len();
                 (ring.iter().map(|p| m.apply(*p)).collect(), vec![0.0; n])
@@ -460,21 +484,21 @@ impl<'l> Emitter<'l> {
     #[allow(clippy::too_many_arguments)]
     fn spline(&mut self, ctx: &Ctx, flags: i64, degree: i64, knots: &[f64], weights: &[f64], ctrl: &[P3], fit: &[P3], b: EntityBase, e: &Parsed) {
         let closed = flags & 1 == 1;
-        let ours = e.common.xdata.iter().any(|(_, s)| s == super::XDATA_SPLINE);
         if fit.len() >= 2 {
             let mut pts: Vec<Vec2> = fit.iter().map(|p| ctx.tf.apply(xy(*p))).collect();
             if closed && pts.len() > 2 && pts.first() == pts.last() {
                 pts.pop();
             }
-            if !ours {
-                self.note("Eğri (SPLINE)", "geçiş noktalarından KentOS eğrisi (Catmull-Rom) olarak kuruldu; noktalar arasındaki biçim küçük farklar gösterebilir", e.line);
-            }
+            self.note("Eğri (SPLINE)", "geçiş noktalarından KentOS eğrisi (Catmull-Rom) olarak kuruldu; noktalar arasındaki biçim küçük farklar gösterebilir", e.line);
             if ctx.tf.similarity().is_none() {
                 self.note("Eğri (SPLINE)", "eşit olmayan ölçekle eklendi; geçiş noktaları dönüştürüldü, eğri yaklaşık", e.line);
             }
             return self.push(Entity::Spline(SplineEntity { base: b, pts, closed }));
         }
         let Ok(p) = usize::try_from(degree) else { return self.skip("Eğri (SPLINE)", "derecesi geçersiz", e.line) };
+        if p > nurbs::MAX_DEGREE {
+            return self.skip("Eğri (SPLINE)", &format!("derecesi {p}; en çok {} okunur (AutoCAD en çok 11 yazar)", nurbs::MAX_DEGREE), e.line);
+        }
         if p == 0 || ctrl.len() < 2 || knots.len() != ctrl.len() + p + 1 {
             return self.skip("Eğri (SPLINE)", "denetim noktası ve düğüm sayıları tutarsız", e.line);
         }
@@ -639,14 +663,21 @@ impl<'l> Emitter<'l> {
         let nz = super::extrusion_z(e.common.extrusion);
         let mut chain = ctx.chain.clone();
         chain.push(key);
-        // An array insert (MINSERT); a huge one stops at the object limit.
-        let cells = (cols.clamp(1, 10_000) as usize).saturating_mul(rows.clamp(1, 10_000) as usize);
-        for cell in 0..cells {
+        // An array insert (MINSERT); a huge one stops at the object limit or at the walk's.
+        let (ncols, nrows) = (cols.clamp(1, MAX_ARRAY), rows.clamp(1, MAX_ARRAY));
+        if ncols < cols || nrows < rows {
+            self.skip("Blok dizisi (MINSERT)", &format!("{cols} × {rows} dizinin en çok {MAX_ARRAY} sütunu ve satırı açıldı; kalanı alınmadı"), e.line);
+        }
+        let (ncols, nrows) = (ncols as usize, nrows as usize);
+        for cell in 0..ncols * nrows {
+            if !self.out.visit() {
+                break;
+            }
             if self.out.entities.len() >= self.out.limit {
                 self.out.truncated += 1;
                 break;
             }
-            let (col, row) = ((cell % cols.max(1) as usize) as f64, (cell / cols.max(1) as usize) as f64);
+            let (col, row) = ((cell % ncols) as f64, (cell / ncols) as f64);
             let local = Tf::translate(-block.base[0], -block.base[1])
                 .then(&Tf::scale(sx, sy))
                 .then(&Tf::translate(col * dc, row * dr))
@@ -696,8 +727,11 @@ impl<'l> Emitter<'l> {
         let mut rings: Vec<Vec<Vec2>> = Vec::new();
         let mut curved = false;
         for path in &h.paths {
-            let (ring, arcs) = path_points(path);
+            let Boundary { pts: ring, curved: arcs, rough } = path_points(path);
             curved |= arcs;
+            if rough {
+                self.note("Tarama (HATCH)", "sınırdaki bir eğri hesaplanamadı (düğümleri geçersiz ya da derecesi çok yüksek); denetim noktalarından geçen çizgiyle alındı", e.line);
+            }
             let mut ring: Vec<Vec2> = ring.into_iter().map(|p| m.apply(p)).collect();
             ring.dedup();
             if ring.len() > 1 && ring.first() == ring.last() {
@@ -715,15 +749,16 @@ impl<'l> Emitter<'l> {
         }
         let pattern = self.pattern(m, h, e);
         // Nesting: even depth is hatched, odd depth is an island of its container.
+        let core: Vec<_> = rings.iter().map(|r| to_core(r)).collect();
+        let area: Vec<f64> = core.iter().map(|r| ring_area(r)).collect();
         let mut order: Vec<usize> = (0..rings.len()).collect();
-        let area = |r: &Vec<Vec2>| signed_area2(r).abs();
-        order.sort_by(|&a, &b| area(&rings[b]).total_cmp(&area(&rings[a])));
+        order.sort_by(|&a, &b| area[b].total_cmp(&area[a]));
         let mut parent: Vec<Option<usize>> = vec![None; rings.len()];
         let mut depth = vec![0usize; rings.len()];
         for (k, &i) in order.iter().enumerate() {
             let probe = rings[i][0];
             // The smallest larger ring around it is its container.
-            if let Some(&j) = order[..k].iter().rev().find(|&&j| inside(probe, &rings[j])) {
+            if let Some(&j) = order[..k].iter().rev().find(|&&j| ring_contains(&core[j], probe)) {
                 parent[i] = Some(j);
                 depth[i] = depth[j] + 1;
             }
@@ -790,18 +825,6 @@ impl<'l> Emitter<'l> {
     }
 }
 
-/// An open bulged path as points (arcs sampled), ending at the last vertex.
-fn open_path_points(pts: &[Vec2], bulges: &[f64]) -> Vec<Vec2> {
-    let mut out = vec![pts[0]];
-    for i in 0..pts.len() - 1 {
-        match bulge_arc(pts[i], pts[i + 1], bulges.get(i).copied().unwrap_or(0.0)) {
-            Some((c, r, a0, sweep)) => arc_points(c, r, a0, sweep, Some(pts[i + 1]), &mut out),
-            None => out.push(pts[i + 1]),
-        }
-    }
-    out
-}
-
 /// A clockwise arc: DXF stores it mirrored (angles negated). The start that
 /// meets the previous edge decides when a writer stored it the other way.
 fn arc_edge(c: Vec2, r: f64, a0: f64, a1: f64, ccw: bool, prev: Option<Vec2>, out: &mut Vec<Vec2>) {
@@ -826,17 +849,27 @@ fn arc_edge(c: Vec2, r: f64, a0: f64, a1: f64, ccw: bool, prev: Option<Vec2>, ou
     arc_points(c, r, rad(start), rad(sweep), Some(at(end)), out);
 }
 
-/// A boundary path's points (object coordinates) and whether it had curves.
-fn path_points(path: &Path) -> (Vec<Vec2>, bool) {
+/// A hatch boundary path as points (object coordinates).
+struct Boundary {
+    pts: Vec<Vec2>,
+    /// It had arcs, elliptic arcs or splines (sampled).
+    curved: bool,
+    /// A spline edge could not be evaluated: its control points stand in for it.
+    rough: bool,
+}
+
+/// A boundary path's points: a polyline path exactly as the app samples its
+/// own bulged rings (the shared core), edge paths with the same step.
+fn path_points(path: &Path) -> Boundary {
     match path {
         Path::Poly { pts, bulges } => {
             let pts: Vec<Vec2> = pts.iter().map(|p| v(p[0], p[1])).collect();
-            let curved = bulges.iter().any(|&b| b != 0.0);
-            (bulge_ring_points(&pts, bulges), curved)
+            Boundary { pts: bulge_path_points(&pts, bulges, true), curved: has_arcs(bulges), rough: false }
         }
         Path::Edges(edges) => {
             let mut out: Vec<Vec2> = Vec::new();
             let mut curved = false;
+            let mut rough = false;
             for edge in edges {
                 let prev = out.last().copied();
                 match edge {
@@ -863,7 +896,7 @@ fn path_points(path: &Path) -> (Vec<Vec2>, bool) {
                         }
                         let (mx, my) = (major[0], major[1]);
                         let (nx, ny) = (-my * ratio, mx * ratio);
-                        let n = (((t1 - t0).abs() / TAU) * 72.0).ceil().max(1.0) as usize;
+                        let n = arc_steps(t1 - t0);
                         for i in 0..=n {
                             let t = t0 + (t1 - t0) * i as f64 / n as f64;
                             out.push(v(c[0] + mx * cos(t) + nx * sin(t), c[1] + my * cos(t) + ny * sin(t)));
@@ -876,12 +909,13 @@ fn path_points(path: &Path) -> (Vec<Vec2>, bool) {
                         if let Some(pts) = nurbs::sample(*degree, knots, &cps, w, SAMPLE_TOLERANCE) {
                             out.extend(pts);
                         } else {
+                            rough = true;
                             out.extend(cps);
                         }
                     }
                 }
             }
-            (out, curved)
+            Boundary { pts: out, curved, rough }
         }
     }
 }
@@ -901,5 +935,18 @@ mod tests {
         arc_edge(v(0.0, 0.0), 2.0, 0.0, 90.0, true, None, &mut out);
         assert!(dist(out[0], v(2.0, 0.0)) < 1e-12 && dist(*out.last().expect("end"), v(0.0, 2.0)) < 1e-12);
         assert_eq!(out.len(), 19);
+    }
+
+    #[test]
+    fn boundary_paths_say_when_they_were_sampled_or_stood_in_for() {
+        // A polyline path: bulges sampled as the app samples its own rings; straight ones are not curved.
+        let b = path_points(&Path::Poly { pts: vec![[0.0, 0.0], [2.0, 0.0]], bulges: vec![1.0, 1.0] });
+        assert_eq!((b.pts.len(), b.curved, b.rough), (72, true, false));
+        let b = path_points(&Path::Poly { pts: vec![[0.0, 0.0], [2.0, 0.0], [2.0, 2.0]], bulges: vec![0.0; 3] });
+        assert_eq!((b.pts.len(), b.curved, b.rough), (3, false, false));
+        // A spline edge whose knots do not fit its control points: the control points stand in, and that is said.
+        let spline = Edge::Spline { degree: 3, knots: vec![0.0, 1.0], ctrl: vec![[0.0, 0.0], [1.0, 1.0], [2.0, 0.0], [3.0, 1.0]], weights: Vec::new() };
+        let b = path_points(&Path::Edges(vec![Edge::Line { a: [3.0, 1.0], b: [0.0, 0.0] }, spline]));
+        assert_eq!((b.pts.len(), b.curved, b.rough), (6, true, true));
     }
 }
