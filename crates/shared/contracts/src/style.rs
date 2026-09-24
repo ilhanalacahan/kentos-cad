@@ -3,21 +3,23 @@
 //! (`crates/style-core`, CLAUDE.md §14); the TypeScript reader validates them.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 pub const STYLE_FORMAT: &str = "kentos-style";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct StyleFile {
-    #[ts(type = "\"kentos-style\"")]
+    #[cfg_attr(feature = "ts", ts(type = "\"kentos-style\""))]
     pub format: String,
     pub version: u32,
     /// ISO 8601 time of export.
     pub exported: String,
-    #[ts(type = "unknown[]")]
+    #[cfg_attr(feature = "ts", ts(type = "unknown[]"))]
     pub items: Vec<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional, type = "unknown[]")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "unknown[]"))]
     pub categories: Option<Vec<serde_json::Value>>,
 }

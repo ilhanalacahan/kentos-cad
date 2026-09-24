@@ -7,7 +7,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-kentos-contracts = { path = "../../shared/contracts" }
+kentos-contracts = { path = "../../shared/contracts", default-features = false }
 kentos-geometry-core = { path = "../../shared/geometry-core" }
 kentos-postgres = { path = "../postgres" }
 serde = { workspace = true }

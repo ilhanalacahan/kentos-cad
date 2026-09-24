@@ -16,7 +16,7 @@ publish.workspace = true
 # same transcendental functions, so an imported file gets the same
 # coordinates in the browser and on the server (§23.4, docs/adr/0008, 0009).
 [dependencies]
-kentos-contracts = { path = "../contracts" }
+kentos-contracts = { path = "../contracts", default-features = false }
 kentos-geometry-core = { path = "../geometry-core" }
 libm = { workspace = true }
 serde = { workspace = true }

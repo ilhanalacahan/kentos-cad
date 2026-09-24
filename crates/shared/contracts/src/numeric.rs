@@ -3,25 +3,29 @@
 //! versioned rule, not a library default.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 /// Exact decimal as text ("748.5151"): no float, no exponent.
 // A newtype: serde writes it as the bare string.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct DecimalString(pub String);
 
 /// A share as an exact fraction; both parts are integers as decimal text.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ShareValue {
     pub numerator: String,
     pub denominator: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum RoundingMode {
     HalfEven,
     HalfAwayFromZero,
@@ -32,9 +36,10 @@ pub enum RoundingMode {
     TowardNegative,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum RemainderRule {
     Reject,
     LargestRemainder,
@@ -42,17 +47,19 @@ pub enum RemainderRule {
 
 /// Only an approved policy may produce a final (legal) value; a draft one
 /// may be previewed but not committed (§23.2).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum PolicyStatus {
     Draft,
     Approved,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct NumericPolicy {
     pub id: String,
     pub version: u32,
@@ -67,6 +74,6 @@ pub struct NumericPolicy {
     pub remainder: RemainderRule,
     /// The official or institutional rule this policy implements, once verified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub source: Option<String>,
 }

@@ -1,11 +1,13 @@
 //! The layer tree and its simple look (`LayerNode`, `LayerStyle` in `src/model/layers.ts`).
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum LineType {
     Continuous,
     Dashed,
@@ -13,26 +15,29 @@ pub enum LineType {
     Dotted,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum PointSymbol {
     Ring,
     Cross,
     Triangle,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct PointStyle {
     pub symbol: PointSymbol,
     /// Diameter in CSS px.
     pub size: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum LabelPlacement {
     Center,
     Corner,
@@ -40,8 +45,9 @@ pub enum LabelPlacement {
     Along,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum LabelInk {
     #[serde(rename = "fg")]
     Fg,
@@ -52,43 +58,45 @@ pub enum LabelInk {
 }
 
 /// How entity labels on a layer are drawn; sizes in CSS px.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct LabelStyle {
     pub placement: LabelPlacement,
     pub size: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub grow: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub max_size: Option<f64>,
     /// 400, 500 or 600.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub weight: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub template: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub min_feature_px: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub min_scale: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub max_scale: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub ink: Option<LabelInk>,
 }
 
 /// A layer's look. `renderer` (the style engine, docs/STYLE.md) is opaque JSON in v1.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct LayerStyle {
     /// Hex colour or a theme token (fg, fg-dim, ink, paper).
     pub color: String,
@@ -96,33 +104,35 @@ pub struct LayerStyle {
     /// Plot line weight in mm.
     pub line_weight: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub fill: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub point: Option<PointStyle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub label: Option<LabelStyle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub pick_interior: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional, type = "unknown")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "unknown"))]
     pub renderer: Option<serde_json::Value>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum LayerNodeType {
     Group,
     Layer,
 }
 
 /// A node of the layer tree: a group or a layer.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct LayerNode {
     pub id: String,
     pub name: String,

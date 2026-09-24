@@ -2,6 +2,7 @@
 //! settings, the layer tree, the objects and the project's styles.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 use crate::entity::{Entity, Vec2};
@@ -10,27 +11,30 @@ use crate::layer::LayerNode;
 pub const DOCUMENT_FORMAT: &str = "kentos.document";
 pub const DOCUMENT_VERSION: u32 = 1;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum AreaUnit {
     M2,
     Donum,
     Ha,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum AngleUnit {
     Grad,
     Deg,
 }
 
 /// Project settings (`ProjectSettingsData`): saved with the drawing, the same for everyone who opens it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ProjectSettings {
     pub srid: u32,
     pub length_decimals: u32,
@@ -41,9 +45,10 @@ pub struct ProjectSettings {
     pub plot_scale: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Bounds {
     pub min_x: f64,
     pub min_y: f64,
@@ -52,29 +57,31 @@ pub struct Bounds {
 }
 
 /// The project's own style library (opaque items in v1, see `style`).
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ProjectStyles {
-    #[ts(type = "unknown[]")]
+    #[cfg_attr(feature = "ts", ts(type = "unknown[]"))]
     pub items: Vec<serde_json::Value>,
-    #[ts(type = "unknown[]")]
+    #[cfg_attr(feature = "ts", ts(type = "unknown[]"))]
     pub categories: Vec<serde_json::Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct DocumentSnapshotV1 {
-    #[ts(type = "\"kentos.document\"")]
+    #[cfg_attr(feature = "ts", ts(type = "\"kentos.document\""))]
     pub format: String,
-    #[ts(type = "1")]
+    #[cfg_attr(feature = "ts", ts(type = "1"))]
     pub version: u32,
     pub name: String,
     pub settings: ProjectSettings,
     /// Local anchor near the data (the GPU works relative to it).
     pub origin: Vec2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub home_view: Option<Bounds>,
     pub layers: Vec<LayerNode>,
     pub active_layer: String,

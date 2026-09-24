@@ -6,14 +6,16 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 use crate::document::AngleUnit;
 
 /// Project units a tool's defaults and summaries use.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct DefaultsContext {
     pub length_decimals: u32,
     pub area_decimals: u32,
@@ -22,13 +24,14 @@ pub struct DefaultsContext {
     pub active_layer: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct RunJob {
     pub tool_id: String,
     /// Parameter values as entered (features as references, layers as targets).
-    #[ts(type = "Record<string, unknown>")]
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
     pub values: BTreeMap<String, serde_json::Value>,
     pub units: DefaultsContext,
     pub selection: Vec<u32>,

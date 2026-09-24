@@ -5,12 +5,14 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 /// Parse → authenticate → authorize → preview/validate → transaction → outbox → result.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CommandEnvelope {
     /// `alan.eylem`, e.g. "feature.update".
     pub command_name: String,
@@ -23,6 +25,6 @@ pub struct CommandEnvelope {
     pub idempotency_key: String,
     /// Row version each touched object had when the edit started; bigint as decimal text (§24.1).
     pub expected_versions: BTreeMap<String, String>,
-    #[ts(type = "unknown")]
+    #[cfg_attr(feature = "ts", ts(type = "unknown"))]
     pub input: serde_json::Value,
 }

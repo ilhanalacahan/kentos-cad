@@ -5,6 +5,11 @@
 //! internal types are checked against them at compile time
 //! (`src/contracts/contracts.test.ts`).
 //!
+//! The TypeScript generation is the `ts` feature (on by default, so
+//! `cargo test` keeps the generated types current). Libraries and programs
+//! that only need the Rust types (formats, the server, the desktop app)
+//! depend on this crate with `default-features = false` and never build ts-rs.
+//!
 //! Rules (docs/adr/0002-contracts-fixtures.md):
 //! - every stored or sent document carries `format` and `version`; readers
 //!   reject versions they do not know instead of guessing;

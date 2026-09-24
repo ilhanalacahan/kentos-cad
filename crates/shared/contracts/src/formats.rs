@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts")]
 use ts_rs::TS;
 
 use crate::document::Bounds;
@@ -19,9 +20,10 @@ pub const FORMATS_VERSION: u32 = 1;
 // ── Every import ────────────────────────────────────────────────────────
 
 /// A layer as the source file defines it. Objects name it in `layerId`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ImportLayer {
     pub name: String,
     /// Hex colour or a theme token (DXF colour 7 → "ink").
@@ -31,15 +33,16 @@ pub struct ImportLayer {
     pub line_type: LineType,
     /// Plot line weight in mm, when the file gives one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub line_weight: Option<f64>,
     /// Objects read onto this layer.
     pub count: u32,
 }
 
 /// One line of an import or export report: what, how many, and what happened to it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ReportItem {
     /// The source's name for it ("IMAGE", "Genişlikli çoklu çizgi").
     pub what: String,
@@ -51,15 +54,17 @@ pub struct ReportItem {
 }
 
 /// A fact about the source file, shown before the import ("Sürüm": "AutoCAD 2000").
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct SourceFact {
     pub label: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ImportReport {
     /// Objects read, by kind (`point`, `line`, …).
     pub counts: BTreeMap<String, u32>,
@@ -72,24 +77,26 @@ pub struct ImportReport {
 
 /// What a reader produced. Objects have id 0 (the app numbers them when it
 /// adds them) and `layerId` holds the name of their layer in `layers`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ImportResult {
     pub entities: Vec<Entity>,
     pub layers: Vec<ImportLayer>,
     pub report: ImportReport,
     /// Extent of the objects' defining points (shown before the import).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub bounds: Option<Bounds>,
 }
 
 // ── Coordinate lists (Netcad NCN, TXT, CSV) ─────────────────────────────
 
 /// What a column of a coordinate list holds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum CoordColumn {
     /// Point name (becomes the label and the `Ad` attribute).
     Name,
@@ -105,9 +112,10 @@ pub enum CoordColumn {
     Skip,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum CoordDelimiter {
     #[default]
     Auto,
@@ -118,9 +126,10 @@ pub enum CoordDelimiter {
     Space,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum DecimalMark {
     #[default]
     Auto,
@@ -129,9 +138,10 @@ pub enum DecimalMark {
     Comma,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum HeaderMode {
     #[default]
     Auto,
@@ -139,9 +149,10 @@ pub enum HeaderMode {
     No,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CoordReadOptions {
     pub delimiter: CoordDelimiter,
     pub decimal: DecimalMark,
@@ -155,27 +166,30 @@ pub struct CoordReadOptions {
 }
 
 /// A row of the preview: the fields as written and, if the row is not a point, why.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CoordRow {
     pub line: u32,
     pub fields: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub error: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct LineError {
     pub line: u32,
     pub message: String,
 }
 
 /// A coordinate list read with the given options, and what the reader found.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CoordRead {
     /// Text encoding of the file ("UTF-8", "Windows-1254 (Türkçe)").
     pub encoding: String,
@@ -200,30 +214,32 @@ pub struct CoordRead {
     pub hints: Vec<String>,
     /// Extent of the points (Y as x, X as y), to show where the data lies before the import.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub bounds: Option<Bounds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub result: Option<ImportResult>,
 }
 
 /// A point to write into a coordinate list.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CoordPoint {
     pub name: String,
     pub p: Vec2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub z: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub code: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum TextEncoding {
     #[default]
     Utf8,
@@ -231,8 +247,9 @@ pub enum TextEncoding {
     Windows1254,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CoordWriteInput {
     pub points: Vec<CoordPoint>,
     /// Not `auto`.
@@ -246,17 +263,19 @@ pub struct CoordWriteInput {
 
 // ── DXF ─────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct DxfReadOptions {
     /// Stop after this many objects (0: one million); the rest is counted and reported.
     pub max_entities: u32,
 }
 
 /// What a writer did besides writing: counts, and anything it could not write as it was.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ExportReport {
     pub counts: BTreeMap<String, u32>,
     pub notes: Vec<ReportItem>,
