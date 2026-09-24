@@ -88,7 +88,7 @@
 
   --shadow-float: 0 12px 32px rgba(3, 6, 10, 0.5), 0 2px 6px rgba(3, 6, 10, 0.35);
   --shadow-pop: 0 14px 36px rgba(3, 6, 10, 0.55), 0 2px 8px rgba(3, 6, 10, 0.4);
-  /* The ribbon's lower edge: a docked bar that still sits over the drawing. */
+  /* The ribbon's shadow on the drawing (only there: the docked panels stay flush). */
   --shadow-bar: 0 1px 3px rgba(3, 6, 10, 0.6), 0 6px 16px rgba(3, 6, 10, 0.4);
   --backdrop: rgba(6, 9, 13, 0.6);
   color-scheme: dark;

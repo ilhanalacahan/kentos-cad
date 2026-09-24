@@ -15,17 +15,12 @@
   flex-direction: column;
   min-width: 0;
 }
-/*
- * Holds the ribbon's place while its chunk loads, so the drawing does not
- * jump; stacked like the ribbon so its shadow falls over the drawing.
- */
+/* Holds the ribbon's place while its chunk loads, so the drawing does not jump. */
 .ribbon-placeholder {
-  position: relative;
-  z-index: 20;
   height: calc(var(--menubar-h) + var(--ribbon-h) + 2px);
   background: var(--c-toolbar);
   border-bottom: 1px solid var(--c-line);
-  box-shadow: inset 0 var(--menubar-h) 0 var(--c-menubar), var(--shadow-bar);
+  box-shadow: inset 0 var(--menubar-h) 0 var(--c-menubar);
 }
 
 .shell__body {
@@ -206,6 +201,25 @@
   overflow: hidden;
   background: var(--canvas-bg);
   isolation: isolate;
+}
+
+/*
+ * The ribbon's shadow falls on the drawing only; the docked panels beside it
+ * stay flush with the ribbon (DESIGN.md §5.4). An edge just above the
+ * viewport casts it, wider than the viewport so it does not fade at the
+ * sides: the viewport's clipping cuts it square at the panels. It lies over
+ * the drawing, under the overlay (labels, cursor) and everything floating.
+ */
+.shell[data-shell='ribbon'] .viewport::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: -32px;
+  left: -32px;
+  right: -32px;
+  height: 32px;
+  box-shadow: var(--shadow-bar);
+  pointer-events: none;
 }
 
 .viewport__gl,
