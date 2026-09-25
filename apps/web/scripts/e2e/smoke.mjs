@@ -1658,6 +1658,29 @@ try {
     check('Alt+Q searches commands by name and Enter runs the first', focused && found[0] === 'Elips' && (await b.eval('window.kentos.tools.activeId.value')) === 'ellipse', JSON.stringify(found));
     await key('Escape');
 
+    // Key tips: Alt tapped alone shows letters on the tabs; a tab's letters open it and show the controls'; those run the control.
+    const tipOver = (sel) =>
+      b.eval(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [...document.querySelectorAll('.keytips__tip')].find((t) => { const q = t.getBoundingClientRect(); return Math.abs(q.left + q.width / 2 - (r.left + r.width / 2)) < 3 && q.top > r.top - 2 && q.top < r.bottom + 2; })?.textContent ?? ''; })()`);
+    await key('Alt');
+    await sleep(120);
+    const modifyTip = await tipOver('.ribbon__tab[data-tab="modify"]');
+    for (const ch of modifyTip) await b.key(ch.toLowerCase());
+    await sleep(250);
+    const moveTip = await tipOver('.ribbon__strip [data-command="tool.move"]');
+    for (const ch of moveTip) await b.key(ch.toLowerCase());
+    await sleep(120);
+    check(
+      'Alt shows key tips: the tab letters open Değiştir, the button letters start Taşı',
+      !!modifyTip && !!moveTip && (await b.eval('window.kentos.tools.activeId.value')) === 'move' && (await b.eval(`!document.querySelector('.keytips')`)),
+      `${modifyTip} ${moveTip}`,
+    );
+    await key('Escape');
+    await b.key('F6');
+    await sleep(100);
+    const f6 = await b.eval(`document.querySelectorAll('.keytips__tip').length`);
+    await b.key('Escape');
+    check('F6 shows the key tips too; Esc takes them away', f6 > 3 && (await b.eval(`!document.querySelector('.keytips')`)), String(f6));
+
     // Quick access: right button on a ribbon command adds it to the bar, remembered with the layout.
     await tab('view');
     const zoom = await at('.ribbon__strip [data-command="view.zoomExtents"]');

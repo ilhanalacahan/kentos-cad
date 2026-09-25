@@ -205,8 +205,8 @@ export function splitControl(ctx: AppContext, key: string, entries: readonly Spl
 }
 
 /** The ▾ beside a panel's title: its seldom used commands. */
-export function overflowMenu(ctx: AppContext, ids: readonly string[], anchor: HTMLElement, host: ControlHost, onClose: () => void): void {
-  PopupMenu.open(afterEach(ids.map((id) => commandItem(ctx, id)), () => host.afterRun()), anchor.getBoundingClientRect(), { minWidth: 220, owner: anchor, onClose });
+export function overflowMenu(ctx: AppContext, ids: readonly string[], anchor: HTMLElement, host: ControlHost, onClose: () => void): PopupMenu {
+  return PopupMenu.open(afterEach(ids.map((id) => commandItem(ctx, id)), () => host.afterRun()), anchor.getBoundingClientRect(), { minWidth: 220, owner: anchor, onClose });
 }
 
 /** A drop-down button for a submenu of the menu model (Tema, İçe aktar …). */

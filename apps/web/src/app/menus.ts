@@ -120,6 +120,7 @@ export const MAIN_MENU: TopMenu[] = [
       'view.bottomPanel',
       'view.coords',
       'view.ribbon',
+      'view.keyTips',
       'view.fullscreen',
       sec('Görünüş'),
       { label: 'Çalışma modu', icon: 'modeHybrid', primary: true, items: ['workspace.hybrid', 'workspace.cad', 'workspace.gis', '-', 'workspace.plan3d', 'workspace.disaster'] },

@@ -125,6 +125,8 @@ export interface CommandHooks {
   focusCommandLine: () => void;
   /** Komut ara — the ribbon's search box, or the command line in the classic shell. */
   searchCommands: () => void;
+  /** Klavye ipuçları — letters over the ribbon's tabs and controls. */
+  keyTips: () => void;
 }
 
 export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void {
@@ -417,6 +419,18 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       aliases: ['ARA', 'SEARCH'],
       description: 'Bir komutu adıyla ya da takma adıyla bulup çalıştırır: şeritte arama kutusu, klasik arayüzde komut satırı.',
       run: hooks.searchCommands,
+    },
+    {
+      id: 'view.keyTips',
+      title: 'Şerit harf ipuçları',
+      short: 'Harf ipuçları',
+      category: V,
+      icon: 'keyboard',
+      aliases: ['KEYTIPS', 'HARFLER'],
+      description: 'Şeridin sekmelerinde ve düğmelerinde harfler gösterir: sekmenin harfine, sonra düğmenin harflerine basınca çalışır. Alt tuşuna tek başına basıp bırakmak da açar; Esc bir düzey geri gider.',
+      run: hooks.keyTips,
+      isEnabled: () => ctx.prefs.shell.value === 'ribbon',
+      watch: [ctx.prefs.shell],
     },
     fullscreen(),
     {
