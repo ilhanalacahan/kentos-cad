@@ -993,7 +993,7 @@ apps/web/src/
     shell/HoverCard.ts       Üzerine gelinen nesnenin bilgi kartı
     shell/viewportMenus.ts   Çizim alanındaki sağ tuş menüleri: boşta, komut, kenet, tutamaç
     shell/fullscreenButton.ts  Menü çubuğunun ve şeridin sağındaki Tam ekran düğmesi (`view.fullscreen`)
-    shell/brandButton.ts     KentOS logosu (haki karo, `--c-brand*`) ve yazısı; tıklayınca uygulama menüsünü yükleyip açar
+    shell/brandButton.ts     KentOS logosu (her zaman lacivert karo, `--c-brand*`) ve yazısı; tıklayınca uygulama menüsünü yükleyip açar
     appmenu/                 Uygulama menüsü (ilk kullanımda yüklenir, `styles/appmenu.css` ile): dosya komutları, içe/dışa aktarma biçimleri, bulut (hesap, açık proje, son projeler), çizimin özeti
     promptOptions.ts         İstem ayrıştırma ve seçenek düğmeleri (komut şeridi ve komut satırı ortak)
     menu/ toolbar/ toolbox/  Menü çubuğu, araç çubuğu (`fields.ts`: şeritle ortak geçerli özellik alanları), kayan araç kutusu

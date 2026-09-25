@@ -12,7 +12,7 @@ import { tooltip } from '../widgets/tooltip';
  */
 
 /**
- * The mark: a khaki tile with a dark K whose arms meet at a survey point.
+ * The mark: a navy tile with a white K whose arms meet at a survey point.
  * The brand colour is its own (--c-brand), not the accent the user picks.
  */
 export function brandMark(size = 20): SVGSVGElement {
