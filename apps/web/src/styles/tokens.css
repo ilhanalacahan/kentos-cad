@@ -69,6 +69,12 @@
   --c-text-2: #9ba7b5;
   --c-text-3: #6d7988;
 
+  /* Brand khaki (the KentOS mark and wordmark): the brand's own, whatever accent the user picks. */
+  --c-brand: #b8994f;
+  --c-brand-hi: #e0c783;
+  --c-brand-ink: #1f1a0d;
+  --c-brand-text: #d6bd7a;
+
   --c-accent: #f2b632;
   --c-accent-ink: #1b1405;
   --c-accent-text: #f2b632;
@@ -122,6 +128,11 @@
   --c-text: #1b232c;
   --c-text-2: #4d5966;
   --c-text-3: #7a8591;
+
+  --c-brand: #a88a3e;
+  --c-brand-hi: #d9bf78;
+  --c-brand-ink: #1f1a0d;
+  --c-brand-text: #7d6424;
 
   --c-accent: #f0b02a;
   --c-accent-ink: #1b1405;
