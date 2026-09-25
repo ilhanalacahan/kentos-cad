@@ -10,7 +10,7 @@ olduğunu ve nasıl kullanılacağını anlatır.
 ## 1. İlkeler
 
 1. **Çizim alanı önce gelir.** Arayüz sakin, yoğun ve geri planda kalır. Göz, pafta üzerindeki veride durmalıdır.
-2. **Tek vurgu, tek anlam.** Prizma sarısı (amber) yalnızca şunları işaretler: etkin araç, seçim, odak, birincil eylem ve "değişecek" durumu. Başka hiçbir şey amber değildir.
+2. **Tek vurgu, tek anlam.** Vurgu rengi yalnızca şunları işaretler: etkin araç, seçim, odak, birincil eylem ve "değişecek" durumu. Başka hiçbir şey vurgu renginde değildir. Vurgu rengini kullanıcı seçer (§3.5; varsayılan **lacivert**); bu belgede geçen “amber” sözü vurgu rengi demektir.
 3. **Sahanın dili.** Terimler, birimler ve işaretler harita mühendisinin kullandığı gibidir: Y sağa ve X yukarı, semt (grad), ada ve parsel, pafta, kot, poligon noktası, "K" kuzey oku.
 4. **Klavye birinci sınıftır.** Her araç ve komutun kısayolu vardır ve görünür durumdadır (araç kutusundaki tuş etiketi, ipucu, menü, F1 listesi).
 5. **Dürüst arayüz.** Yapılmamış özellik "geliştirme aşamasında" yazar. Koordinat dönüştürülmüyorsa bunu açıkça söyler. Sessiz başarısızlık yoktur.
@@ -23,12 +23,12 @@ olduğunu ve nasıl kullanılacağını anlatır.
 | Öğe | Kural |
 |---|---|
 | Ürün adı | **KentOS CAD** (sayfa başlığı, Hakkında penceresi) |
-| Menü çubuğundaki yazı | **KentOS** (Barlow 600, `--fs-md`) |
-| Logo | **K harfi.** Dikey gövde mürekkep renginde. Kollar amberdir ve birleştikleri yerde bir ölçme noktası (dolu daire) bulunur. 20×20 ızgara, 2,1 px çizgi, yuvarlak uçlar. |
+| Menü çubuğundaki yazı | **KentOS** (arayüz yazı tipi, 600, `--fs-md`) |
+| Logo | **K harfi.** Dikey gövde mürekkep renginde. Kollar vurgu rengindedir ve birleştikleri yerde bir ölçme noktası (dolu daire) bulunur. 20×20 ızgara, 2,1 px çizgi, yuvarlak uçlar. |
 | Favicon | `public/favicon.svg`: `#1E252E` zemin üstünde aynı K |
 
-Logo başka renge boyanmaz, döndürülmez, gölge almaz. Amber kol ve nokta her
-iki temada da `--c-accent` rengidir.
+Logo başka renge boyanmaz, döndürülmez, gölge almaz. Kol ve nokta her iki
+temada da `--c-accent` rengidir, yani kullanıcının seçtiği vurgu rengini izler.
 
 ---
 
@@ -107,20 +107,27 @@ Serin, kâğıt paftayı andıran griler. Krem ya da sıcak kâğıt tonu kullan
 
 - Kullanıcı renk paleti (`DRAW_COLORS`): Kırmızı, Sarı, Yeşil, Camgöbeği, Mavi, Eflatun, Gri. İsimlerle sunulur.
 
+### 3.5 Vurgu rengi seçenekleri
+
+**Uygulama ayarları → Görünüm → Vurgu rengi** (`prefs.accent`, `app/appearance.ts`): **Lacivert** (varsayılan), Amber (§3.1–3.2'deki değerler), Petrol yeşili, Bordo. Her seçenek aynı jetonları yeniden tanımlar (`styles/accents.css`: `--c-accent`, `--c-accent-ink`, `--c-accent-text`, `--c-accent-soft`, `--c-accent-line`, `--c-tooltip-accent`, `--canvas-accent`) ve temaya göre ayarlanır: koyu temada okunabilsin diye açık bir ton (lacivertte `#4c7fe0` dolgu, `#8fb3f5` metin), açık temada koyu ton (lacivertte `#1f4a96`). Lacivert, petrol ve bordoda dolgu üstündeki mürekkep beyazdır. Çizimdeki seçim rengi (`--canvas-accent`) vurguyu izler. Uyarı turuncusu (`--c-warn`), kenet yeşili ve hata kırmızısı hiçbir seçenekte değişmez. Seçimde her renk, yarısı koyu temanın yarısı açık temanın tonu olan yuvarlak bir örnekle gösterilir.
+
 ---
 
 ## 4. Tipografi
 
 | Aile | Kullanım |
 |---|---|
-| **Barlow** (400, 500, 600, italik 400) | Bütün arayüz metni. Karayolu levhalarından türemiş, dar ve okunaklı; yoğun özellik ızgaralarına uygun. |
+| **Plus Jakarta Sans** (varsayılan; değişken ağırlık) | Bütün arayüz metni. **Uygulama ayarları → Görünüm → Yazı tipi** (`prefs.uiFont`) ile Inter, IBM Plex Sans, Source Sans 3, Noto Sans, Roboto ya da sistemin yazı tipi seçilir. |
+| **Barlow** (400, 500, 600, italik 400) | Çizimin kendi yazıları: yazı nesneleri, ölçü değerleri, etiketler (üst katman). Veridir; arayüz yazı tipi seçimini izlemez. |
 | **IBM Plex Mono** (400, 500) | **Yalnızca** komut satırı girdisi, komut geçmişi, takma ad gösterimi (`PL`, `PARSEL`) ve işlem pencerelerindeki ifade alanı (komut gibi yazılır). Veri etiketlerinde mono kullanılmaz. |
+
+**Yazı tipleri uygulamayla gelir, CDN'den ya da internetten yüklenmez** (`apps/web/src/assets/fonts/<ad>/`, her birinin yanında SIL OFL 1.1 lisansı; `styles/fonts.css`). Yalnız Latin ve Latin Extended alt kümeleri vardır (ğ, ş, İ ikincisindedir); tarayıcı yalnız kullanılan yazı tipini indirir. Seçim kartında her yazı tipi kendisiyle yazılır (“Ağ Şı İ 123”). Arayüz yazı tipi çizim alanındaki işaretlere (kenet adı, ölçek çubuğu, kuzey oku) de uygulanır; çizimdeki yazı nesneleri, ölçü değerleri ve etiketler veridir, yazı tipi değişmez.
 
 Rakamlar her yerde **tabular** (`.num` sınıfı ya da `font-variant-numeric: tabular-nums`) yazılır, böylece koordinatlar imleç hareket ederken titremez.
 
 ### 4.1 Ölçek
 
-Bütün boyutlar `--ui-scale` ile çarpılır. **Uygulama ayarları → Görünüm → Yazı boyutu** değerleri: Standart 1, Büyük 1,08, Çok büyük 1,16.
+Bütün boyutlar `--ui-scale` ile çarpılır. **Uygulama ayarları → Görünüm → Yazı boyutu** değerleri: Küçük 0,93, Standart 1, Büyük 1,08, Çok büyük 1,16, En büyük 1,25. En büyükte de şerit 1100 px'te her sekmeye sığar.
 
 | Jeton | Standart | Kullanım |
 |---|---|---|
@@ -259,7 +266,7 @@ Menü çubuğu, araç çubuğu ve araç kutusunun sekmeli karşılığıdır; Uy
 Bir projenin arayüzü **çalışma moduna** göre sadeleşir (`app/workspaces.ts`, CLAUDE.md §4.12): Hibrit (CAD + CBS, her şey), CAD (teknik çizim; Harita, Koordinat ve İşlemler menüleri, parsel ve arazi araçları gizli; Harita sekmesinin kalanı “Ölçme” adını alır), CBS (coğrafi bilgi sistemi; yardımcı çizgi, şekil, ölçü, tarama, dizi, köşe araçları gizli, Giriş'te Harita paneli). Mod veriyi değiştirmez ve gizlenen komutlar komut satırından ve kısayoluyla yine çalışır. Duyurulan modlar (3D Plan, Afet Analizi) “Yakında” yazar ve seçilemez.
 
 - **Mod kartları** (`ui/settings/workspacePicker.ts`; Yeni proje, Proje ayarları → Genel, Uygulama ayarları → Yeni projeler): seçilebilen üç mod yan yana kartlardır. Kartta 40 px zeminli resim (mod simgesi 28 px), ad (`--fs-md`, 600), amber alt başlık (ne olduğu), açıklama ve üç maddelik liste; sağ üstte seçim halkası. Seçilen kart amber çerçeve, yumuşak amber zemin, amber resim zemini ve dolu onay halkasıdır. Ayar pencerelerinde kartlar kısadır (açıklama ve liste yok). Klavye: ←/→ seçilebilen modlar arasında gezer.
-- **Yakında:** seçilebilen kartların altında, kesikli bir çizgiyle ayrılmış “YAKINDA” başlığı ve daha alçak, kesikli çerçeveli, saydam kartlar; sağda amber çizgili hap “Yakında”. Tıklanmaz; ipucu ne olacağını söyler.
+- **Yakında:** seçilebilen kartların altında, kesikli bir çizgiyle ayrılmış “Yakında” başlığı ve daha alçak, kesikli çerçeveli, saydam kartlar; sağda amber çizgili hap “Yakında”. Tıklanmaz; ipucu ne olacağını söyler.
 - **Durum çubuğu:** koordinat sisteminin solunda amber mod simgesi ve modun adı (600). Tıklayınca menü: başlık “Çalışma modu”, seçilebilen modlar (radyo), ayırıcı, duyurulanlar soluk ve sağda “Yakında”. Aynı menü Görünüm → Çalışma modu'dadır.
 - Mod değişince menü çubuğu, şerit ve araç kutusu yerinde yeniden kurulur; açık sekme kalıyorsa açık kalır. CAD'de sağ dokun İşlemler sekmesi gizlenir.
 

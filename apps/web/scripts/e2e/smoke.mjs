@@ -1530,7 +1530,7 @@ try {
   // running tool carry a dot, and folded (Ctrl+F1) a tab opens over the drawing until a command runs.
   {
     const at = (sel) =>
-      b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.offsetParent); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      b.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.offsetParent); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
     const click = async (sel) => {
       const p = await at(sel);
       if (!p) throw new Error(`bulunamadı: ${sel}`);
@@ -1678,6 +1678,42 @@ try {
     await b.waitFor(`!!document.querySelector('.menubar')`, 3000).catch(() => {});
     const back = await b.eval(`({ ribbon: !!document.querySelector('.ribbon'), menubar: !!document.querySelector('.menubar'), toolbox: !document.querySelector('.toolbox').hidden })`);
     check('the Şerit arayüzü button returns to menus and toolbox', !back.ribbon && back.menubar && back.toolbox && (await viewportH()) === classicH, JSON.stringify(back));
+  }
+
+  // Uygulama ayarları → Görünüm: accent colour and typeface, applied on Kaydet; the typefaces come with the app.
+  {
+    const at = (sel) => b.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const press = async (sel) => {
+      const p = await at(sel);
+      if (!p) throw new Error(`bulunamadı: ${sel}`);
+      await b.click(...p);
+      await sleep(150);
+    };
+    const before = await b.eval(`({ accent: document.documentElement.dataset.accent, font: getComputedStyle(document.body).fontFamily.split(',')[0].replaceAll('"', ''), jakarta: document.fonts.check('600 13px "Plus Jakarta Sans"', 'ğşıİ') })`);
+    await b.eval(`window.kentos.commands.execute('tools.options', 'appearance')`);
+    await b.waitFor(`!!document.querySelector('.accent-pick')`, 3000).catch(() => {});
+    await press('.accent-pick__opt[data-accent="bordeaux"]');
+    await press('.font-pick__card[data-font="inter"]');
+    await b.shot('appearance-settings');
+    const save = await b.eval(`(() => { const e = [...document.querySelectorAll('.dialog__foot .btn')].find((x) => x.textContent === 'Kaydet'); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    await b.click(...save);
+    await b.waitFor(`document.fonts.check('13px "Inter"')`, 5000).catch(() => {});
+    // Preferences are written a moment after they change.
+    await b.waitFor(`JSON.parse(localStorage.getItem('kentos.prefs.v1') ?? '{}').uiFont === 'inter'`, 3000).catch(() => {});
+    const after = await b.eval(`({
+      accent: document.documentElement.dataset.accent,
+      fill: getComputedStyle(document.documentElement).getPropertyValue('--c-accent').trim(),
+      font: getComputedStyle(document.body).fontFamily.split(',')[0].replaceAll('"', ''),
+      inter: document.fonts.check('13px "Inter"'),
+      stored: JSON.parse(localStorage.getItem('kentos.prefs.v1')),
+      foreign: performance.getEntriesByType('resource').map((r) => r.name).filter((n) => !n.startsWith(location.origin) && !n.startsWith('data:') && !n.startsWith('blob:')),
+    })`);
+    check(
+      'Lacivert and Plus Jakarta Sans by default; Bordo and Inter apply on Kaydet and are remembered; nothing is fetched from another host',
+      before.accent === 'navy' && before.font === 'Plus Jakarta Sans' && before.jakarta && after.accent === 'bordeaux' && after.fill === '#c24a63' && after.font === 'Inter' && after.inter && after.stored.accent === 'bordeaux' && after.stored.uiFont === 'inter' && after.foreign.length === 0,
+      JSON.stringify({ before, after: { ...after, stored: { accent: after.stored?.accent, uiFont: after.stored?.uiFont } } }),
+    );
+    await b.eval(`(async () => { const a = await import('/src/app/appearance.ts'); window.kentos.prefs.accent.set('navy'); window.kentos.prefs.uiFont.set('jakarta'); a.applyAccent('navy'); await a.applyUiFont('jakarta'); window.kentos.view.refreshPalette(); })()`);
   }
 
   const errors = b.consoleLog.filter((l) => /^(error|EXCEPTION)/.test(l));

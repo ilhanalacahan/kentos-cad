@@ -82,7 +82,7 @@ export function applyTheme(ctx: AppContext, theme: Theme): void {
 }
 
 /** Type scale multiplier; every font/size token is derived from --ui-scale. */
-export const UI_SCALE: Record<UiScale, number> = { standard: 1, large: 1.08, xlarge: 1.16 };
+export const UI_SCALE: Record<UiScale, number> = { small: 0.93, standard: 1, large: 1.08, xlarge: 1.16, xxlarge: 1.25 };
 
 export function applyUiScale(scale: UiScale): void {
   document.documentElement.style.setProperty('--ui-scale', String(UI_SCALE[scale] ?? 1));

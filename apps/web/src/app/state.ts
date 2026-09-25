@@ -1,3 +1,4 @@
+import type { AccentId, UiFontId } from './appearance';
 import type { Workspace } from '../model/projectSettings';
 import { Signal } from '../core/signal';
 import type { LineType } from '../model/layers';
@@ -157,7 +158,7 @@ export type UiState = Signals<UiLayoutData>;
 // colleague opening the same project must also see belongs in
 // model/projectSettings.ts instead.
 
-export type UiScale = 'standard' | 'large' | 'xlarge';
+export type UiScale = 'small' | 'standard' | 'large' | 'xlarge' | 'xxlarge';
 /** Workbench chrome: menu bar, toolbar and floating toolbox, or the tabbed ribbon (Şerit). */
 export type ShellKind = 'classic' | 'ribbon';
 export type CrosshairSize = 'small' | 'medium' | 'full';
@@ -182,6 +183,10 @@ export interface PreferencesData {
   polarIncrement: number;
   crosshair: CrosshairSize;
   uiScale: UiScale;
+  /** Accent colour of the interface and the drawing's selection (app/appearance.ts). */
+  accent: AccentId;
+  /** Interface typeface, bundled with the app (app/appearance.ts). */
+  uiFont: UiFontId;
   rendererPreference: 'webgl2' | 'webgpu';
   /** Render at device pixel ratio; off trades sharpness for fill rate. */
   hiDpi: boolean;
@@ -218,6 +223,8 @@ export const PREFERENCE_DEFAULTS: PreferencesData = {
   polarIncrement: 45,
   crosshair: 'medium',
   uiScale: 'standard',
+  accent: 'navy',
+  uiFont: 'jakarta',
   rendererPreference: 'webgl2',
   hiDpi: true,
   cursorInput: true,
