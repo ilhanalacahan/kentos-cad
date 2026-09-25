@@ -1,6 +1,6 @@
 import type { Command } from '../core/commands';
 import type { BackendKind } from '../render/types';
-import { WebGPUBackend } from '../render/webgpu/WebGPUBackend';
+import { webgpuSupported } from '../render/webgpu/support';
 import type { Entity } from '../model/entities';
 import { pasteEntities, PasteTool } from '../tools/editTools';
 import { Signal } from '../core/signal';
@@ -93,7 +93,7 @@ function renderer(ctx: AppContext, kind: BackendKind, title: string, description
       ctx.prefs.rendererPreference.set(kind);
       void ctx.view.switchBackend(kind);
     },
-    isEnabled: () => kind !== 'webgpu' || WebGPUBackend.isSupported(),
+    isEnabled: () => kind !== 'webgpu' || webgpuSupported(),
     isChecked: () => ctx.view.backendKind.value === kind,
     watch: [ctx.view.backendKind],
   };

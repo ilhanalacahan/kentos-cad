@@ -5,7 +5,7 @@ import type { AppContext } from '../../app/context';
 import { PREFERENCE_DEFAULTS, snapshot, type PreferencesData, type ShellKind, type Theme } from '../../app/state';
 import type { Signal } from '../../core/signal';
 import { crsBySrid } from '../../geo/crs';
-import { WebGPUBackend } from '../../render/webgpu/WebGPUBackend';
+import { webgpuSupported } from '../../render/webgpu/support';
 import { h } from '../dom';
 import { note, segmented, settingRow, stepper, toggleSwitch } from '../widgets/controls';
 import { crsPicker } from './crsPicker';
@@ -294,7 +294,7 @@ function snap(api: DraftApi<AppDraft>) {
 
 function engine(api: DraftApi<AppDraft>, ctx: AppContext) {
   const d = api.draft;
-  const gpu = WebGPUBackend.isSupported();
+  const gpu = webgpuSupported();
   const card = (value: 'webgl2' | 'webgpu', title: string, desc: string, badge: string, disabled: boolean) => {
     const b = h(
       'button',
