@@ -94,6 +94,15 @@
 .sgroup {
   margin-top: 18px;
 }
+.sgroup > .wspick {
+  margin-top: 10px;
+}
+.sgroup__note {
+  margin: 8px 0 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
 .sgroup__title {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--c-line);
@@ -762,4 +771,201 @@
 }
 .newproj__status:not(:empty) {
   margin-top: 10px;
+}
+
+/* ── Work mode cards (Yeni proje, Proje ayarları → Genel) ──────────────
+ * Three modes to choose from, each with its picture, name, purpose and
+ * three points; the chosen one is outlined in amber with a check. Modes
+ * announced but not built sit below, smaller and dimmed, with “Yakında”.
+ */
+.wspick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wspick__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.wspick__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 12px 11px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-md);
+  background: var(--c-field);
+  color: var(--c-text);
+  text-align: left;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.wspick__card:hover:not([aria-disabled]) {
+  border-color: var(--c-text-3);
+  background: var(--c-hover);
+}
+.wspick__card[aria-checked='true'] {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+}
+.wspick__card:focus-visible {
+  outline: 2px solid var(--c-accent-line);
+  outline-offset: 2px;
+}
+.wspick__art {
+  display: grid;
+  place-items: center;
+  width: calc(40px * var(--ui-scale));
+  height: calc(40px * var(--ui-scale));
+  margin-bottom: 4px;
+  border-radius: var(--r-md);
+  background: var(--c-panel-head);
+  color: var(--c-text-2);
+}
+.wspick__art .icon {
+  width: calc(28px * var(--ui-scale));
+  height: calc(28px * var(--ui-scale));
+}
+.wspick__art .icon > * {
+  vector-effect: non-scaling-stroke;
+}
+.wspick__card[aria-checked='true'] .wspick__art {
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+}
+.wspick__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  gap: 8px;
+}
+.wspick__name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.wspick__check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 50%;
+  color: transparent;
+}
+.wspick__card[aria-checked='true'] .wspick__check {
+  border-color: var(--c-accent);
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+}
+.wspick__title {
+  color: var(--c-accent-text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.wspick__desc {
+  color: var(--c-text-2);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+.wspick__points {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--c-text-2);
+  font-size: var(--fs-2xs);
+  line-height: 1.5;
+}
+.wspick__points li::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin: 0 7px 2px 1px;
+  border-radius: 1px;
+  background: var(--c-text-3);
+}
+.wspick__card[aria-checked='true'] .wspick__points li::before {
+  background: var(--c-accent);
+}
+
+/* Announced modes: a quieter row under a “Yakında” rule. */
+.wspick__soon {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wspick__soonlabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--c-text-3);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.wspick__soonlabel::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--c-line-strong);
+}
+.wspick__soon .wspick__row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.wspick__card[data-status='soon'] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 12px;
+  border-style: dashed;
+  background: transparent;
+  cursor: default;
+}
+.wspick__card[data-status='soon'] .wspick__art {
+  width: calc(32px * var(--ui-scale));
+  height: calc(32px * var(--ui-scale));
+  margin: 0;
+  opacity: 0.8;
+}
+.wspick__card[data-status='soon'] .wspick__art .icon {
+  width: calc(22px * var(--ui-scale));
+  height: calc(22px * var(--ui-scale));
+}
+.wspick__card[data-status='soon'] .wspick__head {
+  flex: 1;
+  align-self: center;
+}
+.wspick__card[data-status='soon'] .wspick__name {
+  color: var(--c-text-2);
+}
+.wspick__card[data-status='soon'] .wspick__title {
+  flex-basis: 100%;
+  padding-left: calc(42px * var(--ui-scale));
+  margin-top: -6px;
+  color: var(--c-text-3);
+  font-weight: 400;
+}
+.wspick__card[data-status='soon'] .wspick__desc,
+.wspick__card[data-status='soon'] .wspick__points {
+  display: none;
+}
+.wspick__badge {
+  padding: 1px 8px;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 999px;
+  color: var(--c-accent-text);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+/* In Proje ayarları the cards are one row high. */
+.wspick--compact .wspick__card:not([data-status='soon']) {
+  padding: 10px;
 }

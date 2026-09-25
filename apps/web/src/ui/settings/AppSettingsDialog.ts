@@ -7,6 +7,8 @@ import { WebGPUBackend } from '../../render/webgpu/WebGPUBackend';
 import { h } from '../dom';
 import { note, segmented, settingRow, stepper, toggleSwitch } from '../widgets/controls';
 import { crsPicker } from './crsPicker';
+import { workspacePicker } from './workspacePicker';
+import { workspaceById } from '../../app/workspaces';
 import { group, SettingsShell, type DraftApi, type SectionDef } from './SettingsShell';
 
 /** Application settings: this user, this browser, every project. */
@@ -44,13 +46,17 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       label: 'Yeni projeler',
       icon: 'fileNew',
       title: 'Yeni proje varsayılanları',
-      lead: 'Oluşturacağınız her yeni projede başlangıçta kullanılacak koordinat sistemi.',
-      keys: ['defaultSrid'],
+      lead: 'Oluşturacağınız her yeni projede başlangıçta önerilecek çalışma modu ve koordinat sistemi.',
+      keys: ['defaultSrid', 'defaultWorkspace'],
       render: (api) => {
         const current = ctx.doc.crs.value;
         const openProject = h('button', { class: 'btn btn--small', type: 'button' }, 'Proje ayarlarını aç');
         openProject.addEventListener('click', () => ctx.commands.execute('file.settings'));
         return [
+          group(
+            'Çalışma modu',
+            workspacePicker({ value: api.draft.defaultWorkspace, compact: true, onChange: (id) => api.set('defaultWorkspace', id, false) }),
+          ),
           crsPicker({
             value: api.draft.defaultSrid,
             initial: api.initial.defaultSrid,
@@ -92,6 +98,9 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       if (draft.defaultSrid !== init.defaultSrid) {
         const c = crsBySrid(draft.defaultSrid)!;
         ctx.log.info(`Yeni projeler ${c.name} (EPSG:${c.srid}) ile oluşturulacak. Açık projenin sistemi değişmedi.`);
+      }
+      if (draft.defaultWorkspace !== init.defaultWorkspace) {
+        ctx.log.info(`Yeni projeler “${workspaceById(draft.defaultWorkspace).label}” çalışma moduyla önerilecek. Açık projenin modu değişmedi.`);
       }
       ctx.log.success('Uygulama ayarları kaydedildi.');
     },

@@ -1,3 +1,4 @@
+import type { Workspace } from '../model/projectSettings';
 import { Signal } from '../core/signal';
 import type { LineType } from '../model/layers';
 
@@ -164,6 +165,8 @@ export type CrosshairSize = 'small' | 'medium' | 'full';
 export interface PreferencesData {
   /** EPSG code used for new projects. TUREF / TM36 by default. */
   defaultSrid: number;
+  /** Work mode offered first for new projects (the project keeps its own, ProjectSettings.workspace). */
+  defaultWorkspace: Workspace;
   /** Object snap and pick apertures in CSS px. */
   snapAperture: number;
   pickAperture: number;
@@ -201,6 +204,7 @@ export interface PreferencesData {
 
 export const PREFERENCE_DEFAULTS: PreferencesData = {
   defaultSrid: 5256,
+  defaultWorkspace: 'hybrid',
   snapAperture: 11,
   pickAperture: 5,
   snapEndpoint: true,
