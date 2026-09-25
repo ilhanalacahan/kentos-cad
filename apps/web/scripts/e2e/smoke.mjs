@@ -1497,6 +1497,17 @@ try {
     await b.waitFor(`!window.kentos.files.busy.value && window.__asked !== null`, 5000).catch(() => {});
     const asked = await b.eval('window.__asked');
     check('a line in the new project, and the first save asks for “Ada 200.kcad”', drawn.length === 1 && drawn[0].b.x === np.origin.x + 60 && asked === 'Ada 200.kcad' && !(await b.eval('window.kentos.doc.dirty.value')), `${asked}`);
+    // The saved file heads the recent files; the start screen lists it and opens it again with one click.
+    await b.waitFor(`window.kentos.files.recent.list.value[0]?.name === 'Ada 200.kcad'`, 3000).catch(() => {});
+    await b.eval(`window.kentos.commands.execute('file.start')`);
+    await b.waitFor(`!!document.querySelector('.start .recent')`, 10000).catch(() => {});
+    const listed = await b.eval(`[...document.querySelectorAll('.start .recent__name')].map((e) => e.textContent)`);
+    // Another (clean) drawing's name meanwhile: opening from the list asks nothing and brings the file's back.
+    await b.eval(`(() => { const k = window.kentos; k.doc.name.set('Başka'); k.doc.markSaved(k.doc.revision); })()`);
+    await b.eval(`document.querySelector('.start .recent__open').click()`);
+    await b.waitFor(`!document.querySelector('.start') && !window.kentos.files.busy.value`, 5000).catch(() => {});
+    const reopened = await b.eval(`({ name: window.kentos.doc.name.value, size: window.kentos.doc.size })`);
+    check('the start screen lists the saved file first and opens it again', listed[0] === 'Ada 200' && reopened.name === 'Ada 200' && reopened.size === 1, `${JSON.stringify(listed)} ${JSON.stringify(reopened)}`);
     await b.eval(`(() => { window.kentos.files.picker = window.__files.original; window.kentos.files.handle = null; })()`);
     await b.shot('newproject-drawn');
 

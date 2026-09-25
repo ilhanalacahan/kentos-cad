@@ -127,6 +127,8 @@ export interface CommandHooks {
   searchCommands: () => void;
   /** Klavye ipuçları — letters over the ribbon's tabs and controls. */
   keyTips: () => void;
+  /** Başlangıç ekranı — new, open, cloud and the recent files. */
+  openStart: () => void;
 }
 
 export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void {
@@ -164,6 +166,16 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       run: () => void ctx.files.open(),
       isEnabled: () => !ctx.files.busy.value,
       watch: [ctx.files.busy],
+    },
+    {
+      id: 'file.start',
+      title: 'Başlangıç ekranı…',
+      short: 'Başlangıç',
+      category: F,
+      icon: 'history',
+      description: 'Yeni proje, dosya aç, bulut projeleri ve son açılan ya da kaydedilen dosyalar.',
+      aliases: ['BASLANGIC', 'SON', 'RECENT'],
+      run: hooks.openStart,
     },
     {
       id: 'file.save',

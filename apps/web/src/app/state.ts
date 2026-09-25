@@ -215,6 +215,8 @@ export interface PreferencesData {
    * among thick boundaries. Symbols from the style library keep their own widths.
    */
   lineWeights: boolean;
+  /** The start screen (Başlangıç: new, open, cloud, recent files) shows when the app opens. */
+  startScreen: boolean;
   /**
    * Workbench chrome. Both are built from the same tool catalog and menu
    * model (app/menus.ts), so a new tool or command appears in either.
@@ -247,6 +249,7 @@ export const PREFERENCE_DEFAULTS: PreferencesData = {
   hoverInfo: true,
   symbolSize: 'plot',
   lineWeights: true,
+  startScreen: true,
   shell: 'classic',
 };
 

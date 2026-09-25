@@ -65,6 +65,7 @@ export const MAIN_MENU: TopMenu[] = [
       sec('Proje'),
       'file.new',
       'file.open',
+      'file.start',
       sec('Kaydet'),
       'file.save',
       'file.saveAs',

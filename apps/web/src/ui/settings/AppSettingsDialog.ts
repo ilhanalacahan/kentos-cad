@@ -31,7 +31,7 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       icon: 'appearance',
       title: 'Görünüm',
       lead: 'Tema, vurgu rengi, yazı tipi, arayüz düzeni, yazı boyutu, artı imleç ve fare yardımcıları.',
-      keys: ['theme', 'accent', 'uiFont', 'shell', 'uiScale', 'crosshair', 'cursorInput', 'hoverInfo'],
+      keys: ['theme', 'accent', 'uiFont', 'shell', 'uiScale', 'crosshair', 'cursorInput', 'hoverInfo', 'startScreen'],
       render: (api) => appearance(api),
     },
     {
@@ -236,6 +236,14 @@ function appearance(api: DraftApi<AppDraft>) {
         'Nesne bilgi kartı',
         'Seçim aracında bir nesnenin üzerinde durunca türü, katmanı, uzunluğu ya da alanı gösterilir.',
         toggleSwitch({ label: 'Nesne bilgi kartı', checked: d.hoverInfo, onChange: (v) => api.set('hoverInfo', v) }),
+      ),
+    ),
+    group(
+      'Açılış',
+      settingRow(
+        'Başlangıç ekranı',
+        'Uygulama açılınca yeni proje, dosya aç, bulut ve son dosyalar gösterilir. Dosya → Başlangıç ekranı ile her zaman açılır.',
+        toggleSwitch({ label: 'Başlangıç ekranı', checked: d.startScreen, onChange: (v) => api.set('startScreen', v) }),
       ),
     ),
   ];

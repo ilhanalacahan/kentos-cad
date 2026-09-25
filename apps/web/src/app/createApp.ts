@@ -110,6 +110,7 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
     focusCommandLine: () => shell?.bottom.commandLine.focus(),
     searchCommands: () => shell?.searchCommands(),
     keyTips: () => shell?.keyTips(),
+    openStart: () => void openStart(ctx),
   });
   registerProcessingCommands(ctx, {
     open: (id, values) => openToolDialog(ctx, id, values),
@@ -166,5 +167,25 @@ export async function createApp(root: HTMLElement): Promise<AppContext> {
   doc.events.on('changed', () => ctx.selection.retain((id) => !!doc.get(id)));
 
   ctx.log.info(`${doc.name.value} açıldı: ${doc.size} nesne, ${doc.layers.leaves().length} katman.`);
+  if (startScreenOnOpen(ctx)) void openStart(ctx);
   return ctx;
+}
+
+/** The start screen is loaded on first use (CLAUDE.md §20); a failed load says so and the drawing stays. */
+function openStart(ctx: AppContext): Promise<void> {
+  return import('../ui/start/StartScreen').then(
+    (m) => m.openStartScreen(ctx),
+    () => ctx.log.error('Başlangıç ekranı yüklenemedi; bağlantıyı denetleyip Dosya → Başlangıç ekranı ile yeniden deneyin.'),
+  );
+}
+
+/**
+ * Whether the start screen opens with the app: the user's setting, except
+ * under automation (tests drive the drawing at once; `?start=1` still asks for it) and with `?start=0`.
+ */
+function startScreenOnOpen(ctx: AppContext): boolean {
+  const param = new URLSearchParams(location.search).get('start');
+  if (param === '0') return false;
+  if (param === '1') return true;
+  return ctx.prefs.startScreen.value && !navigator.webdriver;
 }
