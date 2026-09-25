@@ -45,6 +45,7 @@ export class StatusBar extends Component {
       this.toggle('draft.ortho', 'Orto'),
       this.toggle('draft.polar', 'Kutupsal'),
       this.toggle('draft.tracking', 'İzleme'),
+      this.toggle('view.lineWeights', 'Kalınlık'),
     );
 
     const crs = h('button', { class: 'status__cell status__btn', type: 'button' }, icon('crs', 14), h('span'));

@@ -378,6 +378,13 @@ export function registerCoreCommands(ctx: AppContext, hooks: CommandHooks): void
       isChecked: () => ctx.prefs.symbolSize.value === 'screen',
       watch: [ctx.prefs.symbolSize],
     },
+    toggle('view.lineWeights', 'Çizgi kalınlığını göster', ctx.prefs.lineWeights, {
+      category: V,
+      icon: 'lineWeight',
+      short: 'Kalınlık',
+      description: 'Katman çizgileri kalınlıklarıyla çizilir. Kapalıyken hepsi ince çizilir (AutoCAD LWT); hassas çalışmada kalın sınırlar noktaları örtmez. Kitaplık sembolleri kendi kalınlığını korur.',
+      aliases: ['KALINLIK', 'LWT', 'LWDISPLAY'],
+    }),
     { id: 'view.theme.toggle', title: 'Temayı değiştir', category: V, run: () => applyTheme(ctx, ui.theme.value === 'dark' ? 'light' : 'dark') },
     {
       id: 'view.ribbon',

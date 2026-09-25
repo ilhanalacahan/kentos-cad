@@ -77,6 +77,8 @@ export interface UiLayoutData {
   ribbonTab: string;
   ribbonCollapsed: boolean;
   ribbonQuickAccess: string[];
+  /** The entry last chosen on each split button (Daire ▾: 3 nokta), by button key. */
+  ribbonSplits: Record<string, string>;
   /** The floating toolbox next to the ribbon (off by default: the ribbon holds every tool). */
   ribbonToolbox: boolean;
 }
@@ -101,6 +103,7 @@ const DEFAULTS: UiLayoutData = {
   ribbonTab: 'home',
   ribbonCollapsed: false,
   ribbonQuickAccess: [],
+  ribbonSplits: {},
   ribbonToolbox: false,
 };
 
@@ -208,6 +211,11 @@ export interface PreferencesData {
    */
   symbolSize: 'plot' | 'screen';
   /**
+   * Line weights shown (AutoCAD's LWT): off, every layer line is drawn one pixel thin, for precise work
+   * among thick boundaries. Symbols from the style library keep their own widths.
+   */
+  lineWeights: boolean;
+  /**
    * Workbench chrome. Both are built from the same tool catalog and menu
    * model (app/menus.ts), so a new tool or command appears in either.
    */
@@ -238,6 +246,7 @@ export const PREFERENCE_DEFAULTS: PreferencesData = {
   cursorInput: true,
   hoverInfo: true,
   symbolSize: 'plot',
+  lineWeights: true,
   shell: 'classic',
 };
 

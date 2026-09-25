@@ -80,8 +80,8 @@ export function openAppSettings(ctx: AppContext, section?: AppSettingsSection): 
       label: 'Çizim motoru',
       icon: 'chip',
       title: 'Çizim motoru',
-      lead: 'Çizim alanını ekran kartında çizen arka uç, çizim kalitesi ve sembol boyutu.',
-      keys: ['rendererPreference', 'renderQuality', 'symbolSize'],
+      lead: 'Çizim alanını ekran kartında çizen arka uç, çizim kalitesi, sembol boyutu ve çizgi kalınlığı.',
+      keys: ['rendererPreference', 'renderQuality', 'symbolSize', 'lineWeights'],
       render: (api) => engine(api, ctx),
     },
   ];
@@ -332,7 +332,7 @@ function engine(api: DraftApi<AppDraft>, ctx: AppContext) {
       ),
     ),
     group(
-      'Sembol boyutu',
+      'Semboller ve çizgiler',
       settingRow(
         'Semboller',
         'Çizim ölçeğinde: basılı paftadaki boyları, harita ile büyür ve küçülür (yönetmelik ölçüleri böyle görünür). Ekranda sabit: her yakınlıkta aynı boy, gezinmek için.',
@@ -345,6 +345,11 @@ function engine(api: DraftApi<AppDraft>, ctx: AppContext) {
           value: d.symbolSize,
           onChange: (v) => api.set('symbolSize', v),
         }),
+      ),
+      settingRow(
+        'Çizgi kalınlığı',
+        'Katman çizgileri kalınlıklarıyla çizilir. Kapalıyken hepsi ince çizilir (durum çubuğunda Kalınlık).',
+        toggleSwitch({ label: 'Çizgi kalınlığını göster', checked: d.lineWeights, onChange: (v) => api.set('lineWeights', v) }),
       ),
     ),
   ];

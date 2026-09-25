@@ -126,6 +126,7 @@ export const MAIN_MENU: TopMenu[] = [
       { label: 'Tema', icon: 'appearance', items: ['view.theme.dark', 'view.theme.light'] },
       { label: 'Çizim motoru', icon: 'chip', items: ['view.renderer.webgl2', 'view.renderer.webgpu'] },
       { label: 'Sembol boyutu', icon: 'styles', items: ['view.symbols.plot', 'view.symbols.screen'] },
+      'view.lineWeights',
     ],
   },
   {

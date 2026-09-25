@@ -467,12 +467,13 @@ export class ViewportController {
       }),
     );
     d.add(() => clearTimeout(this.symbolTimer));
-    d.add(
-      this.ctx.prefs.symbolSize.subscribe(() => {
-        this.allDirty = true;
-        this.requestRender();
-      }),
-    );
+    for (const s of [this.ctx.prefs.symbolSize, this.ctx.prefs.lineWeights])
+      d.add(
+        s.subscribe(() => {
+          this.allDirty = true;
+          this.requestRender();
+        }),
+      );
     d.add(settings.grid.subscribe(() => this.requestRender()));
     // Drawing quality: the pixel ratio applies at once; anti-aliasing is fixed per context, so the backend is made again.
     d.add(
@@ -833,6 +834,7 @@ export class ViewportController {
       palette: this.palette,
       plotScale,
       screen: this.ctx.prefs.symbolSize.value === 'screen',
+      hairlines: !this.ctx.prefs.lineWeights.value,
       library: this.ctx.styles.library,
       layerName: (id: string) => doc.layers.get(id)?.name ?? id,
       geometry: this.picker,
